@@ -1,6 +1,7 @@
 pub mod achievements;
 pub mod ai;
 pub mod audio;
+pub mod autostart;
 pub mod cover_art;
 pub mod custom_games;
 pub mod developer;
@@ -22,3 +23,4 @@ pub mod settings;
 pub mod steam_api;
 pub mod steam_scanner;
 pub mod tags;
+pub mod updater;

@@ -5,7 +5,7 @@ mod utils;
 
 use std::sync::{Arc, Mutex};
 
-use commands::{achievements, ai, audio, cover_art, custom_games, developer, external_scanner, favorites, friends, game_launcher, hidden_games, media_bookmarks, media_controls, metadata, news, notes, overlay, saved_filters, sessions, settings, steam_api, steam_scanner, system_monitor, tags};
+use commands::{achievements, ai, audio, autostart, cover_art, custom_games, developer, external_scanner, favorites, friends, game_launcher, hidden_games, media_bookmarks, media_controls, metadata, news, notes, overlay, saved_filters, sessions, settings, steam_api, steam_scanner, system_monitor, tags, updater};
 use models::ai::CloudProvider;
 use services::ai::cloud_config::CloudConfig;
 use services::cache_db::CacheDb;
@@ -21,6 +21,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -129,6 +134,11 @@ pub fn run() {
             ai::test_cloud_api_key,
             ai::get_cloud_ai_usage,
             ai::update_cloud_ai_settings,
+            updater::check_for_update,
+            updater::install_update,
+            updater::get_app_version,
+            autostart::get_autostart_enabled,
+            autostart::set_autostart_enabled,
         ])
         .setup(|app| {
             // Initialize tracing with our custom layer that forwards events to the frontend

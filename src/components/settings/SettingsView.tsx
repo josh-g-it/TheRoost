@@ -10,14 +10,16 @@ import { CardDisplaySettings } from "./CardDisplaySettings";
 import { ThemeBuilder } from "./ThemeBuilder";
 import { DeveloperSettings } from "./DeveloperSettings";
 import { useSettings } from "../../hooks/useSettings";
+import { useAppVersion } from "../../hooks/useAppVersion";
 import { useLibraryStore } from "../../store/librarySlice";
-import { coverArtApi, cloudAiApi } from "../../services/tauri";
+import { coverArtApi, cloudAiApi, updaterApi, autostartApi } from "../../services/tauri";
 import type {
   AppSettings,
   CommandCenterShortcut,
   RailMode,
   MediaControlsMode,
   CloudAiUsage,
+  UpdateInfo,
 } from "../../types";
 import type { ThemeId } from "../../hooks/useTheme";
 import type { IconSetId, FontFamilyId, UIScaleId } from "../../types/theme";
@@ -50,6 +52,17 @@ export function SettingsView() {
   const [cloudUsage, setCloudUsage] = useState<CloudAiUsage | null>(null);
   const [contextGameSearch, setContextGameSearch] = useState("");
 
+  // Update state
+  const appVersion = useAppVersion();
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateInstalling, setUpdateInstalling] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+
+  // Autostart state
+  const [autostartEnabled, setAutostartEnabled] = useState(false);
+  const [autostartLoading, setAutostartLoading] = useState(true);
+
   // Game name lookup for exclude/include lists
   const allGames = useLibraryStore((s) => s.library?.games);
   const gameNameMap = useMemo(() => {
@@ -80,6 +93,13 @@ export function SettingsView() {
       .getUsage()
       .then(setCloudUsage)
       .catch(() => {});
+    autostartApi
+      .isEnabled()
+      .then((v) => {
+        setAutostartEnabled(v);
+        setAutostartLoading(false);
+      })
+      .catch(() => setAutostartLoading(false));
   }, []);
 
   useEffect(() => {
@@ -182,6 +202,73 @@ export function SettingsView() {
             <span className="settings-view__unsaved-hint">You have unsaved changes</span>
           )}
         </div>
+
+        <section className="settings-view__section">
+          <h3 className="settings-view__section-title">Application</h3>
+          <div className="settings-view__field-row">
+            <label className="settings-view__label">Version</label>
+            <span className="settings-view__version-value">v{appVersion}</span>
+          </div>
+
+          <div className="settings-view__field-row">
+            <div className="settings-view__sgdb-actions">
+              <Button
+                size="sm"
+                disabled={updateChecking || updateInstalling}
+                loading={updateChecking}
+                onClick={async () => {
+                  setUpdateChecking(true);
+                  setUpdateMessage(null);
+                  setUpdateInfo(null);
+                  try {
+                    const info = await updaterApi.checkForUpdate();
+                    if (info) {
+                      setUpdateInfo(info);
+                      setUpdateMessage(`Update available: v${info.version}`);
+                    } else {
+                      setUpdateMessage("You're up to date!");
+                    }
+                  } catch {
+                    setUpdateMessage("Update check failed");
+                  } finally {
+                    setUpdateChecking(false);
+                  }
+                }}
+              >
+                Check for Updates
+              </Button>
+              {updateInfo && (
+                <Button
+                  size="sm"
+                  disabled={updateInstalling}
+                  loading={updateInstalling}
+                  onClick={async () => {
+                    setUpdateInstalling(true);
+                    setUpdateMessage("Downloading update...");
+                    try {
+                      await updaterApi.installUpdate();
+                    } catch {
+                      setUpdateMessage("Update install failed");
+                      setUpdateInstalling(false);
+                    }
+                  }}
+                >
+                  Install v{updateInfo.version}
+                </Button>
+              )}
+            </div>
+            {updateMessage && (
+              <span className="settings-view__sgdb-message">{updateMessage}</span>
+            )}
+          </div>
+
+          {updateInfo?.body && (
+            <div className="settings-view__release-notes">
+              <span className="settings-view__release-notes-label">Release notes:</span>
+              <p className="settings-view__release-notes-body">{updateInfo.body}</p>
+            </div>
+          )}
+        </section>
 
         <section className="settings-view__section">
           <h3 className="settings-view__section-title">Steam Connection</h3>
@@ -792,6 +879,33 @@ export function SettingsView() {
               type="checkbox"
               checked={form.minimizeToTray}
               onChange={(e) => setForm({ ...form, minimizeToTray: e.target.checked })}
+              className="settings-view__checkbox"
+            />
+          </div>
+        </section>
+
+        <section className="settings-view__section">
+          <h3 className="settings-view__section-title">Startup</h3>
+          <div className="settings-view__field-row">
+            <div>
+              <label className="settings-view__label">Launch on startup</label>
+              <p className="settings-view__field-hint">
+                Automatically start The Roost when you log in to Windows.
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              checked={autostartEnabled}
+              disabled={autostartLoading}
+              onChange={async (e) => {
+                const enabled = e.target.checked;
+                setAutostartEnabled(enabled);
+                try {
+                  await autostartApi.setEnabled(enabled);
+                } catch {
+                  setAutostartEnabled(!enabled);
+                }
+              }}
               className="settings-view__checkbox"
             />
           </div>

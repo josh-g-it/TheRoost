@@ -56,19 +56,53 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
-      # 8. Build the Tauri app (compiles Rust + bundles frontend + creates installer)
+      # 8. Build the Tauri app with update signing
       - name: Build Tauri app
         run: npx tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
-      # 9. Rename installer to TheRoost.exe
-      - name: Rename installer
+      # 9. Prepare release assets (rename installer, find bundle files, generate latest.json)
+      - name: Prepare release assets
         shell: bash
         run: |
-          INSTALLER=$(find src-tauri/target/release/bundle/nsis -name "*.exe" | head -1)
-          cp "$INSTALLER" "src-tauri/target/release/bundle/nsis/TheRoost.exe"
-          echo "INSTALLER_PATH=src-tauri/target/release/bundle/nsis/TheRoost.exe" >> $GITHUB_ENV
+          NSIS_DIR="src-tauri/target/release/bundle/nsis"
 
-      # 10. Create draft GitHub Release with the renamed installer
+          # Rename standalone installer
+          INSTALLER=$(find "$NSIS_DIR" -name "*.exe" | head -1)
+          cp "$INSTALLER" "$NSIS_DIR/TheRoost.exe"
+
+          # Find the .nsis.zip and .nsis.zip.sig
+          NSIS_ZIP=$(find "$NSIS_DIR" -name "*.nsis.zip" | head -1)
+          NSIS_SIG=$(find "$NSIS_DIR" -name "*.nsis.zip.sig" | head -1)
+
+          VERSION="${GITHUB_REF_NAME#v}"
+          SIGNATURE=$(cat "$NSIS_SIG")
+          NSIS_ZIP_NAME=$(basename "$NSIS_ZIP")
+
+          # Generate latest.json for the Tauri updater
+          cat > "$NSIS_DIR/latest.json" << EOF
+          {
+            "version": "$VERSION",
+            "notes": "The Roost $GITHUB_REF_NAME",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "$SIGNATURE",
+                "url": "https://github.com/josh-g-it/TheRoost/releases/download/$GITHUB_REF_NAME/$NSIS_ZIP_NAME"
+              }
+            }
+          }
+          EOF
+
+          # Export paths for the upload step
+          echo "INSTALLER_PATH=$NSIS_DIR/TheRoost.exe" >> $GITHUB_ENV
+          echo "NSIS_ZIP_PATH=$NSIS_ZIP" >> $GITHUB_ENV
+          echo "NSIS_SIG_PATH=$NSIS_SIG" >> $GITHUB_ENV
+          echo "LATEST_JSON_PATH=$NSIS_DIR/latest.json" >> $GITHUB_ENV
+
+      # 10. Create draft GitHub Release with all assets
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -77,15 +111,18 @@ jobs:
           body: |
             ## The Roost ${{ github.ref_name }}
 
-            Download **TheRoost.exe** below to install or update The Roost.
+            ### Auto-Update
+            If you already have The Roost installed (v1.1.0+), the app will detect this update automatically. Go to **Settings > Application > Check for Updates** to install it.
 
-            ### Installation
-            1. Download `TheRoost.exe`
-            2. Run the installer
-            3. Launch The Roost from the Start Menu
+            ### Fresh Install
+            Download **TheRoost.exe** below and run the installer.
 
             ---
             *Full changelog coming soon.*
-          files: ${{ env.INSTALLER_PATH }}
+          files: |
+            ${{ env.INSTALLER_PATH }}
+            ${{ env.NSIS_ZIP_PATH }}
+            ${{ env.NSIS_SIG_PATH }}
+            ${{ env.LATEST_JSON_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

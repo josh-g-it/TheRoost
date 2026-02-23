@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { useSettingsStore } from "../../store/settingsSlice";
-import { APP_NAME, APP_VERSION } from "../../constants";
+import { APP_NAME } from "../../constants";
+import { useAppVersion } from "../../hooks/useAppVersion";
 import type { RailMode } from "../../types";
 import type { IconName } from "../../utils/icons";
 import { AppIcon } from "../common/AppIcon";
@@ -36,6 +37,7 @@ interface IconRailProps {
 export function IconRail({ onCommandCenterToggle, railMode }: IconRailProps) {
   const settings = useSettingsStore((s) => s.settings);
   const saveSettings = useSettingsStore((s) => s.saveSettings);
+  const appVersion = useAppVersion();
 
   const cycleRailMode = () => {
     if (!settings) return;
@@ -93,7 +95,7 @@ export function IconRail({ onCommandCenterToggle, railMode }: IconRailProps) {
         >
           <AppIcon name={RAIL_MODE_ICONS[railMode]} size={14} />
         </button>
-        <span className="icon-rail__version">v{APP_VERSION}</span>
+        <span className="icon-rail__version">v{appVersion}</span>
       </div>
     </aside>
   );

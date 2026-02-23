@@ -32,6 +32,11 @@ src-tauri/icons/icon.icns
 src-tauri/icons/Square*.png
 src-tauri/icons/StoreLogo.png
 
+# Signing keys (NEVER commit these)
+.tauri/
+*.key
+*.key.pub
+
 # OS
 Thumbs.db
 .DS_Store

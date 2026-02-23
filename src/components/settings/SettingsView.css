@@ -340,6 +340,37 @@
   opacity: 1;
 }
 
+/* ── Application section ────────────────────────────────── */
+.settings-view__version-value {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono, monospace);
+}
+
+.settings-view__release-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--color-accent-primary);
+}
+
+.settings-view__release-notes-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-view__release-notes-body {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
 /* Developer section — subtle visual separation */
 .settings-view__section--developer {
   border-color: var(--color-border);

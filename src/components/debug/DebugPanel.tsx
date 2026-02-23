@@ -5,7 +5,8 @@ import { useDebugStore, filterEvents } from "../../store/debugSlice";
 import { useSettingsStore } from "../../store/settingsSlice";
 import { useLibraryStore } from "../../store/librarySlice";
 import { useUIStore } from "../../store/uiSlice";
-import { APP_NAME, APP_VERSION, MAX_LOG_EVENTS } from "../../constants";
+import { APP_NAME, MAX_LOG_EVENTS } from "../../constants";
+import { useAppVersion } from "../../hooks/useAppVersion";
 import type { LogEvent, LogLevel, LogCategory } from "../../types";
 import "./DebugPanel.css";
 
@@ -153,6 +154,7 @@ function Dashboard() {
   const startTime = useDebugStore((s) => s.startTime);
   const isCapturing = useDebugStore((s) => s.isCapturing);
   const settings = useSettingsStore((s) => s.settings);
+  const appVersion = useAppVersion();
   const settingsLoading = useSettingsStore((s) => s.isLoading);
   const library = useLibraryStore((s) => s.library);
   const viewMode = useUIStore((s) => s.viewMode);
@@ -174,7 +176,7 @@ function Dashboard() {
       <div className="debug-panel__dash-section">
         <span className="debug-panel__dash-title">App</span>
         <span className="debug-panel__dash-row">
-          {APP_NAME} <span className="debug-panel__dash-value">v{APP_VERSION}</span>
+          {APP_NAME} <span className="debug-panel__dash-value">v{appVersion}</span>
         </span>
         <span className="debug-panel__dash-row">
           Uptime <span className="debug-panel__dash-value">{uptime}</span>

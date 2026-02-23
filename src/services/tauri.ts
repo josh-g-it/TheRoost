@@ -30,6 +30,7 @@ import type {
   AudioSnapshot,
   ResolvedIntent,
   CloudAiUsage,
+  UpdateInfo,
 } from "../types";
 
 export const steamApi = {
@@ -303,6 +304,17 @@ export const audioMixerApi = {
 export const aiApi = {
   resolveIntent: (query: string) =>
     invoke<ResolvedIntent | null>("ai_resolve_intent", { query }),
+};
+
+export const updaterApi = {
+  checkForUpdate: () => invoke<UpdateInfo | null>("check_for_update"),
+  installUpdate: () => invoke<void>("install_update"),
+  getAppVersion: () => invoke<string>("get_app_version"),
+};
+
+export const autostartApi = {
+  isEnabled: () => invoke<boolean>("get_autostart_enabled"),
+  setEnabled: (enabled: boolean) => invoke<void>("set_autostart_enabled", { enabled }),
 };
 
 export const cloudAiApi = {

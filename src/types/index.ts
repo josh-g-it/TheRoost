@@ -111,3 +111,4 @@ export type {
   CloudProvider,
   CloudAiUsage,
 } from "./ai";
+export type { UpdateInfo } from "./updater";
