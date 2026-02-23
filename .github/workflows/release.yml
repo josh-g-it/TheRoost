@@ -56,18 +56,34 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
-      # 8. Build the Tauri app with update signing
+      # 8. Verify signing key is available before building
+      - name: Verify signing configuration
+        shell: bash
+        run: |
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is empty! Check GitHub repo Settings > Secrets."
+            exit 1
+          fi
+          echo "Signing key is configured (${#SIGNING_KEY} chars)"
+        env:
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+
+      # 9. Build the Tauri app with update signing
       - name: Build Tauri app
         run: npx tauri build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
-      # 9. Prepare release assets (rename installer, find bundle files, generate latest.json)
+      # 10. Prepare release assets
       - name: Prepare release assets
         shell: bash
         run: |
           NSIS_DIR="src-tauri/target/release/bundle/nsis"
+
+          echo "=== Files in NSIS bundle directory ==="
+          ls -la "$NSIS_DIR"
+          echo "==="
 
           # Rename standalone installer
           INSTALLER=$(find "$NSIS_DIR" -name "*.exe" | head -1)
@@ -77,24 +93,27 @@ jobs:
           NSIS_ZIP=$(find "$NSIS_DIR" -name "*.nsis.zip" | head -1)
           NSIS_SIG=$(find "$NSIS_DIR" -name "*.nsis.zip.sig" | head -1)
 
+          if [ -z "$NSIS_ZIP" ]; then
+            echo "::error::No .nsis.zip file found — signing may have failed"
+            exit 1
+          fi
+          if [ -z "$NSIS_SIG" ]; then
+            echo "::error::No .nsis.zip.sig file found — signing may have failed"
+            exit 1
+          fi
+
           VERSION="${GITHUB_REF_NAME#v}"
           SIGNATURE=$(cat "$NSIS_SIG")
           NSIS_ZIP_NAME=$(basename "$NSIS_ZIP")
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
           # Generate latest.json for the Tauri updater
-          cat > "$NSIS_DIR/latest.json" << EOF
-          {
-            "version": "$VERSION",
-            "notes": "The Roost $GITHUB_REF_NAME",
-            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "platforms": {
-              "windows-x86_64": {
-                "signature": "$SIGNATURE",
-                "url": "https://github.com/josh-g-it/TheRoost/releases/download/$GITHUB_REF_NAME/$NSIS_ZIP_NAME"
-              }
-            }
-          }
-          EOF
+          printf '{\n  "version": "%s",\n  "notes": "The Roost %s",\n  "pub_date": "%s",\n  "platforms": {\n    "windows-x86_64": {\n      "signature": "%s",\n      "url": "https://github.com/josh-g-it/TheRoost/releases/download/%s/%s"\n    }\n  }\n}\n' \
+            "$VERSION" "$GITHUB_REF_NAME" "$PUB_DATE" "$SIGNATURE" "$GITHUB_REF_NAME" "$NSIS_ZIP_NAME" \
+            > "$NSIS_DIR/latest.json"
+
+          echo "Generated latest.json:"
+          cat "$NSIS_DIR/latest.json"
 
           # Export paths for the upload step
           echo "INSTALLER_PATH=$NSIS_DIR/TheRoost.exe" >> $GITHUB_ENV
@@ -102,7 +121,7 @@ jobs:
           echo "NSIS_SIG_PATH=$NSIS_SIG" >> $GITHUB_ENV
           echo "LATEST_JSON_PATH=$NSIS_DIR/latest.json" >> $GITHUB_ENV
 
-      # 10. Create draft GitHub Release with all assets
+      # 11. Create draft GitHub Release with all assets
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
