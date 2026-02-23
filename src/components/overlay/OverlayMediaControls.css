@@ -1,0 +1,562 @@
+/* ── Overlay Media Controls ───────────────────────────────────── */
+.overlay-media {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 20px;
+  gap: 10px;
+  font-size: 0.85rem;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+/* ══════════════════════════════════════════════════════════════ */
+/* ── Media Section (Hero Area) ────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════ */
+
+.overlay-media__hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  flex: 1;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+/* ── Track Info ───────────────────────────────────────────────── */
+.overlay-media__track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.overlay-media__title {
+  font-size: 1.15em;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-align: center;
+}
+
+.overlay-media__subtitle {
+  font-size: 0.88em;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-align: center;
+}
+
+.overlay-media__subtitle-sep {
+  color: var(--color-text-tertiary);
+  margin: 0 5px;
+  opacity: 0.5;
+}
+
+.overlay-media__album {
+  font-size: 0.76em;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-align: center;
+}
+
+/* ── Transport Controls ──────────────────────────────────────── */
+.overlay-media__controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.overlay-media__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border-subtle);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.overlay-media__btn:hover {
+  color: var(--color-accent-primary);
+  border-color: var(--color-accent-primary);
+}
+
+.overlay-media__btn--play {
+  width: 54px;
+  height: 54px;
+  border-color: var(--color-accent-primary);
+  color: var(--color-accent-primary);
+}
+
+.overlay-media__btn--play:hover {
+  background: var(--color-accent-primary);
+  color: var(--color-bg-primary);
+}
+
+/* ── Empty State ─────────────────────────────────────────────── */
+.overlay-media__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  color: var(--color-text-tertiary);
+}
+
+.overlay-media__empty-icon {
+  opacity: 0.3;
+}
+
+.overlay-media__empty-text {
+  font-size: 0.88em;
+}
+
+/* ══════════════════════════════════════════════════════════════ */
+/* ── Divider ──────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════ */
+
+.overlay-media__divider {
+  width: 100%;
+  height: 1px;
+  background: var(--color-border-subtle);
+  flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════ */
+/* ── Bookmark Carousel (Secondary Section) ─────────────────── */
+/* ══════════════════════════════════════════════════════════════ */
+
+.media-carousel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 2px 0;
+  flex-shrink: 0;
+}
+
+/* ── Navigation Arrows ──────────────────────────────────────── */
+.media-carousel__arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.media-carousel__arrow:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-tertiary);
+}
+
+/* ── Viewport (clip mask) ───────────────────────────────────── */
+.media-carousel__viewport {
+  flex: 1;
+  overflow: hidden;
+  min-width: 0;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 12%,
+    black 88%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 12%,
+    black 88%,
+    transparent 100%
+  );
+}
+
+.media-carousel__viewport--single {
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+
+/* ── Track (sliding container) ──────────────────────────────── */
+.media-carousel__track {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+/* ── Carousel Item ──────────────────────────────────────────── */
+.media-carousel__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  transition:
+    transform 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.media-carousel__item--active {
+  border-color: var(--color-accent-primary);
+  background: rgba(var(--color-accent-primary-rgb, 99, 102, 241), 0.1);
+}
+
+.media-carousel__item:not(.media-carousel__item--active):hover {
+  background: var(--color-bg-tertiary);
+}
+
+.media-carousel__item--deleting {
+  transform: scale(0) !important;
+  opacity: 0 !important;
+  transition:
+    transform 200ms ease-out,
+    opacity 200ms ease-out;
+}
+
+/* ── Bookmark Favicon (shared) ─────────────────────────────── */
+.media-carousel__favicon {
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.media-carousel__emoji {
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.media-carousel__letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ── Label (active bookmark title) ─────────────────────────── */
+.media-carousel__label {
+  font-size: 0.72em;
+  color: var(--color-text-secondary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  min-height: 1.2em;
+}
+
+/* ── Actions Bar ────────────────────────────────────────────── */
+.media-carousel__actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.media-carousel__action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-subtle);
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 0.65em;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.media-carousel__action-btn:hover {
+  color: var(--color-accent-primary);
+  border-color: var(--color-accent-primary);
+}
+
+.media-carousel__action-btn--danger:hover {
+  color: var(--color-danger, #ef4444);
+  border-color: var(--color-danger, #ef4444);
+}
+
+.media-carousel__action-btn--confirming {
+  color: var(--color-danger, #ef4444);
+  border-color: var(--color-danger, #ef4444);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+/* ── Dot Indicators ─────────────────────────────────────────── */
+.media-carousel__dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.media-carousel__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  opacity: 0.3;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.media-carousel__dot--active {
+  opacity: 1;
+  background: var(--color-accent-primary);
+  transform: scale(1.3);
+}
+
+.media-carousel__counter {
+  font-size: 0.65em;
+  color: var(--color-text-tertiary);
+  min-width: 40px;
+  text-align: center;
+}
+
+/* ── Empty Bookmark State ───────────────────────────────────── */
+.media-carousel__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  width: 100%;
+}
+
+.media-carousel__empty-text {
+  font-size: 0.72em;
+  color: var(--color-text-tertiary);
+}
+
+.media-carousel__empty-add {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px dashed var(--color-border-subtle);
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: 0.76em;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.media-carousel__empty-add:hover {
+  color: var(--color-accent-primary);
+  border-color: var(--color-accent-primary);
+}
+
+/* ── Add Form ───────────────────────────────────────────────── */
+.media-carousel__add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: 8px;
+}
+
+.media-carousel__input {
+  width: 100%;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  font-size: 0.82em;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color var(--transition-fast);
+}
+
+.media-carousel__input:focus {
+  border-color: var(--color-accent-primary);
+}
+
+.media-carousel__input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+/* ── Inline Emoji Grid ──────────────────────────────────────── */
+.media-carousel__emoji-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.media-carousel__emoji-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.media-carousel__emoji-label {
+  font-size: 0.7em;
+  color: var(--color-text-tertiary);
+}
+
+.media-carousel__emoji-clear {
+  font-size: 0.65em;
+  color: var(--color-text-tertiary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 4px;
+  transition: color var(--transition-fast);
+}
+
+.media-carousel__emoji-clear:hover {
+  color: var(--color-danger, #ef4444);
+}
+
+.media-carousel__emoji-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-height: 100px;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.media-carousel__emoji-cat {
+  font-size: 0.55em;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 2px 1px;
+  width: 100%;
+  font-weight: 600;
+}
+
+.media-carousel__emoji-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.media-carousel__emoji-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+.media-carousel__emoji-btn--selected {
+  border-color: var(--color-accent-primary);
+  background: rgba(var(--color-accent-primary-rgb, 99, 102, 241), 0.1);
+}
+
+/* ── Form Actions ───────────────────────────────────────────── */
+.media-carousel__form-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.media-carousel__form-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: 0.76em;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.media-carousel__form-btn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-secondary);
+}
+
+.media-carousel__form-btn--save {
+  background: var(--color-accent-primary);
+  border-color: var(--color-accent-primary);
+  color: #fff;
+}
+
+.media-carousel__form-btn--save:hover {
+  opacity: 0.9;
+  color: #fff;
+  border-color: var(--color-accent-primary);
+}
+
+/* ── Bookmarks Tip ───────────────────────────────────────────── */
+.media-carousel__tip {
+  font-size: 0.55em;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  width: 100%;
+  opacity: 0.5;
+}

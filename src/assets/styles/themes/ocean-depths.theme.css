@@ -1,0 +1,60 @@
+/* =============================================================
+   Ocean Depths — Deep marine navy, aqua/teal primary, coral secondary
+   ============================================================= */
+
+[data-theme="ocean-depths"] {
+  /* Background layers — deeper blue-green navy */
+  --color-bg-primary: #081218;
+  --color-bg-secondary: #0e1a26;
+  --color-bg-tertiary: #142434;
+  --color-bg-elevated: #1a2e42;
+  --color-bg-hover: #20384e;
+  --color-bg-active: #26425a;
+
+  /* Text */
+  --color-text-primary: #d8eef8;
+  --color-text-secondary: #80aac0;
+  --color-text-tertiary: #5888a0;
+  --color-text-inverse: #081218;
+
+  /* Accent colors */
+  --color-accent-primary: #00a8c8;
+  --color-accent-primary-hover: #18bce0;
+  --color-accent-secondary: #f06060;
+  --color-accent-secondary-hover: #f87878;
+  --color-accent-success: #28b8a8;
+  --color-accent-warning: #f0c058;
+  --color-accent-error: #e84060;
+
+  /* Borders */
+  --color-border: #20384e;
+  --color-border-subtle: #142434;
+  --color-border-focus: #00a8c8;
+
+  /* Overlay */
+  --color-overlay: rgba(8, 18, 24, 0.7);
+  --color-overlay-light: rgba(8, 18, 24, 0.35);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(8, 18, 24, 0.5);
+  --shadow-md: 0 4px 8px rgba(8, 18, 24, 0.6);
+  --shadow-lg: 0 8px 24px rgba(8, 18, 24, 0.7);
+  --shadow-glow: 0 0 20px rgba(0, 168, 200, 0.22);
+
+  /* Tag palette — oceanic palette */
+  --tag-color-0: #00a8c8; /* aqua */
+  --tag-color-1: #f06060; /* coral */
+  --tag-color-2: #28b8a8; /* sea green */
+  --tag-color-3: #e04060; /* crimson coral */
+  --tag-color-4: #f0c058; /* sand */
+  --tag-color-5: #e88038; /* sunset */
+  --tag-color-6: #e068a8; /* anemone */
+  --tag-color-7: #08c890; /* seafoam */
+  --tag-color-8: #98d060; /* kelp */
+  --tag-color-9: #d870e8; /* jellyfish */
+  --tag-color-10: #7080e8; /* deep blue */
+  --tag-color-11: #40b8a0; /* lagoon */
+  --tag-color-12: #f07878; /* salmon */
+  --tag-color-13: #80a8e8; /* sky */
+  --tag-color-14: #688898; /* driftwood */
+}

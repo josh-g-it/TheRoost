@@ -1,0 +1,60 @@
+/* =============================================================
+   Cyber Neon — Cyberpunk black, neon green primary, hot pink secondary
+   ============================================================= */
+
+[data-theme="cyber-neon"] {
+  /* Background layers */
+  --color-bg-primary: #0a0a0a;
+  --color-bg-secondary: #111111;
+  --color-bg-tertiary: #1a1a1a;
+  --color-bg-elevated: #222222;
+  --color-bg-hover: #2a2a2a;
+  --color-bg-active: #333333;
+
+  /* Text */
+  --color-text-primary: #e0ffe0;
+  --color-text-secondary: #8aff8a;
+  --color-text-tertiary: #5a8a5a;
+  --color-text-inverse: #0a0a0a;
+
+  /* Accent colors */
+  --color-accent-primary: #00ff88;
+  --color-accent-primary-hover: #33ff9e;
+  --color-accent-secondary: #ff2d8a;
+  --color-accent-secondary-hover: #ff5ca5;
+  --color-accent-success: #00ff88;
+  --color-accent-warning: #ffee00;
+  --color-accent-error: #ff3333;
+
+  /* Borders */
+  --color-border: #2a2a2a;
+  --color-border-subtle: #1a1a1a;
+  --color-border-focus: #00ff88;
+
+  /* Overlay */
+  --color-overlay: rgba(0, 0, 0, 0.75);
+  --color-overlay-light: rgba(0, 0, 0, 0.4);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.6);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.7);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.8);
+  --shadow-glow: 0 0 20px rgba(0, 255, 136, 0.25);
+
+  /* Tag palette — neon-saturated palette */
+  --tag-color-0: #00ff88; /* neon green */
+  --tag-color-1: #ff2d8a; /* hot pink */
+  --tag-color-2: #00d4ff; /* electric blue */
+  --tag-color-3: #ff3333; /* neon red */
+  --tag-color-4: #ffee00; /* neon yellow */
+  --tag-color-5: #ff8800; /* neon orange */
+  --tag-color-6: #ff00ff; /* magenta */
+  --tag-color-7: #00ffff; /* cyan */
+  --tag-color-8: #88ff00; /* chartreuse */
+  --tag-color-9: #ff66b2; /* neon rose */
+  --tag-color-10: #6644ff; /* neon indigo */
+  --tag-color-11: #00ffcc; /* neon teal */
+  --tag-color-12: #ff4466; /* neon coral */
+  --tag-color-13: #aa55ff; /* neon violet */
+  --tag-color-14: #888888; /* neutral grey */
+}

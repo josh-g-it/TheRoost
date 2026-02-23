@@ -1,0 +1,29 @@
+.profile-view {
+  padding: var(--space-lg);
+  overflow-y: auto;
+  height: 100%;
+}
+
+.profile-view__quick-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+}
+
+.profile-view__charts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-lg);
+  margin-top: var(--space-lg);
+}
+
+@media (max-width: 900px) {
+  .profile-view__charts {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-view__quick-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

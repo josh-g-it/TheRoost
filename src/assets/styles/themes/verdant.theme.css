@@ -1,0 +1,60 @@
+/* =============================================================
+   Verdant — Dark forest canopy, emerald greens, golden highlights
+   ============================================================= */
+
+[data-theme="verdant"] {
+  /* Background layers */
+  --color-bg-primary: #0b150e;
+  --color-bg-secondary: #121f17;
+  --color-bg-tertiary: #1a2b20;
+  --color-bg-elevated: #22362a;
+  --color-bg-hover: #294032;
+  --color-bg-active: #304a3a;
+
+  /* Text */
+  --color-text-primary: #ddf0e2;
+  --color-text-secondary: #8cb89a;
+  --color-text-tertiary: #689878;
+  --color-text-inverse: #0b150e;
+
+  /* Accent colors */
+  --color-accent-primary: #3cb371;
+  --color-accent-primary-hover: #4ec884;
+  --color-accent-secondary: #d4a838;
+  --color-accent-secondary-hover: #e0b848;
+  --color-accent-success: #3cb371;
+  --color-accent-warning: #d4a838;
+  --color-accent-error: #cd5c5c;
+
+  /* Borders */
+  --color-border: #294032;
+  --color-border-subtle: #1a2b20;
+  --color-border-focus: #3cb371;
+
+  /* Overlay */
+  --color-overlay: rgba(11, 21, 14, 0.7);
+  --color-overlay-light: rgba(11, 21, 14, 0.35);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(11, 21, 14, 0.5);
+  --shadow-md: 0 4px 8px rgba(11, 21, 14, 0.6);
+  --shadow-lg: 0 8px 24px rgba(11, 21, 14, 0.7);
+  --shadow-glow: 0 0 20px rgba(60, 179, 113, 0.2);
+
+  /* Tag palette — botanical/forest palette */
+  --tag-color-0: #3cb371; /* emerald */
+  --tag-color-1: #d4a838; /* golden */
+  --tag-color-2: #cd5c5c; /* indian red */
+  --tag-color-3: #7b68ee; /* slate blue */
+  --tag-color-4: #daa520; /* goldenrod */
+  --tag-color-5: #e07848; /* burnt sienna */
+  --tag-color-6: #c27894; /* dusty rose */
+  --tag-color-7: #20b2aa; /* light sea green */
+  --tag-color-8: #8fbc8f; /* dark sea green */
+  --tag-color-9: #ba55d3; /* orchid */
+  --tag-color-10: #6495ed; /* cornflower */
+  --tag-color-11: #48d1a0; /* mint */
+  --tag-color-12: #f08070; /* salmon */
+  --tag-color-13: #9b84c0; /* wisteria */
+  --tag-color-14: #7a9480; /* sage */
+}

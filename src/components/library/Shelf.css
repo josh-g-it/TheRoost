@@ -1,0 +1,60 @@
+.shelf {
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.shelf:last-of-type {
+  border-bottom: none;
+}
+
+.shelf--drag-over {
+  background: color-mix(in srgb, var(--color-accent-primary) 8%, transparent);
+  border-top: 2px solid var(--color-accent-primary);
+}
+
+/* Genre group sections */
+.shelf__genre-group {
+  margin-bottom: var(--space-xs);
+}
+
+.shelf__genre-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  padding: var(--space-xs) var(--space-md) var(--space-xs);
+}
+
+.shelf__genre-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  font-weight: var(--font-weight-normal);
+}
+
+/* Empty state */
+.shelf__empty {
+  padding: var(--space-lg) var(--space-md);
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}
+
+/* "Show all" link for truncated list view */
+.shelf__show-all {
+  display: block;
+  text-align: center;
+  padding: var(--space-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-accent-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  transition: color var(--transition-fast);
+}
+
+.shelf__show-all:hover {
+  color: var(--color-accent-primary-hover);
+  text-decoration: underline;
+}

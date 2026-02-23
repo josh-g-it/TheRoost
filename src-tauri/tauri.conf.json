@@ -1,0 +1,54 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/tauri-v2.0.0/crates/tauri-config-schema/schema.json",
+  "productName": "The Roost",
+  "version": "1.0.0",
+  "identifier": "app.theroost",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "The Roost",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 768,
+        "resizable": true,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' https://steamcdn-a.akamaihd.net https://avatars.steamstatic.com https://cdn.akamai.steamstatic.com https://cdn.cloudflare.steamstatic.com https://media.steampowered.com https://cdn2.steamgriddb.com https://cdn.steamgriddb.com https://images.gog.com https://images-1.gog.com https://images-2.gog.com https://images-3.gog.com https://www.google.com; style-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/64x64.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "resources": [],
+    "copyright": "Copyright 2025-2026 kickinchicken",
+    "shortDescription": "Where your games come home to roost",
+    "longDescription": "The Roost is a multi-launcher game library manager with a system overlay, AI-powered command palette, session tracking, and rich statistics. Supports Steam, Epic, GOG, EA, Ubisoft, and Battle.net.",
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "headerImage": null,
+        "sidebarImage": null,
+        "installMode": "currentUser",
+        "installerHooks": "nsis/installer-hooks.nsh"
+      }
+    }
+  }
+}

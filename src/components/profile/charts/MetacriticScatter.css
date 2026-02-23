@@ -1,0 +1,23 @@
+.metacritic-scatter {
+  width: 100%;
+}
+
+.metacritic-scatter__tooltip {
+  padding: var(--space-md);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+}
+
+.metacritic-scatter__tooltip-name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin-bottom: 4px;
+}
+
+.metacritic-scatter__tooltip-stat {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}

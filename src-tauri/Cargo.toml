@@ -1,0 +1,51 @@
+[package]
+name = "the-roost"
+version = "1.0.0"
+description = "Where your games come home to roost"
+authors = ["josh-g-it"]
+edition = "2021"
+
+[lib]
+name = "the_roost_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json"] }
+winreg = "0.52"
+thiserror = "2"
+open = "5"
+keyring = { version = "3", features = ["windows-native"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+tokio = { version = "1", features = ["time", "rt", "macros"] }
+futures = "0.3"
+sysinfo = "0.33"
+nvml-wrapper = "0.12.0"
+windows = { version = "0.62.2", features = [
+    "Win32_System_Performance", "Media_Control", "Foundation",
+    "Win32_Media_Audio", "Win32_Media_Audio_Endpoints",
+    "Win32_System_Com", "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant", "Win32_UI_Shell_PropertiesSystem",
+    "Win32_Devices_FunctionDiscovery",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+opt-level = "s"

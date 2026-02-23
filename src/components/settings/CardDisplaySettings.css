@@ -1,0 +1,101 @@
+.card-display-settings {
+  display: flex;
+  gap: var(--space-lg);
+  align-items: flex-start;
+}
+
+.card-display-settings__controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 160px;
+}
+
+.card-display-settings__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.card-display-settings__option input[type="checkbox"] {
+  accent-color: var(--color-accent-primary);
+}
+
+.card-display-settings__preview {
+  flex: 1;
+  max-width: 280px;
+}
+
+.card-display-settings__preview-title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 var(--space-sm);
+}
+
+.card-display-settings__preview-card {
+  position: relative;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  aspect-ratio: 460 / 215;
+}
+
+.card-display-settings__preview-image {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, var(--color-bg-tertiary), var(--color-bg-elevated));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-display-settings__preview-placeholder {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.card-display-settings__preview-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: var(--space-sm);
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.card-display-settings__preview-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: #fff;
+}
+
+.card-display-settings__preview-genres,
+.card-display-settings__preview-tags {
+  display: flex;
+  gap: 3px;
+}
+
+.card-display-settings__preview-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.card-display-settings__preview-playtime {
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.card-display-settings__preview-installed {
+  font-size: var(--font-size-xs);
+  color: var(--color-accent-success);
+}

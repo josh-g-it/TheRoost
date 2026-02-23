@@ -1,0 +1,73 @@
+/* =============================================================
+   The Roost Theme System
+
+   Shared design tokens (spacing, typography, layout) live here
+   in :root. Color themes live in individual *.theme.css files
+   inside the themes/ directory.
+
+   To add a new theme:
+   1. Create themes/your-theme.theme.css with a
+      [data-theme="your-theme"] block overriding color variables
+   2. Add an @import below
+   3. Add the theme metadata to THEMES in src/hooks/useTheme.ts
+
+   The app switches themes by setting the data-theme attribute
+   on <html>.
+   ============================================================= */
+
+/* --- Font declarations --- */
+@import "./fonts.css";
+
+/* --- UI Scale overrides (uses html[] selector for higher specificity than :root) --- */
+@import "./ui-scale.css";
+
+/* --- Theme files (only import *.theme.css files) --- */
+@import "./themes/dark-gaming.theme.css";
+@import "./themes/fae.theme.css";
+@import "./themes/midnight-purple.theme.css";
+@import "./themes/cyber-neon.theme.css";
+@import "./themes/arctic-frost.theme.css";
+@import "./themes/ember-forge.theme.css";
+@import "./themes/ocean-depths.theme.css";
+@import "./themes/sakura.theme.css";
+@import "./themes/verdant.theme.css";
+
+/* --- Shared design tokens (theme-independent) --- */
+:root {
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* Spacing scale */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+
+  /* Typography */
+  --font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.5rem;
+  --font-size-2xl: 2rem;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 400ms ease;
+
+  /* Layout */
+  --rail-width: 48px;
+  --rail-expanded-width: 180px;
+  --header-height: 56px;
+}

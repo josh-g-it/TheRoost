@@ -1,0 +1,12 @@
+.playtime-distribution {
+  width: 100%;
+}
+
+.playtime-distribution__tooltip {
+  padding: var(--space-md);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}

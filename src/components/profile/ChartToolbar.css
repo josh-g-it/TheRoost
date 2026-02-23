@@ -1,0 +1,26 @@
+.chart-toolbar-select {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.chart-toolbar-select__label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.chart-toolbar-select__input {
+  padding: 2px 6px;
+  font-size: var(--font-size-xs);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.chart-toolbar-select__input:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+}

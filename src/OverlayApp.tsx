@@ -1,0 +1,512 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { AppSettings, Game, GameSession, StoreMetadata } from "./types";
+import type {
+  AppSettings as SettingsType,
+  OverlayPanelId,
+  OverlayPanelPosition,
+} from "./types/settings";
+import { FONT_OPTIONS } from "./types/theme";
+import { useSettingsStore } from "./store/settingsSlice";
+import { OVERLAY_PANELS } from "./components/overlay/overlayPanelRegistry";
+import type { Rect } from "./components/overlay/panelCollision";
+import { OverlayCommandCenter } from "./components/overlay/OverlayCommandCenter";
+import { OverlayGameNotes } from "./components/overlay/OverlayGameNotes";
+import { OverlaySystemMonitor } from "./components/overlay/OverlaySystemMonitor";
+import {
+  OverlayMediaControls,
+  useMediaSession,
+} from "./components/overlay/OverlayMediaControls";
+import { OverlayAudioMixer } from "./components/overlay/OverlayAudioMixer";
+import type { MediaControlsMode } from "./types";
+import { FloatingPanel } from "./components/overlay/FloatingPanel";
+import { OverlayBackdrop } from "./components/overlay/OverlayBackdrop";
+import { OverlayWindowManager } from "./components/overlay/OverlayWindowManager";
+
+const SAVE_DEBOUNCE_MS = 300;
+
+export function OverlayApp() {
+  const [settings, setSettings] = useState<SettingsType | null>(null);
+  const [games, setGames] = useState<Game[]>([]);
+  const [metadataCache, setMetadataCache] = useState<Map<string, StoreMetadata>>(
+    new Map(),
+  );
+  const [activeSessions, setActiveSessions] = useState<GameSession[]>([]);
+  const [favoritesCount, setFavoritesCount] = useState(0);
+  const [panelPositions, setPanelPositions] = useState<
+    Partial<Record<OverlayPanelId, OverlayPanelPosition>>
+  >({});
+  const [resetKeys, setResetKeys] = useState<Record<string, number>>({});
+
+  // Track intentional hide so we don't re-grab focus when we dismiss on purpose
+  const hidingRef = useRef(false);
+
+  // Debounced settings save
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSettingsRef = useRef<SettingsType | null>(null);
+
+  const debouncedSave = useCallback((updated: SettingsType) => {
+    pendingSettingsRef.current = updated;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      if (pendingSettingsRef.current) {
+        invoke("save_settings", { settings: pendingSettingsRef.current }).catch(() => {});
+        pendingSettingsRef.current = null;
+      }
+    }, SAVE_DEBOUNCE_MS);
+  }, []);
+
+  // Debounce guard: prevents multiple rapid loadData calls from piling up
+  // DB commands on the tokio thread pool (which causes freezes during session transitions).
+  const loadingRef = useRef(false);
+
+  // Load data on mount + whenever window regains focus.
+  const loadData = useCallback(async () => {
+    // Skip if a load is already in flight — prevents command pile-up
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+
+    try {
+      const s = await invoke<AppSettings>("load_settings");
+      setSettings(s);
+      setPanelPositions((s as SettingsType).overlayPanelPositions ?? {});
+    } catch {
+      loadingRef.current = false;
+      return;
+    }
+
+    try {
+      const [libResult, sessionsResult, favsResult] = await Promise.allSettled([
+        invoke<{ games: Game[] }>("get_overlay_library"),
+        invoke<GameSession[]>("get_active_sessions"),
+        invoke<string[]>("get_all_favorites"),
+      ]);
+
+      let loadedGames: Game[] = [];
+      if (libResult.status === "fulfilled") {
+        loadedGames = libResult.value?.games ?? [];
+        setGames(loadedGames);
+      }
+      if (sessionsResult.status === "fulfilled") {
+        setActiveSessions(sessionsResult.value ?? []);
+      }
+      if (favsResult.status === "fulfilled") {
+        setFavoritesCount(favsResult.value?.length ?? 0);
+      }
+
+      // Fetch metadata for command palette genre/tag/category filters
+      if (loadedGames.length > 0) {
+        try {
+          const gameIds = loadedGames.map((g) => g.gameId);
+          const results = await invoke<[string, StoreMetadata | null][]>(
+            "fetch_library_metadata",
+            { gameIds },
+          );
+          const cache = new Map<string, StoreMetadata>();
+          for (const [gameId, meta] of results) {
+            if (meta) cache.set(gameId, meta);
+          }
+          setMetadataCache(cache);
+        } catch {
+          // Metadata fetch failed — command palette will just skip dynamic filters
+        }
+      }
+    } finally {
+      loadingRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Re-fetch data when overlay regains focus (e.g. after toggling off/on).
+  // When focus is LOST (e.g. Steam/Discord/NVIDIA overlay steals it), re-claim it
+  // after a short delay — unless we intentionally hid the overlay.
+  useEffect(() => {
+    const win = getCurrentWindow();
+    let focusTimer: ReturnType<typeof setTimeout> | null = null;
+    const unlisten = win.onFocusChanged(({ payload: focused }) => {
+      if (focused) {
+        hidingRef.current = false;
+        // loadData has its own debounce guard — safe to call on focus
+        loadData();
+      } else if (!hidingRef.current) {
+        // Focus was stolen by another overlay — reclaim after a short delay
+        if (focusTimer) clearTimeout(focusTimer);
+        focusTimer = setTimeout(() => {
+          if (!hidingRef.current) {
+            win.setFocus().catch(() => {});
+          }
+        }, 150);
+      }
+    });
+    return () => {
+      if (focusTimer) clearTimeout(focusTimer);
+      unlisten.then((fn) => fn());
+    };
+  }, [loadData]);
+
+  // Re-fetch when a game session starts or stops (process monitor broadcasts this)
+  useEffect(() => {
+    const unlisten = listen("session-update", () => {
+      loadData();
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [loadData]);
+
+  // Apply theme + sync to Zustand so AppIcon reads the correct icon set
+  useEffect(() => {
+    if (!settings) return;
+    const theme = settings.theme ?? "dark-gaming";
+    const fontFamily = settings.fontFamily ?? "system";
+    const uiScale = settings.uiScale ?? "comfortable";
+
+    document.documentElement.setAttribute("data-theme", theme);
+
+    const fontOption = FONT_OPTIONS.find((f) => f.id === fontFamily);
+    if (fontOption) {
+      document.documentElement.style.setProperty("--font-family", fontOption.family);
+    }
+
+    if (uiScale === "comfortable") {
+      document.documentElement.removeAttribute("data-ui-scale");
+    } else {
+      document.documentElement.setAttribute("data-ui-scale", uiScale);
+    }
+
+    // Sync to Zustand so shared components (AppIcon etc.) read from the store
+    useSettingsStore.setState({ settings, isLoading: false });
+  }, [settings]);
+
+  // Reload settings when the main window notifies us of a change
+  useEffect(() => {
+    const unlisten = listen("settings-changed", () => {
+      invoke<AppSettings>("load_settings")
+        .then((s) => setSettings(s))
+        .catch(() => {});
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  // ── Panel orchestration ────────────────────────────────────────
+
+  const handlePanelPositionChange = useCallback(
+    (panelId: OverlayPanelId, pos: OverlayPanelPosition) => {
+      const next = { ...panelPositions, [panelId]: pos };
+      setPanelPositions(next);
+      if (settings) {
+        const updated = { ...settings, overlayPanelPositions: next };
+        setSettings(updated);
+        debouncedSave(updated);
+      }
+    },
+    [panelPositions, settings, debouncedSave],
+  );
+
+  const handleTogglePanel = useCallback(
+    (id: OverlayPanelId) => {
+      const current = panelPositions[id];
+      const isVisible = current?.visible ?? true;
+      const pos: OverlayPanelPosition = current
+        ? { ...current, visible: !isVisible }
+        : { ...getPanelDefault(id), visible: true };
+      handlePanelPositionChange(id, pos);
+    },
+    [panelPositions, handlePanelPositionChange],
+  );
+
+  const handleHidePanel = useCallback(
+    (id: OverlayPanelId) => {
+      const current = panelPositions[id];
+      if (current) {
+        handlePanelPositionChange(id, { ...current, visible: false });
+      } else {
+        handlePanelPositionChange(id, { ...getPanelDefault(id), visible: false });
+      }
+    },
+    [panelPositions, handlePanelPositionChange],
+  );
+
+  const handleResetPanel = useCallback(
+    (id: OverlayPanelId) => {
+      const next = { ...panelPositions };
+      delete next[id];
+      setPanelPositions(next);
+      // Bump reset key to force FloatingPanel remount at default position
+      setResetKeys((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
+      if (settings) {
+        const updated = { ...settings, overlayPanelPositions: next };
+        setSettings(updated);
+        debouncedSave(updated);
+      }
+    },
+    [panelPositions, settings, debouncedSave],
+  );
+
+  const hideOverlay = useCallback(() => {
+    hidingRef.current = true;
+    getCurrentWindow().hide();
+  }, []);
+
+  // ── Media controls dynamic visibility ─────────────────────────
+  const mediaMode: MediaControlsMode =
+    (settings?.mediaControlsMode as MediaControlsMode) ?? "dynamic";
+  const mediaSnapshot = useMediaSession(mediaMode === "dynamic");
+
+  // Build panel states for window manager
+  const panelStates: Record<string, { visible: boolean }> = {};
+  for (const panel of OVERLAY_PANELS) {
+    if (panel.id === "media-controls") {
+      // Media controls visibility is driven entirely by mode
+      if (mediaMode === "always") {
+        panelStates[panel.id] = { visible: true };
+      } else if (mediaMode === "hidden") {
+        panelStates[panel.id] = { visible: false };
+      } else {
+        // Dynamic: show when active media session exists
+        const hasMedia =
+          mediaSnapshot?.hasSession === true &&
+          mediaSnapshot.status !== "closed" &&
+          mediaSnapshot.status !== "stopped";
+        panelStates[panel.id] = { visible: hasMedia };
+      }
+    } else {
+      panelStates[panel.id] = {
+        visible: panelPositions[panel.id]?.visible ?? true,
+      };
+    }
+  }
+
+  // Build otherPanelRects for collision detection
+  const buildOtherRects = useCallback(
+    (excludeId: OverlayPanelId): Rect[] => {
+      const rects: Rect[] = [];
+      // Window manager bar rect (top center, ~auto width but estimate)
+      rects.push({ x: 0, y: 0, width: window.innerWidth, height: 44 });
+
+      // Cast to Record<string, ...> to prevent TS narrowing OverlayPanelId to never
+      // when the only panel is excluded (currently "command-center" is the sole member).
+      const positions = panelPositions as Record<
+        string,
+        OverlayPanelPosition | undefined
+      >;
+      for (const panel of OVERLAY_PANELS) {
+        if (panel.id === excludeId) continue;
+        const saved = positions[panel.id];
+        const isVisible = saved?.visible ?? true;
+        if (!isVisible) continue;
+
+        if (saved) {
+          rects.push({
+            x: saved.x,
+            y: saved.y,
+            width: saved.width ?? panel.defaultWidth,
+            height: saved.height ?? 400,
+          });
+        } else {
+          const def = panel.defaultPosition();
+          rects.push({
+            x: def.x,
+            y: def.y,
+            width: panel.defaultWidth,
+            height: 400,
+          });
+        }
+      }
+      return rects;
+    },
+    [panelPositions],
+  );
+
+  const handleMediaControlsModeChange = useCallback(
+    (mode: MediaControlsMode) => {
+      if (!settings) return;
+      const updated = { ...settings, mediaControlsMode: mode };
+      setSettings(updated);
+      debouncedSave(updated);
+      // Also sync to main window
+      invoke("notify_settings_changed").catch(() => {});
+    },
+    [settings, debouncedSave],
+  );
+
+  if (!settings) return null;
+
+  // Command center panel config
+  const ccDef = OVERLAY_PANELS.find((p) => p.id === "command-center")!;
+  const ccSaved = panelPositions["command-center"];
+  const ccVisible = ccSaved?.visible ?? true;
+  const ccPosition = ccSaved ? { x: ccSaved.x, y: ccSaved.y } : ccDef.defaultPosition();
+
+  return (
+    <>
+      <OverlayBackdrop onClick={hideOverlay} />
+      <OverlayWindowManager
+        panelStates={panelStates}
+        onTogglePanel={handleTogglePanel}
+        onHidePanel={handleHidePanel}
+        onResetPanel={handleResetPanel}
+        mediaControlsMode={mediaMode}
+        onMediaControlsModeChange={handleMediaControlsModeChange}
+      />
+      {ccVisible && (
+        <FloatingPanel
+          key={`command-center-${resetKeys["command-center"] ?? 0}`}
+          panelId="command-center"
+          title="Command Center"
+          defaultPosition={ccPosition}
+          pinned={ccSaved?.pinned}
+          onPositionChange={(pos) => handlePanelPositionChange("command-center", pos)}
+          width={ccSaved?.width ?? ccDef.defaultWidth}
+          resizable={false}
+          otherPanelRects={buildOtherRects("command-center")}
+        >
+          <OverlayCommandCenter
+            settings={settings}
+            games={games}
+            metadataCache={metadataCache}
+            activeSessions={activeSessions}
+            favoritesCount={favoritesCount}
+            onTogglePanel={handleTogglePanel}
+            onSaveSettings={async (s) => {
+              try {
+                await invoke("save_settings", { settings: s });
+                setSettings(s);
+                invoke("notify_settings_changed").catch(() => {});
+              } catch {
+                // Settings save failed silently
+              }
+            }}
+            onHideOverlay={hideOverlay}
+          />
+        </FloatingPanel>
+      )}
+      {(() => {
+        const gnDef = OVERLAY_PANELS.find((p) => p.id === "game-notes")!;
+        const gnSaved = panelPositions["game-notes"];
+        const gnVisible = gnSaved?.visible ?? true;
+        if (!gnVisible) return null;
+        const gnPosition = gnSaved
+          ? { x: gnSaved.x, y: gnSaved.y }
+          : gnDef.defaultPosition();
+        return (
+          <FloatingPanel
+            key={`game-notes-${resetKeys["game-notes"] ?? 0}`}
+            panelId="game-notes"
+            title="Game Notes"
+            defaultPosition={gnPosition}
+            pinned={gnSaved?.pinned}
+            onPositionChange={(pos) => handlePanelPositionChange("game-notes", pos)}
+            onClose={() => handleHidePanel("game-notes")}
+            width={gnSaved?.width ?? gnDef.defaultWidth}
+            resizable
+            minWidth={300}
+            minHeight={200}
+            defaultHeight={gnSaved?.height ?? 420}
+            otherPanelRects={buildOtherRects("game-notes")}
+          >
+            <OverlayGameNotes activeSessions={activeSessions} games={games} />
+          </FloatingPanel>
+        );
+      })()}
+      {(() => {
+        const smDef = OVERLAY_PANELS.find((p) => p.id === "system-monitor")!;
+        const smSaved = panelPositions["system-monitor"];
+        const smVisible = smSaved?.visible ?? true;
+        if (!smVisible) return null;
+        const smPosition = smSaved
+          ? { x: smSaved.x, y: smSaved.y }
+          : smDef.defaultPosition();
+        return (
+          <FloatingPanel
+            key={`system-monitor-${resetKeys["system-monitor"] ?? 0}`}
+            panelId="system-monitor"
+            title="System Monitor"
+            defaultPosition={smPosition}
+            pinned={smSaved?.pinned}
+            onPositionChange={(pos) => handlePanelPositionChange("system-monitor", pos)}
+            onClose={() => handleHidePanel("system-monitor")}
+            width={smSaved?.width ?? smDef.defaultWidth}
+            resizable
+            minWidth={360}
+            minHeight={250}
+            defaultHeight={smSaved?.height ?? 340}
+            otherPanelRects={buildOtherRects("system-monitor")}
+          >
+            <OverlaySystemMonitor activeSessions={activeSessions} games={games} />
+          </FloatingPanel>
+        );
+      })()}
+      {(() => {
+        const mcDef = OVERLAY_PANELS.find((p) => p.id === "media-controls")!;
+        const mcSaved = panelPositions["media-controls"];
+        const mcVisible = panelStates["media-controls"]?.visible ?? false;
+        if (!mcVisible) return null;
+        const mcPosition = mcSaved
+          ? { x: mcSaved.x, y: mcSaved.y }
+          : mcDef.defaultPosition();
+        return (
+          <FloatingPanel
+            key={`media-controls-${resetKeys["media-controls"] ?? 0}`}
+            panelId="media-controls"
+            title="Media Controls"
+            defaultPosition={mcPosition}
+            pinned={mcSaved?.pinned}
+            onPositionChange={(pos) => handlePanelPositionChange("media-controls", pos)}
+            onClose={() => handleMediaControlsModeChange("hidden")}
+            width={mcSaved?.width ?? mcDef.defaultWidth}
+            resizable
+            minWidth={320}
+            minHeight={240}
+            defaultHeight={mcSaved?.height ?? 380}
+            otherPanelRects={buildOtherRects("media-controls")}
+          >
+            <OverlayMediaControls />
+          </FloatingPanel>
+        );
+      })()}
+      {(() => {
+        const amDef = OVERLAY_PANELS.find((p) => p.id === "audio-mixer")!;
+        const amSaved = panelPositions["audio-mixer"];
+        const amVisible = amSaved?.visible ?? true;
+        if (!amVisible) return null;
+        const amPosition = amSaved
+          ? { x: amSaved.x, y: amSaved.y }
+          : amDef.defaultPosition();
+        return (
+          <FloatingPanel
+            key={`audio-mixer-${resetKeys["audio-mixer"] ?? 0}`}
+            panelId="audio-mixer"
+            title="Audio Mixer"
+            defaultPosition={amPosition}
+            pinned={amSaved?.pinned}
+            onPositionChange={(pos) => handlePanelPositionChange("audio-mixer", pos)}
+            onClose={() => handleHidePanel("audio-mixer")}
+            width={amSaved?.width ?? amDef.defaultWidth}
+            resizable
+            minWidth={320}
+            minHeight={250}
+            defaultHeight={amSaved?.height ?? 500}
+            otherPanelRects={buildOtherRects("audio-mixer")}
+          >
+            <OverlayAudioMixer />
+          </FloatingPanel>
+        );
+      })()}
+    </>
+  );
+}
+
+/** Get default position for a panel based on the registry. */
+function getPanelDefault(id: OverlayPanelId): OverlayPanelPosition {
+  const panel = OVERLAY_PANELS.find((p) => p.id === id);
+  const pos = panel?.defaultPosition() ?? { x: 100, y: 100 };
+  return { x: pos.x, y: pos.y, pinned: false, visible: true };
+}

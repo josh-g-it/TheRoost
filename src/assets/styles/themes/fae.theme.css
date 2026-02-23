@@ -1,0 +1,61 @@
+/* =============================================================
+   Fae — Cottage-core / nature theme
+   Warm wood tones, parchment, forest greens, mushroom accents
+   ============================================================= */
+
+[data-theme="fae"] {
+  /* Background layers — medium-wood / warm parchment */
+  --color-bg-primary: #ddd0ba;
+  --color-bg-secondary: #d0c1a6;
+  --color-bg-tertiary: #c4b294;
+  --color-bg-elevated: #e8dbc4;
+  --color-bg-hover: #baa88c;
+  --color-bg-active: #b09c80;
+
+  /* Text */
+  --color-text-primary: #2e2218;
+  --color-text-secondary: #5c4a36;
+  --color-text-tertiary: #7a6650;
+  --color-text-inverse: #ddd0ba;
+
+  /* Accent colors */
+  --color-accent-primary: #4e8250;
+  --color-accent-primary-hover: #3f6e42;
+  --color-accent-secondary: #a85838;
+  --color-accent-secondary-hover: #924a2e;
+  --color-accent-success: #4e8250;
+  --color-accent-warning: #b88a22;
+  --color-accent-error: #a84038;
+
+  /* Borders */
+  --color-border: #bfae92;
+  --color-border-subtle: #ccbc9e;
+  --color-border-focus: #4e8250;
+
+  /* Overlay */
+  --color-overlay: rgba(46, 34, 24, 0.55);
+  --color-overlay-light: rgba(46, 34, 24, 0.22);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(46, 34, 24, 0.15);
+  --shadow-md: 0 4px 8px rgba(46, 34, 24, 0.2);
+  --shadow-lg: 0 8px 24px rgba(46, 34, 24, 0.25);
+  --shadow-glow: 0 0 20px rgba(78, 130, 80, 0.18);
+
+  /* Tag palette — earthy/botanical 15-color palette */
+  --tag-color-0: #4e8250; /* forest green */
+  --tag-color-1: #a85838; /* terracotta */
+  --tag-color-2: #b88a22; /* golden */
+  --tag-color-3: #a84038; /* russet */
+  --tag-color-4: #706040; /* umber */
+  --tag-color-5: #c08050; /* apricot */
+  --tag-color-6: #b06880; /* dusty rose */
+  --tag-color-7: #4a8e8e; /* sage teal */
+  --tag-color-8: #7a9648; /* moss */
+  --tag-color-9: #906088; /* lavender */
+  --tag-color-10: #5a7090; /* slate blue */
+  --tag-color-11: #5a9a7e; /* mint */
+  --tag-color-12: #b86248; /* salmon */
+  --tag-color-13: #7e6ca0; /* wisteria */
+  --tag-color-14: #7a6650; /* warm grey */
+}

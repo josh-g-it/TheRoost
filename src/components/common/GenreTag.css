@@ -1,0 +1,21 @@
+.genre-tag {
+  display: inline-block;
+  background: var(--color-bg-active);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+  line-height: 1;
+}
+
+.genre-tag--sm {
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+}
+
+.genre-tag--md {
+  font-size: var(--font-size-sm);
+  padding: 3px 8px;
+}

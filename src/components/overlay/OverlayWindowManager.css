@@ -1,0 +1,126 @@
+/* ── Overlay Window Manager Bar ────────────────────────────────── */
+.overlay-wm {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(24px);
+  animation: panel-enter 150ms ease-out;
+}
+
+.overlay-wm__title {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 6px 0 2px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.overlay-wm__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--color-border-subtle);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.overlay-wm__item {
+  position: relative;
+}
+
+.overlay-wm__btn {
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.overlay-wm__btn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.overlay-wm__btn--active {
+  color: var(--color-accent-primary);
+}
+
+.overlay-wm__btn--active:hover {
+  color: var(--color-accent-primary);
+}
+
+.overlay-wm__btn-label {
+  font-weight: 500;
+}
+
+/* ── Dropdown ─────────────────────────────────────────────────── */
+.overlay-wm__dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(24px);
+  min-width: 150px;
+  padding: 4px;
+  z-index: 30;
+  animation: panel-enter 100ms ease-out;
+}
+
+.overlay-wm__dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
+  white-space: nowrap;
+}
+
+.overlay-wm__dropdown-item:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.overlay-wm__dropdown-item--active {
+  color: var(--color-accent-primary);
+  font-weight: 600;
+}
+
+.overlay-wm__dropdown-sep {
+  height: 1px;
+  background: var(--color-border-subtle);
+  margin: 4px 8px;
+}

@@ -1,0 +1,118 @@
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useUIStore } from "../../store/uiSlice";
+import { useMetadataStore } from "../../store/metadataSlice";
+import { extractAllCategories } from "../../utils/filtering";
+import type { StoreMetadata } from "../../types";
+import "./CategoryFilterPopover.css";
+
+/** Count how many games have each category */
+function countByCategory(cache: Map<string, StoreMetadata>): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const meta of cache.values()) {
+    for (const cat of meta.categories) {
+      counts.set(cat.id, (counts.get(cat.id) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+export function CategoryFilterPopover() {
+  const filters = useUIStore((s) => s.filters);
+  const setFilterByCategoryIds = useUIStore((s) => s.setFilterByCategoryIds);
+  const cache = useMetadataStore((s) => s.cache);
+
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  const allCategories = useMemo(() => extractAllCategories(cache), [cache]);
+  const categoryCounts = useMemo(() => countByCategory(cache), [cache]);
+
+  const filteredCategories = useMemo(() => {
+    if (!search.trim()) return allCategories;
+    const q = search.toLowerCase().trim();
+    return allCategories.filter((c) => c.description.toLowerCase().includes(q));
+  }, [allCategories, search]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const handleToggle = (catId: number) => {
+    const current = filters.filterByCategoryIds;
+    if (current.includes(catId)) {
+      setFilterByCategoryIds(current.filter((id) => id !== catId));
+    } else {
+      setFilterByCategoryIds([...current, catId]);
+    }
+  };
+
+  const selectedCount = filters.filterByCategoryIds.length;
+
+  if (allCategories.length === 0) return null;
+
+  return (
+    <div className="category-filter" ref={ref}>
+      <button
+        className={`category-filter__trigger ${selectedCount > 0 ? "category-filter__trigger--active" : ""}`}
+        onClick={() => setOpen(!open)}
+        aria-label="Filter by features"
+        aria-expanded={open}
+      >
+        {selectedCount > 0 ? `Features (${selectedCount})` : "Features"}
+      </button>
+      {open && (
+        <div className="category-filter__popover" role="menu">
+          <div className="category-filter__header">
+            <span>Filter by features</span>
+            {selectedCount > 0 && (
+              <button
+                className="category-filter__clear"
+                onClick={() => setFilterByCategoryIds([])}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <input
+            className="category-filter__search"
+            type="text"
+            placeholder="Search features..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            autoFocus
+          />
+          <div className="category-filter__list">
+            {filteredCategories.map((cat) => {
+              const isSelected = filters.filterByCategoryIds.includes(cat.id);
+              return (
+                <label key={cat.id} className="category-filter__item">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => handleToggle(cat.id)}
+                  />
+                  <span className="category-filter__item-name">{cat.description}</span>
+                  <span className="category-filter__item-count">
+                    {categoryCounts.get(cat.id) ?? 0}
+                  </span>
+                </label>
+              );
+            })}
+            {filteredCategories.length === 0 && (
+              <div className="category-filter__empty">No matching features</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

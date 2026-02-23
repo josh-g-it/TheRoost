@@ -1,0 +1,94 @@
+.hscroll-row {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Single-row track (collapsed) */
+.hscroll-row__track {
+  display: flex;
+  gap: var(--space-md);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: var(--space-xs) var(--space-md) var(--space-sm);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bg-active) transparent;
+}
+
+/* Two-row track (extended) */
+.hscroll-row__track--two-rows {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, 1fr);
+  gap: var(--space-md);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: var(--space-xs) var(--space-md) var(--space-sm);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bg-active) transparent;
+}
+
+.hscroll-row__card {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+}
+
+/* Scroll arrows */
+.hscroll-row__arrow {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  color: var(--color-text-primary);
+  font-size: 18px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+  z-index: 5;
+}
+
+.hscroll-row:hover .hscroll-row__arrow--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.hscroll-row__arrow--left {
+  left: 0;
+  background: linear-gradient(to right, var(--color-bg-primary) 40%, transparent);
+}
+
+.hscroll-row__arrow--right {
+  right: 0;
+  background: linear-gradient(to left, var(--color-bg-primary) 40%, transparent);
+}
+
+.hscroll-row__arrow:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+  opacity: 1;
+}
+
+.hscroll-row__arrow:hover {
+  color: var(--color-accent-primary);
+}
+
+/* WebKit scrollbar styling */
+.hscroll-row__track::-webkit-scrollbar,
+.hscroll-row__track--two-rows::-webkit-scrollbar {
+  height: 4px;
+}
+
+.hscroll-row__track::-webkit-scrollbar-track,
+.hscroll-row__track--two-rows::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.hscroll-row__track::-webkit-scrollbar-thumb,
+.hscroll-row__track--two-rows::-webkit-scrollbar-thumb {
+  background: var(--color-bg-active);
+  border-radius: 2px;
+}

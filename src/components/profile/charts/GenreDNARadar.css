@@ -1,0 +1,21 @@
+.genre-dna-radar {
+  width: 100%;
+}
+
+.genre-dna-radar__tooltip {
+  padding: var(--space-md);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+}
+
+.genre-dna-radar__tooltip-label {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin-bottom: 2px;
+}
+
+.genre-dna-radar__tooltip-value {
+  color: var(--color-text-tertiary);
+}

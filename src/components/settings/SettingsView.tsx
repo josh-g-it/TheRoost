@@ -1,0 +1,839 @@
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useBlocker } from "react-router-dom";
+import { invoke } from "@tauri-apps/api/core";
+import { Header } from "../layout/Header";
+import { Button } from "../common/Button";
+import { Input } from "../common/Input";
+import { TagManager } from "./TagManager";
+import { BookmarkManager } from "./BookmarkManager";
+import { CardDisplaySettings } from "./CardDisplaySettings";
+import { ThemeBuilder } from "./ThemeBuilder";
+import { DeveloperSettings } from "./DeveloperSettings";
+import { useSettings } from "../../hooks/useSettings";
+import { useLibraryStore } from "../../store/librarySlice";
+import { coverArtApi, cloudAiApi } from "../../services/tauri";
+import type {
+  AppSettings,
+  CommandCenterShortcut,
+  RailMode,
+  MediaControlsMode,
+  CloudAiUsage,
+} from "../../types";
+import type { ThemeId } from "../../hooks/useTheme";
+import type { IconSetId, FontFamilyId, UIScaleId } from "../../types/theme";
+import { SHORTCUT_OPTIONS } from "../../types";
+import "./SettingsView.css";
+
+export function SettingsView() {
+  const { settings, saveSettings, isLoading } = useSettings();
+  const [form, setForm] = useState<AppSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // SteamGridDB key state (managed independently — stored in Credential Manager)
+  const [sgdbKey, setSgdbKey] = useState("");
+  const [showSgdbKey, setShowSgdbKey] = useState(false);
+  const [sgdbKeyConfigured, setSgdbKeyConfigured] = useState(false);
+  const [sgdbSaving, setSgdbSaving] = useState(false);
+  const [sgdbFetching, setSgdbFetching] = useState(false);
+  const [sgdbMessage, setSgdbMessage] = useState<string | null>(null);
+
+  // Cloud AI state (managed independently — key stored in Credential Manager)
+  const [cloudKey, setCloudKey] = useState("");
+  const [showCloudKey, setShowCloudKey] = useState(false);
+  const [cloudKeyConfigured, setCloudKeyConfigured] = useState(false);
+  const [cloudSaving, setCloudSaving] = useState(false);
+  const [cloudTesting, setCloudTesting] = useState(false);
+  const [cloudMessage, setCloudMessage] = useState<string | null>(null);
+  const [cloudUsage, setCloudUsage] = useState<CloudAiUsage | null>(null);
+  const [contextGameSearch, setContextGameSearch] = useState("");
+
+  // Game name lookup for exclude/include lists
+  const allGames = useLibraryStore((s) => s.library?.games);
+  const gameNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (allGames) {
+      for (const g of allGames) map.set(g.gameId, g.name);
+    }
+    return map;
+  }, [allGames]);
+
+  useEffect(() => {
+    if (settings && !form) {
+      setForm({ ...settings });
+    }
+  }, [settings, form]);
+
+  useEffect(() => {
+    coverArtApi
+      .getSgdbKeyStatus()
+      .then(setSgdbKeyConfigured)
+      .catch(() => {});
+    // Load cloud AI key status and usage (default to gemini on first load)
+    cloudAiApi
+      .getKeyStatus("gemini")
+      .then(setCloudKeyConfigured)
+      .catch(() => {});
+    cloudAiApi
+      .getUsage()
+      .then(setCloudUsage)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    };
+  }, []);
+
+  const isDirty =
+    form !== null &&
+    settings !== null &&
+    (form.theme !== settings.theme ||
+      form.iconSet !== settings.iconSet ||
+      form.fontFamily !== settings.fontFamily ||
+      form.uiScale !== settings.uiScale ||
+      form.steamApiKey !== settings.steamApiKey ||
+      form.steamId !== settings.steamId ||
+      form.commandCenterShortcut !== settings.commandCenterShortcut ||
+      form.railMode !== settings.railMode ||
+      form.minimizeToTray !== settings.minimizeToTray ||
+      form.cloudAiDailyLimit !== settings.cloudAiDailyLimit ||
+      form.cloudAiContextScope !== settings.cloudAiContextScope ||
+      JSON.stringify(form.cloudAiIncludedGames ?? []) !==
+        JSON.stringify(settings.cloudAiIncludedGames ?? []) ||
+      JSON.stringify(form.cloudAiExcludedGames ?? []) !==
+        JSON.stringify(settings.cloudAiExcludedGames ?? []));
+
+  const revertChanges = () => {
+    if (settings) {
+      setForm({ ...settings });
+    }
+  };
+
+  const blocker = useBlocker(isDirty);
+
+  const handleSave = async () => {
+    if (!form) return;
+    setSaving(true);
+    // Re-register global shortcut if it changed
+    if (settings && form.commandCenterShortcut !== settings.commandCenterShortcut) {
+      invoke("update_overlay_shortcut", { shortcut: form.commandCenterShortcut });
+    }
+    await saveSettings(form);
+    setSaving(false);
+    setSaved(true);
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleSaveAndLeave = async () => {
+    if (!form) return;
+    setSaving(true);
+    if (settings && form.commandCenterShortcut !== settings.commandCenterShortcut) {
+      invoke("update_overlay_shortcut", { shortcut: form.commandCenterShortcut });
+    }
+    await saveSettings(form);
+    setSaving(false);
+    blocker.proceed?.();
+  };
+
+  const handleDiscard = () => {
+    revertChanges();
+    blocker.proceed?.();
+  };
+
+  const handleQuickApply = async (changes: {
+    theme?: ThemeId;
+    iconSet?: IconSetId;
+    fontFamily?: FontFamilyId;
+    uiScale?: UIScaleId;
+  }) => {
+    if (!form) return;
+    const updated = {
+      ...form,
+      ...(changes.theme !== undefined && { theme: changes.theme }),
+      ...(changes.iconSet !== undefined && { iconSet: changes.iconSet }),
+      ...(changes.fontFamily !== undefined && { fontFamily: changes.fontFamily }),
+      ...(changes.uiScale !== undefined && { uiScale: changes.uiScale }),
+    };
+    setForm(updated);
+    setSaving(true);
+    await saveSettings(updated);
+    setSaving(false);
+    setSaved(true);
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
+  };
+
+  if (isLoading || !form) return null;
+
+  return (
+    <div className="settings-view">
+      <Header title="Settings" />
+      <div className="settings-view__content">
+        <div className="settings-view__save-bar">
+          <Button onClick={handleSave} loading={saving} disabled={!isDirty && !saved}>
+            {saved ? "Saved!" : "Save Settings"}
+          </Button>
+          {isDirty && (
+            <span className="settings-view__unsaved-hint">You have unsaved changes</span>
+          )}
+        </div>
+
+        <section className="settings-view__section">
+          <h3 className="settings-view__section-title">Steam Connection</h3>
+
+          <div className="settings-view__field">
+            <Input
+              label="Steam Web API Key"
+              type={showKey ? "text" : "password"}
+              placeholder="Enter your Steam Web API key"
+              value={form.steamApiKey ?? ""}
+              onChange={(e) => setForm({ ...form, steamApiKey: e.target.value || null })}
+            />
+            <Button variant="ghost" size="sm" onClick={() => setShowKey(!showKey)}>
+              {showKey ? "Hide" : "Show"}
+            </Button>
+          </div>
+
+          <Input
+            label="Steam ID (64-bit)"
+            placeholder="e.g. 76561198012345678"
+            value={form.steamId ?? ""}
+            onChange={(e) => setForm({ ...form, steamId: e.target.value || null })}
+          />
+        </section>
+
+        <section className="settings-view__section">
+          <h3 className="settings-view__section-title">Cover Art (Non-Steam Games)</h3>
+          <p className="settings-view__section-desc">
+            GOG games get cover art automatically. For other launchers (Epic, EA, Ubisoft,
+            Battle.net), provide a free <strong>SteamGridDB</strong> API key. Get one at{" "}
+            steamgriddb.com &rarr; Preferences &rarr; API.
+          </p>
+
+          <div className="settings-view__field">
+            <Input
+              label="SteamGridDB API Key"
+              type={showSgdbKey ? "text" : "password"}
+              placeholder={
+                sgdbKeyConfigured ? "••••••••••••••••" : "Enter your SteamGridDB API key"
+              }
+              value={sgdbKey}
+              onChange={(e) => setSgdbKey(e.target.value)}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowSgdbKey(!showSgdbKey)}
+            >
+              {showSgdbKey ? "Hide" : "Show"}
+            </Button>
+          </div>
+
+          <div className="settings-view__field-row">
+            <div className="settings-view__sgdb-actions">
+              <Button
+                size="sm"
+                disabled={!sgdbKey.trim() || sgdbSaving}
+                loading={sgdbSaving}
+                onClick={async () => {
+                  setSgdbSaving(true);
+                  setSgdbMessage(null);
+                  try {
+                    await coverArtApi.storeSgdbKey(sgdbKey.trim());
+                    setSgdbKeyConfigured(true);
+                    setSgdbKey("");
+                    setSgdbMessage("Key saved");
+                  } catch {
+                    setSgdbMessage("Failed to save key");
+                  } finally {
+                    setSgdbSaving(false);
+                  }
+                }}
+              >
+                Save Key
+              </Button>
+              {sgdbKeyConfigured && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await coverArtApi.deleteSgdbKey();
+                      setSgdbKeyConfigured(false);
+                      setSgdbMessage("Key removed");
+                    } catch {
+                      setSgdbMessage("Failed to remove key");
+                    }
+                  }}
+                >
+                  Remove Key
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={sgdbFetching}
+                loading={sgdbFetching}
+                onClick={async () => {
+                  setSgdbFetching(true);
+                  setSgdbMessage(null);
+                  try {
+                    const count = await coverArtApi.fetchBatch();
+                    setSgdbMessage(
+                      count > 0
+                        ? `Found ${count} image${count !== 1 ? "s" : ""}`
+                        : "No new images found",
+                    );
+                  } catch {
+                    setSgdbMessage("Fetch failed");
+                  } finally {
+                    setSgdbFetching(false);
+                  }
+                }}
+              >
+                Fetch Cover Art Now
+              </Button>
+            </div>
+            {sgdbMessage && (
+              <span className="settings-view__sgdb-message">{sgdbMessage}</span>
+            )}
+          </div>
+        </section>
+
+        <section className="settings-view__section">
+          <h3 className="settings-view__section-title">Cloud AI (Experimental)</h3>
+          <p className="settings-view__section-desc">
+            Enable cloud-powered AI for smarter search suggestions in the command palette.
+            The AI can understand natural language queries like &ldquo;what should I play
+            tonight?&rdquo; or &ldquo;recommend something like Skyrim&rdquo;. Requires a
+            free <strong>Gemini</strong> API key from Google AI Studio.
+          </p>
+
+          {form.cloudAiEnabled && (
+            <div className="settings-view__cloud-privacy">
+              When enabled, your search queries, game names, and aggregated library stats
+              (genres, playtime) are sent to {cloudUsage?.provider ?? "Gemini"}&apos;s
+              servers for processing. API keys, file paths, and personal information are
+              never sent.
+            </div>
+          )}
+
+          <div className="settings-view__field-row">
+            <label className="settings-view__checkbox-label">
+              <input
+                type="checkbox"
+                checked={form.cloudAiEnabled ?? false}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  // First-use privacy acknowledgment
+                  if (enabled && !form.cloudAiPrivacyAcknowledged) {
+                    const ok = window.confirm(
+                      "Cloud AI sends your search queries and library data (game names, genres, playtime) to external servers for processing. " +
+                        "API keys, file paths, and personal information are never sent.\n\n" +
+                        "Do you want to enable Cloud AI?",
+                    );
+                    if (!ok) return;
+                    setForm({
+                      ...form,
+                      cloudAiEnabled: true,
+                      cloudAiPrivacyAcknowledged: true,
+                    });
+                    cloudAiApi.updateSettings(
+                      true,
+                      form.cloudAiProvider ?? "gemini",
+                      form.cloudAiDailyLimit ?? 100,
+                    );
+                    return;
+                  }
+                  setForm({ ...form, cloudAiEnabled: enabled });
+                  cloudAiApi.updateSettings(
+                    enabled,
+                    form.cloudAiProvider ?? "gemini",
+                    form.cloudAiDailyLimit ?? 100,
+                  );
+                }}
+              />
+              Enable Cloud AI
+            </label>
+          </div>
+
+          {form.cloudAiEnabled && (
+            <>
+              <div className="settings-view__field-row">
+                <label className="settings-view__label">Provider</label>
+                <select
+                  className="settings-view__select"
+                  value={form.cloudAiProvider ?? "gemini"}
+                  onChange={(e) => {
+                    setForm({ ...form, cloudAiProvider: e.target.value });
+                    cloudAiApi.updateSettings(
+                      form.cloudAiEnabled ?? false,
+                      e.target.value,
+                      form.cloudAiDailyLimit ?? 100,
+                    );
+                    // Refresh key status for new provider
+                    cloudAiApi
+                      .getKeyStatus(e.target.value)
+                      .then(setCloudKeyConfigured)
+                      .catch(() => {});
+                  }}
+                >
+                  <option value="gemini">Gemini 3 Flash</option>
+                  <option value="openai" disabled>
+                    OpenAI (Coming soon)
+                  </option>
+                  <option value="claude" disabled>
+                    Claude (Coming soon)
+                  </option>
+                </select>
+              </div>
+
+              <div className="settings-view__field">
+                <Input
+                  label="API Key"
+                  type={showCloudKey ? "text" : "password"}
+                  placeholder={
+                    cloudKeyConfigured
+                      ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+                      : "Enter your API key"
+                  }
+                  value={cloudKey}
+                  onChange={(e) => setCloudKey(e.target.value)}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowCloudKey(!showCloudKey)}
+                >
+                  {showCloudKey ? "Hide" : "Show"}
+                </Button>
+              </div>
+
+              <div className="settings-view__field-row">
+                <div className="settings-view__sgdb-actions">
+                  <Button
+                    size="sm"
+                    disabled={!cloudKey.trim() || cloudSaving}
+                    loading={cloudSaving}
+                    onClick={async () => {
+                      setCloudSaving(true);
+                      setCloudMessage(null);
+                      try {
+                        await cloudAiApi.storeKey(
+                          form.cloudAiProvider ?? "gemini",
+                          cloudKey.trim(),
+                        );
+                        setCloudKeyConfigured(true);
+                        setCloudKey("");
+                        setCloudMessage("Key saved");
+                      } catch {
+                        setCloudMessage("Failed to save key");
+                      } finally {
+                        setCloudSaving(false);
+                      }
+                    }}
+                  >
+                    Save Key
+                  </Button>
+                  {cloudKeyConfigured && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await cloudAiApi.deleteKey(form.cloudAiProvider ?? "gemini");
+                          setCloudKeyConfigured(false);
+                          setCloudMessage("Key removed");
+                        } catch {
+                          setCloudMessage("Failed to remove key");
+                        }
+                      }}
+                    >
+                      Remove Key
+                    </Button>
+                  )}
+                  {cloudKeyConfigured && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={cloudTesting}
+                      loading={cloudTesting}
+                      onClick={async () => {
+                        setCloudTesting(true);
+                        setCloudMessage(null);
+                        try {
+                          const valid = await cloudAiApi.testKey(
+                            form.cloudAiProvider ?? "gemini",
+                          );
+                          setCloudMessage(valid ? "Key valid" : "Invalid key");
+                        } catch {
+                          setCloudMessage("Connection failed");
+                        } finally {
+                          setCloudTesting(false);
+                        }
+                      }}
+                    >
+                      Test Key
+                    </Button>
+                  )}
+                </div>
+                {cloudMessage && (
+                  <span className="settings-view__sgdb-message">{cloudMessage}</span>
+                )}
+              </div>
+
+              <div className="settings-view__field-row">
+                <label className="settings-view__label">Daily request limit</label>
+                <input
+                  type="number"
+                  className="settings-view__number-input"
+                  min={1}
+                  max={9999}
+                  value={form.cloudAiDailyLimit ?? 100}
+                  onChange={(e) => {
+                    const val = Math.max(
+                      1,
+                      Math.min(9999, Number(e.target.value) || 100),
+                    );
+                    setForm({ ...form, cloudAiDailyLimit: val });
+                    cloudAiApi.updateSettings(
+                      form.cloudAiEnabled ?? false,
+                      form.cloudAiProvider ?? "gemini",
+                      val,
+                    );
+                  }}
+                />
+              </div>
+
+              {cloudUsage && (
+                <p className="settings-view__cloud-usage">
+                  Requests today: {cloudUsage.requestsToday} / {cloudUsage.dailyLimit}
+                </p>
+              )}
+
+              <div className="settings-view__field-row">
+                <label className="settings-view__label">Context scope</label>
+                <select
+                  className="settings-view__select"
+                  value={form.cloudAiContextScope ?? "all"}
+                  onChange={(e) =>
+                    setForm({ ...form, cloudAiContextScope: e.target.value })
+                  }
+                >
+                  <option value="all">All games</option>
+                  <option value="installed">Installed only</option>
+                  <option value="recent">Played in last year</option>
+                </select>
+              </div>
+              <p className="settings-view__field-hint">
+                Controls which games are included in the context sent to the AI provider.
+                Reducing scope lowers token usage and cost.
+              </p>
+
+              {/* Always Include / Exclude game lists */}
+              <div className="settings-view__field-row">
+                <label className="settings-view__label">
+                  Always include / exclude games
+                </label>
+                <input
+                  type="text"
+                  className="settings-view__number-input settings-view__context-search"
+                  placeholder="Search games to add..."
+                  value={contextGameSearch}
+                  onChange={(e) => setContextGameSearch(e.target.value)}
+                />
+              </div>
+
+              {contextGameSearch.trim().length >= 2 && allGames && (
+                <div className="settings-view__context-game-results">
+                  {allGames
+                    .filter((g) =>
+                      g.name.toLowerCase().includes(contextGameSearch.toLowerCase()),
+                    )
+                    .slice(0, 8)
+                    .map((g) => {
+                      const isIncluded = (form.cloudAiIncludedGames ?? []).includes(
+                        g.gameId,
+                      );
+                      const isExcluded = (form.cloudAiExcludedGames ?? []).includes(
+                        g.gameId,
+                      );
+                      return (
+                        <div key={g.gameId} className="settings-view__context-game-row">
+                          <span className="settings-view__context-game-name">
+                            {g.name}
+                          </span>
+                          <button
+                            className={`settings-view__context-btn ${isIncluded ? "settings-view__context-btn--active" : ""}`}
+                            onClick={() => {
+                              const current = form.cloudAiIncludedGames ?? [];
+                              const next = isIncluded
+                                ? current.filter((id) => id !== g.gameId)
+                                : [...current, g.gameId];
+                              // Also remove from excluded if adding to included
+                              const excluded = isIncluded
+                                ? (form.cloudAiExcludedGames ?? [])
+                                : (form.cloudAiExcludedGames ?? []).filter(
+                                    (id) => id !== g.gameId,
+                                  );
+                              setForm({
+                                ...form,
+                                cloudAiIncludedGames: next,
+                                cloudAiExcludedGames: excluded,
+                              });
+                            }}
+                          >
+                            {isIncluded ? "Included" : "Include"}
+                          </button>
+                          <button
+                            className={`settings-view__context-btn settings-view__context-btn--exclude ${isExcluded ? "settings-view__context-btn--active" : ""}`}
+                            onClick={() => {
+                              const current = form.cloudAiExcludedGames ?? [];
+                              const next = isExcluded
+                                ? current.filter((id) => id !== g.gameId)
+                                : [...current, g.gameId];
+                              // Also remove from included if adding to excluded
+                              const included = isExcluded
+                                ? (form.cloudAiIncludedGames ?? [])
+                                : (form.cloudAiIncludedGames ?? []).filter(
+                                    (id) => id !== g.gameId,
+                                  );
+                              setForm({
+                                ...form,
+                                cloudAiExcludedGames: next,
+                                cloudAiIncludedGames: included,
+                              });
+                            }}
+                          >
+                            {isExcluded ? "Excluded" : "Exclude"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+
+              {/* Show current included games */}
+              {(form.cloudAiIncludedGames ?? []).length > 0 && (
+                <div className="settings-view__context-list">
+                  <span className="settings-view__context-list-label">
+                    Always included:
+                  </span>
+                  {(form.cloudAiIncludedGames ?? []).map((id) => (
+                    <span
+                      key={id}
+                      className="settings-view__context-chip settings-view__context-chip--include"
+                    >
+                      {gameNameMap.get(id) ?? id}
+                      <button
+                        className="settings-view__context-chip-remove"
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            cloudAiIncludedGames: (
+                              form.cloudAiIncludedGames ?? []
+                            ).filter((x) => x !== id),
+                          })
+                        }
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Show current excluded games */}
+              {(form.cloudAiExcludedGames ?? []).length > 0 && (
+                <div className="settings-view__context-list">
+                  <span className="settings-view__context-list-label">
+                    Always excluded:
+                  </span>
+                  {(form.cloudAiExcludedGames ?? []).map((id) => (
+                    <span
+                      key={id}
+                      className="settings-view__context-chip settings-view__context-chip--exclude"
+                    >
+                      {gameNameMap.get(id) ?? id}
+                      <button
+                        className="settings-view__context-chip-remove"
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            cloudAiExcludedGames: (
+                              form.cloudAiExcludedGames ?? []
+                            ).filter((x) => x !== id),
+                          })
+                        }
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+
+        <section className="settings-view__section">
+          <h3 className="settings-view__section-title">Theme Builder</h3>
+          <p className="settings-view__section-desc">
+            Customize your palette, font, icon style, and UI density. Changes preview live
+            and apply when you save. <strong>Tip:</strong> Double-click any option to
+            apply it instantly.
+          </p>
+          <ThemeBuilder
+            palette={form.theme}
+            iconSet={form.iconSet}
+            fontFamily={form.fontFamily}
+            uiScale={form.uiScale}
+            onPaletteChange={(id) => setForm({ ...form, theme: id })}
+            onIconSetChange={(id) => setForm({ ...form, iconSet: id })}
+            onFontChange={(id) => setForm({ ...form, fontFamily: id })}
+            onScaleChange={(id) => setForm({ ...form, uiScale: id })}
+            onQuickApply={handleQuickApply}
+          />
+        </section>
+
+        <section className="settings-view__section">
+          <h3 className="settings-view__section-title">Navigation</h3>
+          <p className="settings-view__section-desc">
+            Configure the sidebar and overlay shortcut. The overlay shortcut works
+            system-wide, even when The Roost is minimized to the tray.
+          </p>
+
+          <div className="settings-view__field-row">
+            <label className="settings-view__label">Overlay Shortcut</label>
+            <select
+              className="settings-view__select"
+              value={form.commandCenterShortcut}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  commandCenterShortcut: e.target.value as CommandCenterShortcut,
+                })
+              }
+            >
+              {SHORTCUT_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="settings-view__field-row">
+            <label className="settings-view__label">Sidebar Mode</label>
+            <select
+              className="settings-view__select"
+              value={form.railMode}
+              onChange={(e) => setForm({ ...form, railMode: e.target.value as RailMode })}
+            >
+              <option value="dynamic">Dynamic (hover to expand)</option>
+              <option value="expanded">Always open</option>
+              <option value="collapsed">Always collapsed (icons only)</option>
+            </select>
+          </div>
+
+          <div className="settings-view__field-row">
+            <label className="settings-view__label">Media Controls</label>
+            <select
+              className="settings-view__select"
+              value={form.mediaControlsMode ?? "dynamic"}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  mediaControlsMode: e.target.value as MediaControlsMode,
+                })
+              }
+            >
+              <option value="dynamic">Dynamic (auto-show when media playing)</option>
+              <option value="always">Always shown</option>
+              <option value="hidden">Always hidden (manual toggle only)</option>
+            </select>
+          </div>
+        </section>
+
+        <section className="settings-view__section">
+          <h3 className="settings-view__section-title">Media Bookmarks</h3>
+          <p className="settings-view__section-desc">
+            Save links to playlists, videos, or any media URL and open them from the
+            overlay with one click. YouTube playlist URLs will automatically start playing
+            the first track when opened. Other services (Spotify, SoundCloud, etc.) will
+            open in your browser but autoplay depends on each service&apos;s own behavior.
+          </p>
+          <BookmarkManager />
+        </section>
+
+        <section className="settings-view__section">
+          <h3 className="settings-view__section-title">System Tray</h3>
+          <p className="settings-view__section-desc">
+            Control how The Roost behaves when you close the window. Background operation
+            enables automatic game session tracking.
+          </p>
+
+          <div className="settings-view__field-row">
+            <div>
+              <label className="settings-view__label">Minimize to tray on close</label>
+              <p className="settings-view__field-hint">
+                When enabled, closing the window keeps The Roost running in the system
+                tray. Game sessions are tracked automatically by detecting running games.
+                When disabled, sessions are only tracked while the app window is open. Use
+                &quot;Fully Quit&quot; from the tray icon to exit completely.
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              checked={form.minimizeToTray}
+              onChange={(e) => setForm({ ...form, minimizeToTray: e.target.checked })}
+              className="settings-view__checkbox"
+            />
+          </div>
+        </section>
+
+        <section className="settings-view__section">
+          <h3 className="settings-view__section-title">Tags</h3>
+          <p className="settings-view__section-desc">
+            Create custom tags to organize your game library.
+          </p>
+          <TagManager />
+        </section>
+
+        <section className="settings-view__section">
+          <h3 className="settings-view__section-title">Card Display</h3>
+          <p className="settings-view__section-desc">
+            Choose what information appears on game cards.
+          </p>
+          <CardDisplaySettings />
+        </section>
+
+        <DeveloperSettings />
+      </div>
+
+      {blocker.state === "blocked" && (
+        <div className="settings-view__modal-overlay">
+          <div className="settings-view__modal">
+            <h3 className="settings-view__modal-title">Unsaved Changes</h3>
+            <p className="settings-view__modal-message">
+              You have unsaved settings changes. Would you like to save before leaving?
+            </p>
+            <div className="settings-view__modal-actions">
+              <Button variant="ghost" onClick={handleDiscard}>
+                Discard Changes
+              </Button>
+              <Button onClick={handleSaveAndLeave} loading={saving}>
+                Save &amp; Leave
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

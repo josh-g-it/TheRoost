@@ -1,0 +1,15 @@
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--grid-min-width, 280px), 1fr));
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+
+.game-grid__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2xl);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-lg);
+}

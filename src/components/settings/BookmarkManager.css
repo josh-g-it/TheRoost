@@ -1,0 +1,198 @@
+/* ── Bookmark Manager ─────────────────────────────────────────── */
+.bm-mgr {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bm-mgr__empty {
+  color: var(--color-text-tertiary);
+  font-size: 0.8rem;
+  font-style: italic;
+  padding: 4px 0;
+}
+
+/* ── Bookmark Row ────────────────────────────────────────────── */
+.bm-mgr__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.bm-mgr__row:hover {
+  background: var(--color-bg-hover);
+}
+
+/* ── Bookmark Info ───────────────────────────────────────────── */
+.bm-mgr__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.bm-mgr__title {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.bm-mgr__url {
+  font-size: 0.65rem;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Icons ───────────────────────────────────────────────────── */
+.bm-mgr__icon-favicon {
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.bm-mgr__icon-emoji {
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+
+.bm-mgr__icon-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  font-size: 0.65rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ── Actions ─────────────────────────────────────────────────── */
+.bm-mgr__actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.bm-mgr__icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.bm-mgr__icon-btn:hover {
+  color: var(--color-text-primary);
+}
+
+.bm-mgr__icon-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.bm-mgr__icon-btn--danger:hover {
+  color: var(--color-danger, #ef4444);
+}
+
+/* ── Inputs ──────────────────────────────────────────────────── */
+.bm-mgr__input {
+  padding: 5px 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  font-size: 0.8rem;
+  outline: none;
+  transition: border-color var(--transition-fast);
+  width: 100%;
+}
+
+.bm-mgr__input:focus {
+  border-color: var(--color-accent-primary);
+}
+
+.bm-mgr__input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.bm-mgr__input--icon {
+  max-width: 140px;
+}
+
+/* ── Add Form ────────────────────────────────────────────────── */
+.bm-mgr__add-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+/* ── Edit Form (inline) ──────────────────────────────────────── */
+.bm-mgr__edit-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+
+.bm-mgr__edit-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.bm-mgr__btn {
+  padding: 5px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.bm-mgr__btn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-secondary);
+}
+
+.bm-mgr__btn--save {
+  background: var(--color-accent-primary);
+  border-color: var(--color-accent-primary);
+  color: #fff;
+}
+
+.bm-mgr__btn--save:hover {
+  opacity: 0.9;
+  color: #fff;
+  border-color: var(--color-accent-primary);
+}
+
+.bm-mgr__btn--save:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

@@ -1,0 +1,178 @@
+/* ── Command Palette Results ──────────────────────────────────── */
+.command-palette__results {
+  max-height: 340px;
+  overflow-y: auto;
+  padding: var(--space-xs) 0;
+}
+
+.command-palette__group-header {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: var(--space-xs) var(--space-md);
+  margin-top: var(--space-xs);
+}
+
+.command-palette__group-header:first-child {
+  margin-top: 0;
+}
+
+.command-palette__result {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-md);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.command-palette__result:hover {
+  background: var(--color-bg-hover);
+}
+
+.command-palette__result--active {
+  background: var(--color-bg-tertiary);
+}
+
+.command-palette__result-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-md);
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-hover);
+}
+
+.command-palette__result-icon img {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+}
+
+.command-palette__result-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.command-palette__result-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-palette__result-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── AI Section ────────────────────────────────────────────────── */
+.command-palette__ai-suggestion {
+  border-left: 2px solid var(--color-accent);
+  margin: 0 var(--space-xs);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+}
+
+.command-palette__ai-suggestion:hover,
+.command-palette__ai-suggestion.command-palette__result--active {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.command-palette__ai-icon {
+  background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+  color: var(--color-accent);
+}
+
+.command-palette__ai-loading .command-palette__result-label {
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+.command-palette__ai-loading .command-palette__ai-icon {
+  animation: ai-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes ai-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.command-palette__ai-tier-badge {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  color: var(--color-accent);
+}
+
+/* Ask Assistant button row */
+.command-palette__ask-btn {
+  cursor: pointer;
+}
+
+/* AI response panel (summary + actions) */
+.command-palette__ai-response {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  margin: 0 var(--space-xs);
+  border-left: 2px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+}
+
+.command-palette__ai-response .command-palette__result-icon {
+  margin-top: 2px;
+}
+
+.command-palette__ai-summary {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* AI-suggested action rows */
+.command-palette__ai-action {
+  margin-left: var(--space-md);
+  border-left: 2px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+/* Game mention rows extracted from summary */
+.command-palette__ai-mention {
+  margin-left: var(--space-md);
+  border-left: 2px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+.command-palette__empty {
+  padding: var(--space-lg) var(--space-md);
+  text-align: center;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.command-palette__empty-query {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}

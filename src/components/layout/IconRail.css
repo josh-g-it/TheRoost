@@ -1,0 +1,240 @@
+.icon-rail {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--rail-width);
+  background: var(--color-bg-secondary);
+  border-right: 1px solid var(--color-border-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width var(--transition-fast);
+  z-index: 20;
+}
+
+/* Dynamic mode: expand on hover (default) */
+.icon-rail:hover {
+  width: var(--rail-expanded-width);
+}
+
+/* Expanded mode: always wide, no hover needed */
+.icon-rail--expanded {
+  width: var(--rail-expanded-width);
+}
+
+/* Collapsed mode: always narrow, disable hover expand */
+.icon-rail--collapsed,
+.icon-rail--collapsed:hover {
+  width: var(--rail-width);
+}
+
+/* ── Logo / Header ────────────────────────────────────────────── */
+.icon-rail__header {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-sm);
+  border-bottom: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+  gap: var(--space-sm);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.icon-rail__logo-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: inherit;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
+.icon-rail__logo-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+  border-radius: var(--radius-md);
+}
+
+.icon-rail__logo-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+  transition: transform var(--transition-fast);
+}
+
+.icon-rail__logo-btn:hover .icon-rail__logo-icon {
+  transform: scale(1.08);
+}
+
+.icon-rail__logo-text {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-accent-primary);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  white-space: nowrap;
+}
+
+.icon-rail:hover .icon-rail__logo-text,
+.icon-rail--expanded .icon-rail__logo-text {
+  opacity: 1;
+}
+
+.icon-rail--collapsed .icon-rail__logo-text,
+.icon-rail--collapsed:hover .icon-rail__logo-text {
+  opacity: 0;
+}
+
+/* ── Navigation ────────────────────────────────────────────────── */
+.icon-rail__nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-sm) 0;
+}
+
+.icon-rail__link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+  overflow: hidden;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.icon-rail__link:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.icon-rail__link:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+.icon-rail__link--active {
+  color: var(--color-accent-primary);
+  background: var(--color-bg-tertiary);
+}
+
+.icon-rail__link--active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--color-accent-primary);
+}
+
+.icon-rail__link-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-lg);
+  flex-shrink: 0;
+  color: inherit;
+  transition: color var(--transition-fast);
+}
+
+.icon-rail__link:hover .icon-rail__link-icon {
+  color: var(--color-accent-primary);
+}
+
+.icon-rail__link--active .icon-rail__link-icon {
+  color: var(--color-accent-primary);
+}
+
+.icon-rail__link-label {
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.icon-rail:hover .icon-rail__link-label,
+.icon-rail--expanded .icon-rail__link-label {
+  opacity: 1;
+}
+
+.icon-rail--collapsed .icon-rail__link-label,
+.icon-rail--collapsed:hover .icon-rail__link-label {
+  opacity: 0;
+}
+
+/* ── Footer ────────────────────────────────────────────────────── */
+.icon-rail__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-xs) 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+/* Small expand button — always visible at bottom of collapsed rail */
+.icon-rail__expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.icon-rail__expand-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.icon-rail__expand-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+.icon-rail__version {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  text-align: center;
+  padding: var(--space-xs) 0;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.icon-rail:hover .icon-rail__version,
+.icon-rail--expanded .icon-rail__version {
+  opacity: 1;
+}
+
+.icon-rail--collapsed .icon-rail__version,
+.icon-rail--collapsed:hover .icon-rail__version {
+  opacity: 0;
+}

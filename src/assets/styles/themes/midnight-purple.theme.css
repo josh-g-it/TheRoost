@@ -1,0 +1,60 @@
+/* =============================================================
+   Midnight Purple — Deep amethyst twilight, violet/magenta accents
+   ============================================================= */
+
+[data-theme="midnight-purple"] {
+  /* Background layers — richer purple tinting */
+  --color-bg-primary: #0c0816;
+  --color-bg-secondary: #141028;
+  --color-bg-tertiary: #1c1636;
+  --color-bg-elevated: #251e44;
+  --color-bg-hover: #2e244e;
+  --color-bg-active: #382c5a;
+
+  /* Text */
+  --color-text-primary: #e6ddf6;
+  --color-text-secondary: #9888be;
+  --color-text-tertiary: #766aa0;
+  --color-text-inverse: #0c0816;
+
+  /* Accent colors */
+  --color-accent-primary: #a050f0;
+  --color-accent-primary-hover: #b268ff;
+  --color-accent-secondary: #e8449a;
+  --color-accent-secondary-hover: #f06cb0;
+  --color-accent-success: #30cc90;
+  --color-accent-warning: #f0b828;
+  --color-accent-error: #f06868;
+
+  /* Borders */
+  --color-border: #2e244e;
+  --color-border-subtle: #1c1636;
+  --color-border-focus: #a050f0;
+
+  /* Overlay */
+  --color-overlay: rgba(12, 8, 22, 0.7);
+  --color-overlay-light: rgba(12, 8, 22, 0.35);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(12, 8, 22, 0.5);
+  --shadow-md: 0 4px 8px rgba(12, 8, 22, 0.6);
+  --shadow-lg: 0 8px 24px rgba(12, 8, 22, 0.7);
+  --shadow-glow: 0 0 20px rgba(160, 80, 240, 0.22);
+
+  /* Tag palette */
+  --tag-color-0: #a050f0; /* purple */
+  --tag-color-1: #e8449a; /* pink */
+  --tag-color-2: #30cc90; /* emerald */
+  --tag-color-3: #f06868; /* red */
+  --tag-color-4: #f0b828; /* amber */
+  --tag-color-5: #f08838; /* orange */
+  --tag-color-6: #c080f0; /* violet */
+  --tag-color-7: #20c8e0; /* cyan */
+  --tag-color-8: #98e030; /* lime */
+  --tag-color-9: #f06cb0; /* rose */
+  --tag-color-10: #7880f0; /* indigo */
+  --tag-color-11: #28d0b8; /* teal */
+  --tag-color-12: #e070f0; /* fuchsia */
+  --tag-color-13: #5898f0; /* blue */
+  --tag-color-14: #8890a8; /* slate */
+}

@@ -1,0 +1,91 @@
+/* ── Overlay Game Notes Panel ─────────────────────────────────── */
+.overlay-notes {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ── Tabs ─────────────────────────────────────────────────────── */
+.overlay-notes__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 12px 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+}
+
+.overlay-notes__tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 6px 12px 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.overlay-notes__tab:hover {
+  color: var(--color-text-secondary);
+}
+
+.overlay-notes__tab--active {
+  color: var(--color-accent-primary);
+  border-bottom-color: var(--color-accent-primary);
+}
+
+/* ── Textarea ────────────────────────────────────────────────── */
+.overlay-notes__textarea {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  border: none;
+  padding: 12px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  outline: none;
+}
+
+.overlay-notes__textarea::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.overlay-notes__textarea:disabled {
+  opacity: 0.5;
+}
+
+/* ── Footer ──────────────────────────────────────────────────── */
+.overlay-notes__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-top: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+}
+
+.overlay-notes__char-count {
+  font-size: 0.65rem;
+  color: var(--color-text-tertiary);
+}
+
+.overlay-notes__save-status {
+  font-size: 0.65rem;
+  color: var(--color-text-tertiary);
+  transition: color var(--transition-fast);
+}
+
+.overlay-notes__save-status--dirty {
+  color: var(--color-accent-primary);
+}

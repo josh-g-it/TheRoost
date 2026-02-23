@@ -1,0 +1,421 @@
+.game-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--color-overlay);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: overlay-fade-in 0.2s ease;
+}
+
+.game-detail {
+  position: relative;
+  width: 95%;
+  max-width: 1100px;
+  max-height: 90vh;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+  animation: detail-slide-in 0.25s ease;
+}
+
+.game-detail__close {
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  font-size: var(--font-size-md);
+  z-index: 10;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.game-detail__close:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+/* Hero */
+.game-detail__hero {
+  position: relative;
+  height: 200px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.game-detail__hero-image {
+  position: absolute;
+  inset: 0;
+}
+
+.game-detail__hero-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: var(--space-lg);
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+}
+
+.game-detail__title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: white;
+}
+
+/* Hero edit button */
+.game-detail__change-hero {
+  position: absolute;
+  bottom: var(--space-sm);
+  right: var(--space-sm);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  cursor: pointer;
+  z-index: 5;
+  transition: background var(--transition-fast);
+  border: none;
+}
+
+.game-detail__change-hero:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+/* Body: sidebar + main */
+.game-detail__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.game-detail__sidebar {
+  width: 300px;
+  flex-shrink: 0;
+  padding: var(--space-lg);
+  border-right: 1px solid var(--color-border-subtle);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.game-detail__sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.game-detail__sidebar-actions .btn {
+  width: 100%;
+}
+
+.game-detail__remove-btn {
+  color: var(--color-danger, #e74c3c) !important;
+}
+
+/* Launch mode selector */
+.game-detail__launch-mode {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 2px 0;
+}
+
+.game-detail__launch-mode-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.game-detail__launch-mode-select {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-tertiary, var(--color-bg-secondary));
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.game-detail__launch-mode-select:hover {
+  border-color: var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.game-detail__launch-mode-select:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 1px;
+}
+
+.game-detail__sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.game-detail__sidebar-section--muted {
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.game-detail__section-title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.game-detail__stat-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.game-detail__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.game-detail__stat-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.game-detail__stat-value {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.game-detail__stat-value--success {
+  color: var(--color-accent-success);
+}
+
+.game-detail__stat-value--muted {
+  color: var(--color-text-secondary);
+}
+
+/* Metacritic badge */
+.game-detail__metacritic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: white;
+}
+
+.game-detail__metacritic--green {
+  background: #6c3;
+}
+
+.game-detail__metacritic--yellow {
+  background: #fc3;
+  color: #333;
+}
+
+.game-detail__metacritic--red {
+  background: #f33;
+}
+
+.game-detail__metacritic-link {
+  text-decoration: none;
+}
+
+.game-detail__metacritic-link:hover .game-detail__metacritic {
+  opacity: 0.85;
+}
+
+/* Genre tags */
+.game-detail__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.game-detail__tags-empty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.game-detail__tags-link {
+  background: none;
+  border: none;
+  color: var(--color-accent-primary);
+  font-size: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+.game-detail__tags-link:hover {
+  text-decoration-style: solid;
+}
+
+/* Main content */
+.game-detail__main {
+  flex: 1;
+  padding: var(--space-lg);
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.game-detail__main-section {
+  margin-bottom: var(--space-xl);
+}
+
+.game-detail__main-section:last-child {
+  margin-bottom: 0;
+}
+
+.game-detail__main-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.game-detail__description {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Screenshots gallery */
+.game-detail__screenshots {
+  display: flex;
+  gap: var(--space-sm);
+  overflow-x: auto;
+  padding-bottom: var(--space-xs);
+}
+
+.game-detail__screenshot-link {
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: transform var(--transition-fast);
+}
+
+.game-detail__screenshot-link:hover {
+  transform: scale(1.03);
+}
+
+.game-detail__screenshot-img {
+  display: block;
+  height: 120px;
+  width: auto;
+  border-radius: var(--radius-md);
+}
+
+/* Timeline wrapper */
+.game-detail__timeline-wrapper {
+  margin-top: var(--space-md);
+}
+
+/* Animations */
+@keyframes overlay-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── Notes Section ────────────────────────────────────────────── */
+.game-detail__section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-primary);
+  padding: 0;
+}
+
+.game-detail__section-toggle .game-detail__section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.game-detail__note-textarea {
+  width: 100%;
+  min-height: 80px;
+  max-height: 200px;
+  resize: vertical;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin-top: 0.5rem;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.game-detail__note-textarea:focus {
+  border-color: var(--color-accent-primary);
+}
+
+.game-detail__note-indicator {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent-primary);
+  margin-left: 0.25rem;
+  flex-shrink: 0;
+}
+
+@keyframes detail-slide-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}

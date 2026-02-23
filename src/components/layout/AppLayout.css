@@ -1,0 +1,23 @@
+.app-layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-layout__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-left: var(--rail-width);
+}
+
+/* When rail is always expanded, content needs more margin */
+.app-layout__content[data-rail-mode="expanded"] {
+  margin-left: var(--rail-expanded-width);
+}
+
+/* When rail is always collapsed, no hover expand so content stays tight */
+.app-layout__content[data-rail-mode="collapsed"] {
+  margin-left: var(--rail-width);
+}

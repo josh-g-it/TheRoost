@@ -1,0 +1,247 @@
+/* ── Trigger Button ──────────────────────────────────────── */
+.chart-filter-menu__trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.chart-filter-menu__trigger:hover {
+  border-color: var(--color-border-focus);
+}
+
+.chart-filter-menu__trigger--active {
+  border-color: var(--color-accent-primary);
+  color: var(--color-accent-primary);
+}
+
+/* ── Portal Panel ───────────────────────────────────────── */
+.chart-filter-menu__panel {
+  position: fixed;
+  z-index: 200;
+  width: 300px;
+  max-height: min(480px, calc(100vh - 80px));
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-elevated, var(--color-bg-primary));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.3));
+  overflow: hidden;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+.chart-filter-menu__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+}
+
+.chart-filter-menu__header-title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.chart-filter-menu__header-clear {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-accent-primary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
+.chart-filter-menu__header-clear:hover {
+  text-decoration: underline;
+}
+
+/* ── Scrollable Body ────────────────────────────────────── */
+.chart-filter-menu__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-xs);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bg-active, #555) transparent;
+}
+
+/* ── Collapsible Section ────────────────────────────────── */
+.chart-filter-menu__section {
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.chart-filter-menu__section:last-child {
+  border-bottom: none;
+}
+
+.chart-filter-menu__section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 100%;
+  padding: var(--space-sm) var(--space-xs);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.chart-filter-menu__section-header:hover {
+  background: var(--color-bg-hover);
+}
+
+.chart-filter-menu__section-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-full, 999px);
+  background: rgba(var(--color-accent-rgb, 100, 180, 255), 0.15);
+  color: var(--color-accent-primary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.chart-filter-menu__section-label {
+  flex: 1;
+  text-align: left;
+}
+
+.chart-filter-menu__section-body {
+  padding: 0 var(--space-xs) var(--space-sm);
+}
+
+/* ── Genre / Tag Chips ──────────────────────────────────── */
+.chart-filter-menu__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  max-height: 160px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.chart-filter-menu__chip {
+  padding: 3px 10px;
+  border-radius: var(--radius-full, 999px);
+  font-size: var(--font-size-xs);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.chart-filter-menu__chip:hover {
+  border-color: var(--color-accent-primary);
+  color: var(--color-text-primary);
+}
+
+.chart-filter-menu__chip--active {
+  background: var(--color-accent-primary);
+  border-color: var(--color-accent-primary);
+  color: var(--color-text-inverse, #fff);
+  font-weight: var(--font-weight-medium);
+}
+
+.chart-filter-menu__chip--active:hover {
+  background: var(--color-accent-primary-hover, var(--color-accent-primary));
+  color: var(--color-text-inverse, #fff);
+}
+
+/* ── Checkbox List ──────────────────────────────────────── */
+.chart-filter-menu__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bg-active, #555) transparent;
+}
+
+.chart-filter-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 4px var(--space-xs);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  transition: background var(--transition-fast);
+}
+
+.chart-filter-menu__item:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.chart-filter-menu__item input[type="checkbox"] {
+  accent-color: var(--color-accent-primary);
+  flex-shrink: 0;
+}
+
+.chart-filter-menu__item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-filter-menu__item-count {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+/* ── Search Input ───────────────────────────────────────── */
+.chart-filter-menu__search {
+  display: block;
+  width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  margin-bottom: var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  outline: none;
+}
+
+.chart-filter-menu__search::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.chart-filter-menu__search:focus {
+  border-color: var(--color-border-focus);
+}
+
+/* ── Empty State ────────────────────────────────────────── */
+.chart-filter-menu__empty {
+  padding: var(--space-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  text-align: center;
+}

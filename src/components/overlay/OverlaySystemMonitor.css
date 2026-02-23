@@ -1,0 +1,215 @@
+/* ── Overlay System Monitor ───────────────────────────────────── */
+.overlay-sysmon {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  font-size: 0.8rem;
+}
+
+/* ── System Metrics Section ───────────────────────────────────── */
+.overlay-sysmon__metrics {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+}
+
+.overlay-sysmon__metric-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.overlay-sysmon__metric-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.overlay-sysmon__metric-sparkline {
+  flex: 1;
+  min-width: 0;
+}
+
+.overlay-sysmon__metric-value {
+  font-size: 0.75rem;
+  color: var(--color-text-primary);
+  font-weight: 500;
+  min-width: 100px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* GPU unavailable state */
+.overlay-sysmon__metric-row--unavailable {
+  opacity: 0.4;
+}
+
+.overlay-sysmon__metric-row--unavailable .overlay-sysmon__metric-value {
+  font-size: 0.65rem;
+  font-style: italic;
+  color: var(--color-text-tertiary);
+}
+
+/* ── Process List ─────────────────────────────────────────────── */
+.overlay-sysmon__processes {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Column headers */
+.overlay-sysmon__proc-columns {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px 4px;
+  gap: 8px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.overlay-sysmon__col-icon {
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.overlay-sysmon__col-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.overlay-sysmon__col-stat {
+  min-width: 55px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.overlay-sysmon__col-action {
+  width: 38px;
+  flex-shrink: 0;
+}
+
+.overlay-sysmon__proc-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  gap: 8px;
+  transition: background var(--transition-fast);
+}
+
+.overlay-sysmon__proc-row:hover {
+  background: var(--color-bg-hover);
+}
+
+.overlay-sysmon__proc-row--self {
+  border-left: 2px solid var(--color-accent-primary);
+}
+
+.overlay-sysmon__proc-icon {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+.overlay-sysmon__proc-name {
+  flex: 1;
+  font-size: 0.75rem;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.overlay-sysmon__proc-stat {
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  min-width: 55px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.overlay-sysmon__proc-kill-spacer {
+  width: 38px;
+  flex-shrink: 0;
+}
+
+.overlay-sysmon__proc-kill {
+  background: none;
+  border: 1px solid var(--color-border-subtle);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.overlay-sysmon__proc-kill:hover {
+  color: var(--color-danger, #ef4444);
+  border-color: var(--color-danger, #ef4444);
+}
+
+/* End Task confirmation */
+.overlay-sysmon__confirm {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.overlay-sysmon__confirm-text {
+  font-size: 0.65rem;
+  color: var(--color-danger, #ef4444);
+  white-space: nowrap;
+}
+
+.overlay-sysmon__confirm-yes {
+  background: var(--color-danger, #ef4444);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.6rem;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  transition: opacity var(--transition-fast);
+}
+
+.overlay-sysmon__confirm-yes:hover {
+  opacity: 0.85;
+}
+
+.overlay-sysmon__confirm-cancel {
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 0.7rem;
+  transition: color var(--transition-fast);
+}
+
+.overlay-sysmon__confirm-cancel:hover {
+  color: var(--color-text-primary);
+}
+
+/* ── Empty State ──────────────────────────────────────────────── */
+.overlay-sysmon__empty {
+  padding: 16px 12px;
+  text-align: center;
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+}

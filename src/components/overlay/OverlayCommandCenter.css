@@ -1,0 +1,83 @@
+/* ── Now Playing Banner ─────────────────────────────────────────── */
+.overlay-now-playing {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.overlay-now-playing__session {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.overlay-now-playing__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: overlay-pulse 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes overlay-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.overlay-now-playing__name {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.overlay-now-playing__elapsed {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.overlay-now-playing__badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #22c55e;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+/* ── Inline Popover (replaces floating panel in overlay) ───────── */
+.overlay-inline-popover {
+  display: flex;
+  flex-direction: column;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.overlay-inline-popover__back {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  padding: var(--space-xs) 0;
+  margin-bottom: var(--space-xs);
+  transition: color var(--transition-fast);
+  align-self: flex-start;
+}
+
+.overlay-inline-popover__back:hover {
+  color: var(--color-text-primary);
+}
+
+/* Reuse all .command-center__* styles from the existing CommandCenter.css */

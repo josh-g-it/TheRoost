@@ -1,0 +1,60 @@
+/* =============================================================
+   Sakura — Light theme, soft blush-pink, cherry blossom accents
+   ============================================================= */
+
+[data-theme="sakura"] {
+  /* Background layers — muted rose-cream, not stark white */
+  --color-bg-primary: #f0e4ea;
+  --color-bg-secondary: #e6d8e0;
+  --color-bg-tertiary: #daced6;
+  --color-bg-elevated: #f6eef2;
+  --color-bg-hover: #d0c0ca;
+  --color-bg-active: #c6b4c0;
+
+  /* Text */
+  --color-text-primary: #362028;
+  --color-text-secondary: #644858;
+  --color-text-tertiary: #886474;
+  --color-text-inverse: #f0e4ea;
+
+  /* Accent colors */
+  --color-accent-primary: #c45678;
+  --color-accent-primary-hover: #b44868;
+  --color-accent-secondary: #7a5078;
+  --color-accent-secondary-hover: #6a4068;
+  --color-accent-success: #4a9868;
+  --color-accent-warning: #c49038;
+  --color-accent-error: #b83838;
+
+  /* Borders */
+  --color-border: #d0c0ca;
+  --color-border-subtle: #daced6;
+  --color-border-focus: #c45678;
+
+  /* Overlay */
+  --color-overlay: rgba(54, 32, 40, 0.45);
+  --color-overlay-light: rgba(54, 32, 40, 0.18);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(54, 32, 40, 0.1);
+  --shadow-md: 0 4px 8px rgba(54, 32, 40, 0.12);
+  --shadow-lg: 0 8px 24px rgba(54, 32, 40, 0.15);
+  --shadow-glow: 0 0 20px rgba(196, 86, 120, 0.14);
+
+  /* Tag palette — blossom-inspired palette */
+  --tag-color-0: #c45678; /* cherry blossom */
+  --tag-color-1: #7a5078; /* plum */
+  --tag-color-2: #4a9868; /* leaf */
+  --tag-color-3: #b83838; /* camellia */
+  --tag-color-4: #c49038; /* gold */
+  --tag-color-5: #c07050; /* peach */
+  --tag-color-6: #d88ea8; /* pink */
+  --tag-color-7: #4a8ea0; /* sky blue */
+  --tag-color-8: #689840; /* bamboo */
+  --tag-color-9: #a06090; /* wisteria */
+  --tag-color-10: #586898; /* twilight */
+  --tag-color-11: #409880; /* jade */
+  --tag-color-12: #c87080; /* rose */
+  --tag-color-13: #8070a8; /* iris */
+  --tag-color-14: #807078; /* grey */
+}

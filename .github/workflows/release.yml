@@ -1,0 +1,91 @@
+name: Release Build
+
+# Triggers when you push a version tag like v1.0.0, v1.2.3, etc.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+# Allow this workflow to create GitHub Releases and upload artifacts
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows Installer
+    runs-on: windows-latest
+
+    steps:
+      # 1. Check out the repo at the tagged commit
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Set up Node.js for the frontend build
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # 3. Set up Rust toolchain
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # 4. Cache Rust compilation artifacts (speeds up subsequent builds significantly)
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # 5. Install frontend dependencies
+      - name: Install npm dependencies
+        run: npm ci
+
+      # 6. Run frontend tests
+      - name: Run frontend tests
+        run: npx vitest run
+
+      # 7. Run Rust tests
+      - name: Run Rust tests
+        working-directory: src-tauri
+        run: cargo test
+
+      # 8. Build the Tauri app (compiles Rust + bundles frontend + creates installer)
+      - name: Build Tauri app
+        run: npx tauri build
+
+      # 9. Rename installer to TheRoost.exe
+      - name: Rename installer
+        shell: bash
+        run: |
+          INSTALLER=$(find src-tauri/target/release/bundle/nsis -name "*.exe" | head -1)
+          cp "$INSTALLER" "src-tauri/target/release/bundle/nsis/TheRoost.exe"
+          echo "INSTALLER_PATH=src-tauri/target/release/bundle/nsis/TheRoost.exe" >> $GITHUB_ENV
+
+      # 10. Create draft GitHub Release with the renamed installer
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: "The Roost ${{ github.ref_name }}"
+          body: |
+            ## The Roost ${{ github.ref_name }}
+
+            Download **TheRoost.exe** below to install or update The Roost.
+
+            ### Installation
+            1. Download `TheRoost.exe`
+            2. Run the installer
+            3. Launch The Roost from the Start Menu
+
+            ---
+            *Full changelog coming soon.*
+          files: ${{ env.INSTALLER_PATH }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

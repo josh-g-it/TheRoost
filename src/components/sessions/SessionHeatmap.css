@@ -1,0 +1,107 @@
+.session-heatmap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.session-heatmap__container {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.session-heatmap__day-labels {
+  display: grid;
+  gap: 2px;
+  padding-top: 20px; /* align with grid (space for month labels) */
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.session-heatmap__day-label {
+  font-size: 9px;
+  color: var(--color-text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 4px;
+}
+
+.session-heatmap__grid-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.session-heatmap__month-labels {
+  display: grid;
+  height: 16px;
+  gap: 2px;
+}
+
+.session-heatmap__month-label {
+  font-size: 9px;
+  color: var(--color-text-tertiary);
+  line-height: 16px;
+}
+
+.session-heatmap__grid {
+  display: grid;
+  gap: 2px;
+}
+
+.session-heatmap__cell {
+  border-radius: 2px;
+}
+
+.session-heatmap__cell--level-0 {
+  background: var(--color-bg-tertiary);
+}
+
+.session-heatmap__cell--level-1 {
+  background: var(--color-accent-success);
+  opacity: 0.25;
+}
+
+.session-heatmap__cell--level-2 {
+  background: var(--color-accent-success);
+  opacity: 0.5;
+}
+
+.session-heatmap__cell--level-3 {
+  background: var(--color-accent-success);
+  opacity: 0.75;
+}
+
+.session-heatmap__cell--level-4 {
+  background: var(--color-accent-success);
+  opacity: 1;
+}
+
+.session-heatmap__cell--clickable {
+  cursor: pointer;
+}
+
+.session-heatmap__cell--clickable:hover {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+}
+
+.session-heatmap__legend {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  justify-content: flex-end;
+}
+
+.session-heatmap__legend-label {
+  font-size: 9px;
+  color: var(--color-text-tertiary);
+  padding: 0 2px;
+}
+
+.session-heatmap__legend .session-heatmap__cell {
+  width: 10px;
+  height: 10px;
+}

@@ -1,0 +1,61 @@
+/* =============================================================
+   Dark Gaming — Sleek dark theme with blue accents
+   ============================================================= */
+
+:root,
+[data-theme="dark-gaming"] {
+  /* Background layers */
+  --color-bg-primary: #0a0e14;
+  --color-bg-secondary: #131923;
+  --color-bg-tertiary: #1c2433;
+  --color-bg-elevated: #222d3d;
+  --color-bg-hover: #283448;
+  --color-bg-active: #2f3d52;
+
+  /* Text */
+  --color-text-primary: #e6edf3;
+  --color-text-secondary: #8b949e;
+  --color-text-tertiary: #6e7681;
+  --color-text-inverse: #0a0e14;
+
+  /* Accent colors */
+  --color-accent-primary: #4a9eff;
+  --color-accent-primary-hover: #5eaaff;
+  --color-accent-secondary: #a855f7;
+  --color-accent-secondary-hover: #b56aff;
+  --color-accent-success: #34d399;
+  --color-accent-warning: #fbbf24;
+  --color-accent-error: #f87171;
+
+  /* Borders */
+  --color-border: #2a3544;
+  --color-border-subtle: #1e2836;
+  --color-border-focus: #4a9eff;
+
+  /* Overlay */
+  --color-overlay: rgba(0, 0, 0, 0.6);
+  --color-overlay-light: rgba(0, 0, 0, 0.3);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 20px rgba(74, 158, 255, 0.15);
+
+  /* Tag palette — 15 preset colors for user-created tags */
+  --tag-color-0: #4a9eff; /* blue */
+  --tag-color-1: #a855f7; /* purple */
+  --tag-color-2: #34d399; /* green */
+  --tag-color-3: #f87171; /* red */
+  --tag-color-4: #fbbf24; /* yellow */
+  --tag-color-5: #fb923c; /* orange */
+  --tag-color-6: #f472b6; /* pink */
+  --tag-color-7: #22d3ee; /* cyan */
+  --tag-color-8: #a3e635; /* lime */
+  --tag-color-9: #e879f9; /* magenta */
+  --tag-color-10: #818cf8; /* indigo */
+  --tag-color-11: #2dd4bf; /* teal */
+  --tag-color-12: #fb7185; /* rose */
+  --tag-color-13: #c084fc; /* violet */
+  --tag-color-14: #94a3b8; /* slate */
+}

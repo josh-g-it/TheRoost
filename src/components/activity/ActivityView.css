@@ -1,0 +1,216 @@
+.activity-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.activity-view__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  padding-bottom: var(--space-xl);
+}
+
+/* ── Edit Layout Button ──────────────────────────────────── */
+.activity-view__edit-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.activity-view__edit-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.activity-view__edit-btn--active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* ── Card Grid ───────────────────────────────────────────── */
+.activity-view__cards {
+  position: relative; /* anchor for drop-slot overlay */
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-lg);
+}
+
+/* ── Standardized Card Size ──────────────────────────────── */
+.activity-card {
+  display: flex;
+  flex-direction: column;
+  height: 360px;
+}
+
+.activity-card--full {
+  grid-column: 1 / -1;
+}
+
+/* ChartCard fills the card wrapper */
+.activity-card > .chart-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-card > .chart-card > .chart-card__content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Empty state fills available space */
+.activity-card > .chart-card > .chart-card__empty {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Scrollable content cards */
+.activity-card--scrollable > .chart-card > .chart-card__content {
+  overflow-y: auto;
+}
+
+/* Quick-stats fills the card and centers content */
+.activity-view__stats {
+  display: grid;
+  gap: var(--space-md);
+  flex: 1;
+  align-content: center;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* Half-width quick-stats: 2x2 grid */
+.activity-card--half .activity-view__stats {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+/* ── Edit Mode Card Chrome ───────────────────────────────── */
+.activity-card--editing {
+  position: relative;
+  border: 2px dashed var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+/* Hide the original card during drag — drop slots provide visual feedback */
+.activity-card--drag-origin {
+  visibility: hidden;
+}
+
+/* ── Drag Overlay (floating card that follows cursor) ────── */
+.activity-card--overlay {
+  border: 3px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-secondary);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  cursor: grabbing;
+}
+
+.activity-card__overlay-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  height: 100%;
+  color: var(--color-accent);
+  font-size: var(--font-size-lg, 1.125rem);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ── Drop Slot Indicators ────────────────────────────────── */
+.drop-slot-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.drop-slot {
+  position: absolute;
+  border: 2px dashed rgba(var(--color-accent-rgb, 100, 180, 255), 0.35);
+  border-radius: var(--radius-lg);
+  background: rgba(var(--color-accent-rgb, 100, 180, 255), 0.04);
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+
+.drop-slot--active {
+  border-color: var(--color-accent);
+  border-style: solid;
+  background: rgba(var(--color-accent-rgb, 100, 180, 255), 0.12);
+}
+
+/* Invisible overlay covering entire card — drag surface in edit mode */
+.activity-card__drag-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  cursor: grab;
+}
+
+.activity-card__drag-overlay:active {
+  cursor: grabbing;
+}
+
+.activity-card__edit-bar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+}
+
+.activity-card__edit-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.activity-card__move-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.activity-card__move-btn:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.activity-card__move-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .activity-view__cards {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-view__stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

@@ -1,0 +1,59 @@
+import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
+import { AppLayout } from "./components/layout/AppLayout";
+import { LibraryView } from "./components/library/LibraryView";
+import { SettingsView } from "./components/settings/SettingsView";
+import { FirstRunSetup } from "./components/setup/FirstRunSetup";
+import { LoadingSpinner } from "./components/common/LoadingSpinner";
+import { useSettings } from "./hooks/useSettings";
+import { useTheme } from "./hooks/useTheme";
+import { useDebugListener } from "./hooks/useDebugListener";
+import { APP_NAME } from "./constants";
+import { DebugPanel } from "./components/debug/DebugPanel";
+import { ActivityView } from "./components/activity/ActivityView";
+import { ProfileView } from "./components/profile/ProfileView";
+import { NotesView } from "./components/notes/NotesView";
+
+const router = createBrowserRouter([
+  {
+    element: <AppLayout />,
+    children: [
+      { path: "/", element: <Navigate to="/library" replace /> },
+      { path: "/library", element: <LibraryView /> },
+      { path: "/activity", element: <ActivityView /> },
+      { path: "/profile", element: <ProfileView /> },
+      { path: "/notes", element: <NotesView /> },
+      { path: "/settings", element: <SettingsView /> },
+      { path: "/debug", element: <DebugPanel /> },
+      { path: "*", element: <Navigate to="/library" replace /> },
+    ],
+  },
+]);
+
+function App() {
+  const { settings, isLoading } = useSettings();
+  useTheme();
+  useDebugListener();
+
+  if (isLoading || !settings) {
+    return (
+      <div
+        style={{
+          height: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <LoadingSpinner size="lg" message={`Loading ${APP_NAME}...`} />
+      </div>
+    );
+  }
+
+  if (settings.isFirstRun) {
+    return <FirstRunSetup />;
+  }
+
+  return <RouterProvider router={router} />;
+}
+
+export default App;

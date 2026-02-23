@@ -1,0 +1,60 @@
+/* =============================================================
+   Ember Forge — Volcanic charcoal, ember orange, molten accents
+   ============================================================= */
+
+[data-theme="ember-forge"] {
+  /* Background layers — warm charcoal with subtle red-brown tint */
+  --color-bg-primary: #14100e;
+  --color-bg-secondary: #1e1814;
+  --color-bg-tertiary: #2a221e;
+  --color-bg-elevated: #342c26;
+  --color-bg-hover: #3e342e;
+  --color-bg-active: #483e36;
+
+  /* Text */
+  --color-text-primary: #f0e4da;
+  --color-text-secondary: #b8a494;
+  --color-text-tertiary: #907868;
+  --color-text-inverse: #14100e;
+
+  /* Accent colors */
+  --color-accent-primary: #e07028;
+  --color-accent-primary-hover: #ec8840;
+  --color-accent-secondary: #c43828;
+  --color-accent-secondary-hover: #d84838;
+  --color-accent-success: #28a858;
+  --color-accent-warning: #e8b818;
+  --color-accent-error: #d84040;
+
+  /* Borders */
+  --color-border: #3e342e;
+  --color-border-subtle: #2a221e;
+  --color-border-focus: #e07028;
+
+  /* Overlay */
+  --color-overlay: rgba(20, 16, 14, 0.7);
+  --color-overlay-light: rgba(20, 16, 14, 0.35);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(20, 16, 14, 0.5);
+  --shadow-md: 0 4px 8px rgba(20, 16, 14, 0.6);
+  --shadow-lg: 0 8px 24px rgba(20, 16, 14, 0.7);
+  --shadow-glow: 0 0 20px rgba(224, 112, 40, 0.22);
+
+  /* Tag palette — warm/fiery palette */
+  --tag-color-0: #e07028; /* ember */
+  --tag-color-1: #c43828; /* crimson */
+  --tag-color-2: #28a858; /* forest */
+  --tag-color-3: #d84040; /* flame */
+  --tag-color-4: #e8b818; /* gold */
+  --tag-color-5: #c85000; /* rust */
+  --tag-color-6: #b87088; /* dusty rose */
+  --tag-color-7: #189080; /* dark teal */
+  --tag-color-8: #809848; /* olive */
+  --tag-color-9: #9050a8; /* plum */
+  --tag-color-10: #707880; /* ash */
+  --tag-color-11: #28b868; /* jade */
+  --tag-color-12: #d88060; /* peach */
+  --tag-color-13: #8040a0; /* grape */
+  --tag-color-14: #889098; /* stone */
+}

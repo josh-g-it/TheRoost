@@ -1,0 +1,366 @@
+/* ── Notes View ───────────────────────────────────────────────── */
+.notes-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.notes-view__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem;
+  max-width: 800px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* ── Empty State ──────────────────────────────────────────────── */
+.notes-view__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 3rem 1rem;
+  color: var(--color-text-tertiary);
+  text-align: center;
+}
+
+.notes-view__empty p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.notes-view__empty-hint {
+  font-size: 0.8rem !important;
+  max-width: 360px;
+}
+
+.notes-view__footer-hint {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  margin: 1rem 0 0;
+  padding: 1rem 0;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────── */
+.notes-view__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.notes-view__create-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  background: var(--color-accent-primary);
+  color: var(--color-text-on-accent, #fff);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.notes-view__create-btn:hover {
+  opacity: 0.9;
+}
+
+/* ── Game Search ─────────────────────────────────────────────── */
+.game-search {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.game-search__input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text-tertiary);
+}
+
+.game-search__input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--color-text-primary);
+  font-size: 0.85rem;
+  font-family: inherit;
+  outline: none;
+}
+
+.game-search__input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.game-search__cancel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast);
+}
+
+.game-search__cancel:hover {
+  color: var(--color-text-primary);
+}
+
+.game-search__results {
+  border-top: 1px solid var(--color-border-subtle);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.game-search__no-results {
+  padding: 0.75rem 1rem;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-tertiary);
+  text-align: center;
+}
+
+.game-search__result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: none;
+  color: var(--color-text-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.game-search__result:hover,
+.game-search__result--selected {
+  background: var(--color-bg-hover);
+}
+
+.game-search__result-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.game-search__result-source {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+  margin-left: 0.75rem;
+}
+
+/* ── Note Card ────────────────────────────────────────────────── */
+.note-card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color var(--transition-fast);
+}
+
+.note-card:hover {
+  border-color: var(--color-border);
+}
+
+.note-card--general {
+  border-left: 3px solid var(--color-accent-primary);
+}
+
+.note-card--expanded {
+  border-color: var(--color-border);
+}
+
+/* ── Card Header ──────────────────────────────────────────────── */
+.note-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-primary);
+  font-size: 0.85rem;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.note-card__header:hover {
+  background: var(--color-bg-hover);
+}
+
+.note-card__header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.note-card__name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.note-card__badge {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-accent-primary);
+  background: color-mix(in srgb, var(--color-accent-primary) 12%, transparent);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.note-card__header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+.note-card__date {
+  font-size: 0.7rem;
+}
+
+/* ── Card Preview ─────────────────────────────────────────────── */
+.note-card__preview {
+  padding: 0 1rem 0.75rem;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Card Body (expanded) ─────────────────────────────────────── */
+.note-card__body {
+  padding: 0 1rem 0.75rem;
+}
+
+.note-card__textarea {
+  width: 100%;
+  min-height: 120px;
+  max-height: 400px;
+  resize: vertical;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.note-card__textarea:focus {
+  border-color: var(--color-accent-primary);
+}
+
+.note-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+}
+
+.note-card__char-count {
+  font-size: 0.7rem;
+  color: var(--color-text-tertiary);
+}
+
+.note-card__delete {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.note-card__delete:hover {
+  color: var(--color-danger, #ef4444);
+  background: color-mix(in srgb, var(--color-danger, #ef4444) 10%, transparent);
+}
+
+/* ── Inline Delete Confirmation ──────────────────────────────── */
+.note-card__confirm {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.note-card__confirm-text {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.note-card__confirm-yes,
+.note-card__confirm-no {
+  padding: 3px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.note-card__confirm-yes {
+  background: var(--color-danger, #ef4444);
+  color: #fff;
+}
+
+.note-card__confirm-yes:hover {
+  opacity: 0.85;
+}
+
+.note-card__confirm-no {
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+}
+
+.note-card__confirm-no:hover {
+  background: var(--color-border-subtle);
+}

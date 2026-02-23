@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+src-tauri/target/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code
+.claude/
+
+# Internal dev docs
+docs/audit/
+docs/Active_Phase.md
+docs/PHASE_*_*.md
+PLAN-*.md
+
+# Tauri auto-generated schemas (regenerated on build)
+src-tauri/gen/
+
+# Platform icons not needed (Windows-only app)
+src-tauri/icons/android/
+src-tauri/icons/ios/
+src-tauri/icons/icon.icns
+src-tauri/icons/Square*.png
+src-tauri/icons/StoreLogo.png
+
+# OS
+Thumbs.db
+.DS_Store

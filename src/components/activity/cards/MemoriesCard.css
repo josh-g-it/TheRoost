@@ -1,0 +1,67 @@
+.memories-card {
+  padding: var(--space-sm);
+}
+
+.memories-card--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+}
+
+.memories-card__empty-text {
+  color: var(--color-text-tertiary);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+.memories-card__section {
+  padding: var(--space-sm) 0;
+}
+
+.memories-card__section + .memories-card__section {
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: var(--space-sm);
+}
+
+.memories-card__period-label {
+  margin: 0 0 4px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.memories-card__period-total {
+  margin: 0 0 var(--space-xs);
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.memories-card__game-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.memories-card__game {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: 0.8125rem;
+}
+
+.memories-card__game-name {
+  color: var(--color-text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memories-card__game-time {
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+  margin-left: var(--space-sm);
+  font-size: 0.75rem;
+}

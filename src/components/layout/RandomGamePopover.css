@@ -1,0 +1,71 @@
+.random-game-popover {
+  padding: var(--space-sm);
+  min-width: 240px;
+}
+
+.random-game-popover__image {
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: var(--space-sm);
+}
+
+.random-game-popover__image img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.random-game-popover__info {
+  margin-bottom: var(--space-sm);
+}
+
+.random-game-popover__name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.random-game-popover__actions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.random-game-popover__btn {
+  flex: 1;
+  padding: var(--space-xs) var(--space-sm);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.random-game-popover__btn--reroll {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+}
+
+.random-game-popover__btn--reroll:hover {
+  background: var(--color-bg-hover);
+}
+
+.random-game-popover__btn--launch {
+  background: var(--color-accent-primary);
+  color: white;
+}
+
+.random-game-popover__btn--launch:hover {
+  opacity: 0.9;
+}
+
+.random-game-popover__empty {
+  padding: var(--space-md);
+  text-align: center;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}

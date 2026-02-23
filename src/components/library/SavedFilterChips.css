@@ -1,0 +1,55 @@
+.saved-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-lg);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.saved-filter-chips__chip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  overflow: hidden;
+  transition: border-color var(--transition-fast);
+}
+
+.saved-filter-chips__chip:hover {
+  border-color: var(--color-accent-primary);
+}
+
+.saved-filter-chips__label {
+  padding: 3px 8px 3px 12px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.saved-filter-chips__label:hover {
+  color: var(--color-accent-primary);
+}
+
+.saved-filter-chips__remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font-size: 9px;
+  padding: 0;
+  margin-right: 2px;
+}
+
+.saved-filter-chips__remove:hover {
+  color: var(--color-accent-error);
+}

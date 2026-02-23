@@ -1,0 +1,60 @@
+/* =============================================================
+   Arctic Frost — Light theme, soft blue-gray, silver/steel accents
+   ============================================================= */
+
+[data-theme="arctic-frost"] {
+  /* Background layers — muted blue-gray, not stark white */
+  --color-bg-primary: #e4eaf2;
+  --color-bg-secondary: #d8e0ec;
+  --color-bg-tertiary: #ccd6e4;
+  --color-bg-elevated: #edf1f7;
+  --color-bg-hover: #c0ccd8;
+  --color-bg-active: #b4c0d0;
+
+  /* Text */
+  --color-text-primary: #1a2a3a;
+  --color-text-secondary: #465e74;
+  --color-text-tertiary: #6e8498;
+  --color-text-inverse: #e4eaf2;
+
+  /* Accent colors */
+  --color-accent-primary: #2878b0;
+  --color-accent-primary-hover: #206898;
+  --color-accent-secondary: #5e50d0;
+  --color-accent-secondary-hover: #4e40c0;
+  --color-accent-success: #28aa60;
+  --color-accent-warning: #d89020;
+  --color-accent-error: #d04838;
+
+  /* Borders */
+  --color-border: #b8c6d4;
+  --color-border-subtle: #ccd6e4;
+  --color-border-focus: #2878b0;
+
+  /* Overlay */
+  --color-overlay: rgba(26, 42, 58, 0.45);
+  --color-overlay-light: rgba(26, 42, 58, 0.18);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(26, 42, 58, 0.1);
+  --shadow-md: 0 4px 8px rgba(26, 42, 58, 0.12);
+  --shadow-lg: 0 8px 24px rgba(26, 42, 58, 0.15);
+  --shadow-glow: 0 0 20px rgba(40, 120, 176, 0.14);
+
+  /* Tag palette — cool/icy palette */
+  --tag-color-0: #2878b0; /* ice blue */
+  --tag-color-1: #5e50d0; /* periwinkle */
+  --tag-color-2: #28aa60; /* seafoam */
+  --tag-color-3: #d04838; /* frost red */
+  --tag-color-4: #d89020; /* amber */
+  --tag-color-5: #c87020; /* tangerine */
+  --tag-color-6: #c070a0; /* blush */
+  --tag-color-7: #189888; /* aqua */
+  --tag-color-8: #689838; /* spring */
+  --tag-color-9: #8850a0; /* amethyst */
+  --tag-color-10: #5070a8; /* steel blue */
+  --tag-color-11: #40b098; /* mint */
+  --tag-color-12: #c87070; /* rose quartz */
+  --tag-color-13: #7868b0; /* lavender */
+  --tag-color-14: #808c90; /* silver */
+}
