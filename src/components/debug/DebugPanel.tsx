@@ -20,6 +20,7 @@ const ALL_CATEGORIES: LogCategory[] = [
   "system",
   "credential",
   "scan",
+  "routing",
 ];
 
 const SENSITIVE_KEYS = /key|token|password|secret/i;

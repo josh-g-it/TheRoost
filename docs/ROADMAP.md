@@ -4,7 +4,7 @@
 
 # Version 1.0 — Feature Complete
 
-556 tests passing (206 Rust + 350 frontend). 90 Tauri commands across 25 modules. Multi-launcher support (Steam, Epic, GOG, EA, Ubisoft, Battle.net). System overlay with 5 HUD panels. Two-tier AI (pattern matcher + Gemini cloud). Command palette with natural language input.
+555 tests passing (205 Rust + 350 frontend). 104 Tauri commands across 27 modules. Multi-launcher support (Steam, Epic, GOG, EA, Ubisoft, Battle.net). System overlay with 5 HUD panels. Two-tier AI (pattern matcher + Gemini cloud). Command palette with natural language input.
 
 ## Completed Phases
 
@@ -712,109 +712,60 @@ Getting The Roost from a dev build to an installable, auto-updating desktop appl
 
 ---
 
-### Phase R1: Build Pipeline & Installer
-Configure Tauri's bundler to produce a polished Windows installer and establish automated builds.
+### Phase R1+R3: Build Pipeline, Installer & Auto-Updates
+From dev build to installable, auto-updating desktop application — completed in a single sprint.
 
-**Tauri Bundler Configuration:**
-- Configure `bundle` section in `tauri.conf.json` (installer type, app description, license, file associations)
-- NSIS installer (`.exe`) as primary format — modern, supports custom install paths, auto-creates Start Menu shortcuts
-- MSI as secondary format for enterprise/sysadmin deployment
-- Installer branding: custom icon, license agreement screen, install directory picker
-- Bundle size optimization: strip debug symbols, enable LTO in release profile
-- Verify clean install/uninstall cycle (registry cleanup, AppData handling)
+**NSIS Installer:**
+- NSIS installer (`.exe`) as primary format with custom icon, install directory picker
+- Tauri bundler configured: `bundle` section in `tauri.conf.json` with copyright, descriptions, icon set
+- `createUpdaterArtifacts: "v1Compatible"` generates `.nsis.zip` + `.sig` alongside installer
 
 **GitHub Actions CI/CD:**
-- Workflow triggered on version tag push (e.g., `v1.0.0`)
-- Build matrix: Windows x64 (primary), ARM64 (stretch)
-- Steps: checkout → install Rust toolchain → install Node deps → run tests (Rust + frontend) → `npm run tauri build`
-- Upload installer artifacts to GitHub Release (draft → manual publish)
-- Separate workflow for PR checks (lint + test only, no build)
-- Cache Cargo registry + target dir + node_modules for faster builds
+- **Release workflow** (`release.yml`): triggered on version tags (`v*`), builds installer + updater artifacts, generates `latest.json` manifest, creates GitHub Release with all assets
+- **CI workflow** (`ci.yml`): triggered on master pushes — runs ESLint, TypeScript check, `cargo fmt --check`, `cargo clippy -D warnings`, frontend tests, and Rust tests
+- Ed25519 signing: private key in GitHub Actions secrets (`TAURI_SIGNING_PRIVATE_KEY` + `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`), public key embedded in `tauri.conf.json`
+- `latest.json` auto-generated with correct `.sig` file content and URL-encoded download links
 
-**Versioning Strategy:**
-- Semantic versioning: `MAJOR.MINOR.PATCH`
-- Version defined in one place (`tauri.conf.json`), synced to `package.json` and `Cargo.toml`
-- Git tags trigger release builds
-- Changelog generation from conventional commits (or manual `CHANGELOG.md`)
+**Auto-Updates (OTA):**
+- `tauri-plugin-updater` v2 — update endpoint: GitHub Releases `latest.json`
+- `UpdateBanner` component: automatic check 30s after launch + every 4 hours; dismissible per-version
+- Settings UI: "Check for Updates" button, install button with progress states, release notes display
+- Detailed error reporting: `tracing::error!` in Rust + frontend error message extraction
+- Updater commands: `check_for_update`, `install_update`, `get_app_version`
 
----
+**Launch on Startup:**
+- `tauri-plugin-autostart` v2 — Windows auto-launch via `LaunchAgent`
+- Settings UI checkbox with description: "Launch on startup"
+- Commands: `get_autostart_enabled`, `set_autostart_enabled`
 
-### Phase R2: Code Signing & Trust
-Eliminate the "Windows protected your PC" SmartScreen warning so users can install without fear.
+**Versioning:**
+- Semantic versioning synced across `tauri.conf.json`, `package.json`, `Cargo.toml`
+- Git tags (`v1.1.0`, `v1.1.1`, `v1.1.2`) trigger release builds
+- Current release: **v1.1.2** (3 published releases on GitHub)
 
-**Windows Code Signing:**
-- Obtain code signing certificate (OV or EV from DigiCert, Sectigo, or similar)
-- Configure Tauri to sign during build (`bundle > windows > certificateThumbprint` or environment-based)
-- Sign both the NSIS installer and the inner `.exe` binary
-- GitHub Actions: store signing cert as encrypted secret, sign as part of build pipeline
-- Test SmartScreen behavior after signing
+**Release Flow (end-to-end, verified working):**
+1. Bump version in `tauri.conf.json` + `package.json` + `Cargo.toml` → commit → push tag
+2. GitHub Actions: build → sign → generate `latest.json` → create GitHub Release (draft)
+3. Developer publishes release
+4. Running app instances detect update → UpdateBanner shown → user installs from Settings
 
-**Considerations:**
-- OV certificate (~$200-400/year): immediate signing, SmartScreen reputation builds over time
-- EV certificate (~$300-500/year): immediate SmartScreen trust, but requires hardware token (complicates CI)
-- Alternative: submit to Microsoft for SmartScreen reputation review after accumulating installs
-- macOS: Apple Developer account ($99/year) + notarization (future, if/when macOS support ships)
-
----
-
-### Phase R3: Auto-Updates (OTA)
-Users receive updates seamlessly without manually downloading new installers.
-
-**Tauri Updater Plugin:**
-- Add `tauri-plugin-updater` to Rust and frontend dependencies
-- Configure update endpoint in `tauri.conf.json` (e.g., `https://theroost.app/api/update/{{target}}/{{arch}}/{{current_version}}`)
-- Tauri generates signed update bundles (`.nsis.zip` + signature) alongside installer on each build
-- Update check on app launch (configurable: startup, daily, manual-only)
-- UI: non-intrusive notification bar ("Update available — v2.1.0") with Install / Later / Release Notes options
-- Background download → apply on next restart (or immediate with user confirmation)
-
-**Update Hosting (Google Cloud):**
-- GCS bucket behind `theroost.app` (e.g., `theroost.app/api/update/`)
-- Static JSON manifest per platform/arch pointing to the latest version + download URL
-- GitHub Actions uploads update artifacts to GCS after successful build
-- CDN caching with short TTL (5-10 min) so updates propagate quickly
-- Fallback: update artifacts also available on GitHub Releases for manual download
-
-**Update Signing:**
-- Tauri updater uses Ed25519 key pair for update verification
-- Private key stored as GitHub Actions secret (never in repo)
-- Public key embedded in `tauri.conf.json` — app verifies signature before applying update
-- Prevents tampered update bundles from being installed
-
-**Launch on Startup (test patch):**
-- Add `tauri-plugin-autostart` for optional launch-on-login
-- Toggle in Settings (alongside existing "minimize to tray" option)
-- Good candidate for first minor patch release (v1.1.0) to validate the full update pipeline end-to-end
-
-**Release Flow (end-to-end):**
-1. Bump version in `tauri.conf.json` → commit → push tag `v1.1.0`
-2. GitHub Actions: test → build → sign → create GitHub Release (draft)
-3. GitHub Actions: upload update manifest + bundle to GCS
-4. Developer reviews draft release → publishes
-5. Running app instances detect update on next check → prompt user → apply
+- 205 Rust tests + 350 frontend tests passing (555 total)
 
 ---
 
-### Phase R4: Website & Distribution
-User-facing download page and landing site at theroost.app.
+---
 
-**Landing Page:**
-- Hero section with app screenshots and tagline
-- Feature highlights (multi-launcher, overlay, AI assistant, etc.)
-- Download button (auto-detects OS, links to latest GitHub Release)
-- System requirements
-- Links to GitHub repo, changelog, documentation
+# Version 1.2.0 — Stability (Done)
 
-**Download Infrastructure:**
-- Primary: direct download from GitHub Releases (free, reliable, CDN-backed)
-- Mirror: GCS bucket for redundancy
-- Download analytics (simple hit counter or Google Analytics)
-- SHA256 checksums published alongside installers for verification
+### Route Error Boundaries
+Per-route error handling so a crash in one page doesn't take down the whole app.
 
-**Future Distribution Channels:**
-- Windows Package Manager (`winget install TheRoost`) — submit manifest to winget-pkgs repo
-- Chocolatey package (community package manager)
-- Microsoft Store (if demand warrants the submission process)
+- `RouteErrorFallback` component using React Router's `useRouteError()` — renders in-place via `<Outlet />`, keeping IconRail visible
+- Per-route `errorElement` on all 6 content routes (library, activity, profile, notes, settings, debug)
+- "Try Again" (re-mounts route) and "Go to Library" (safe fallback) recovery buttons
+- `"routing"` log category — errors forwarded to debug panel with path, message, and stack metadata
+- Fixed pre-existing bug: `ErrorBoundary.css` using non-existent CSS variable names (`--bg-*` → `--color-bg-*`)
+- 205 Rust tests + 354 frontend tests passing (559 total)
 
 ---
 
@@ -822,7 +773,7 @@ User-facing download page and landing site at theroost.app.
 
 # Version 2.0 — Planned
 
-Phases can be tackled in any order. Numbered for reference, not strict sequencing.
+Each feature below will be released as an incremental minor version (v1.3.0, v1.4.0, etc.). Phases can be tackled in any order. Once all features are shipped, the app version elevates to 2.0.0.
 
 ---
 
@@ -867,11 +818,6 @@ Per-game data features that give users more control over their library metadata.
 - Additive or absolute mode (add X hours vs. set to X hours)
 - Audit log of manual adjustments
 - Reflected in all statistics, charts, and sorting
-
-**Route Error Boundaries:**
-- Per-route `errorElement` props for graceful, contextual error recovery
-- User-friendly error pages with retry/navigate-home options
-- Error reporting to debug panel
 
 ---
 

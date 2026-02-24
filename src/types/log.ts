@@ -21,7 +21,8 @@ export type LogCategory =
   | "achievements"
   | "friends"
   | "news"
-  | "notes";
+  | "notes"
+  | "routing";
 
 export interface LogEvent {
   id: string;

@@ -1,14 +1,12 @@
-.error-boundary {
-  height: 100vh;
+.route-error {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: var(--space-lg);
-  background: var(--color-bg-primary);
-  color: var(--color-text-primary);
 }
 
-.error-boundary__card {
+.route-error__card {
   max-width: 480px;
   padding: var(--space-xl);
   background: var(--color-bg-secondary);
@@ -17,19 +15,25 @@
   text-align: center;
 }
 
-.error-boundary__title {
+.route-error__icon {
+  margin-bottom: var(--space-md);
+  color: var(--color-accent-error);
+}
+
+.route-error__title {
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
   margin-bottom: var(--space-sm);
 }
 
-.error-boundary__message {
+.route-error__message {
   color: var(--color-text-secondary);
   margin-bottom: var(--space-md);
   line-height: 1.5;
 }
 
-.error-boundary__details {
+.route-error__details {
   text-align: left;
   padding: var(--space-sm);
   background: var(--color-bg-tertiary);
@@ -42,7 +46,7 @@
   word-break: break-word;
 }
 
-.error-boundary__actions {
+.route-error__actions {
   display: flex;
   gap: var(--space-sm);
   justify-content: center;

@@ -1,7 +1,7 @@
 # The Roost — Technical Overview (Simple)
 
 > **Audience**: Non-technical readers, project stakeholders, curious users
-> **Last updated**: 2026-02-22 (Phase 12a complete)
+> **Last updated**: 2026-02-24 (v1.2.0 — route error boundaries)
 
 ---
 
@@ -88,12 +88,24 @@ Each panel is a floating window you can drag, resize, lock in place, or hide. Po
 - **Theme Builder**: Mix and match 9 color palettes, 5 fonts, 6 icon styles, 4 UI scales — with instant preview
 - Tag manager, card display settings, overlay shortcut configuration
 - Minimize-to-tray option
+- **Launch on startup** toggle
+- **Check for updates** button with one-click install
+- AI assistant settings (Gemini API key, context scope, daily limits)
 - Developer section for advanced tools
+
+### Auto-Updates
+- The Roost checks for updates automatically (every 4 hours) and shows a non-intrusive banner when one is available
+- Click "View in Settings" to see release notes and install with one click
+- Updates are cryptographically signed (Ed25519) so tampered updates can't be installed
+- You can also check manually any time from Settings
 
 ### System Tray
 - The Roost lives in your system tray when minimized
 - Shows your currently active game
 - Quick access to recent games and overlay toggle
+
+### Error Recovery
+If a page encounters an error, only that page is affected — the navigation sidebar stays visible so you can switch to a different page. You'll see a friendly error message with options to retry or go back to the Library. The full error details are forwarded to the Debug Panel for troubleshooting.
 
 ### Debug Panel
 A developer tool showing everything happening inside the app in real-time — events from both backend and frontend, color-coded, searchable, filterable, exportable.
@@ -153,10 +165,10 @@ TheRoost/
 │
 └── src-tauri/              ← The engine (behind the scenes)
     └── src/
-        ├── commands/       ← 89 things the frontend can ask the backend to do
+        ├── commands/       ← 104 things the frontend can ask the backend to do
         ├── models/         ← Data shapes (48+ structs)
-        ├── services/       ← Core logic (30 modules: APIs, database, monitoring,
-        │                      audio, media, overlay, launcher scanners)
+        ├── services/       ← Core logic (39 modules: APIs, database, monitoring,
+        │                      audio, media, overlay, AI, launcher scanners)
         └── utils/          ← Error handling
 ```
 
@@ -177,13 +189,17 @@ TheRoost/
 | **CSS variables** for themes | Easy runtime theme switching without JavaScript overhead |
 | **Windows WASAPI** for audio | Direct per-app volume control at the OS level |
 | **NVML + PDH** for GPU | NVIDIA-specific + universal GPU monitoring |
+| **GitHub Actions** for CI/CD | Automated testing on every push + release builds on version tags |
+| **Ed25519 signing** for updates | Cryptographic verification prevents tampered updates |
 
 ---
 
 ## What's Coming Next
 
-- **AI & Companion Features** (Phase 12): Smart game recommendations, discovery of hidden gems, achievement tracking suggestions, and possibly natural-language library queries.
 - **Big Picture Mode**: Full-screen, controller-friendly interface for couch gaming.
+- **Advanced AI**: Multi-turn chat, multi-provider support (Claude, OpenAI, Gemini).
+- **Achievements Tracker**: Dedicated page with completion progress across your whole library.
+- **Personal Ratings & Reviews**: Rate games, write reviews, feed preferences into AI.
 
 ---
 

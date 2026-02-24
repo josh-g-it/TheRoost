@@ -4,6 +4,7 @@ import { LibraryView } from "./components/library/LibraryView";
 import { SettingsView } from "./components/settings/SettingsView";
 import { FirstRunSetup } from "./components/setup/FirstRunSetup";
 import { LoadingSpinner } from "./components/common/LoadingSpinner";
+import { RouteErrorFallback } from "./components/common/RouteErrorFallback";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { useDebugListener } from "./hooks/useDebugListener";
@@ -18,12 +19,28 @@ const router = createBrowserRouter([
     element: <AppLayout />,
     children: [
       { path: "/", element: <Navigate to="/library" replace /> },
-      { path: "/library", element: <LibraryView /> },
-      { path: "/activity", element: <ActivityView /> },
-      { path: "/profile", element: <ProfileView /> },
-      { path: "/notes", element: <NotesView /> },
-      { path: "/settings", element: <SettingsView /> },
-      { path: "/debug", element: <DebugPanel /> },
+      {
+        path: "/library",
+        element: <LibraryView />,
+        errorElement: <RouteErrorFallback />,
+      },
+      {
+        path: "/activity",
+        element: <ActivityView />,
+        errorElement: <RouteErrorFallback />,
+      },
+      {
+        path: "/profile",
+        element: <ProfileView />,
+        errorElement: <RouteErrorFallback />,
+      },
+      { path: "/notes", element: <NotesView />, errorElement: <RouteErrorFallback /> },
+      {
+        path: "/settings",
+        element: <SettingsView />,
+        errorElement: <RouteErrorFallback />,
+      },
+      { path: "/debug", element: <DebugPanel />, errorElement: <RouteErrorFallback /> },
       { path: "*", element: <Navigate to="/library" replace /> },
     ],
   },

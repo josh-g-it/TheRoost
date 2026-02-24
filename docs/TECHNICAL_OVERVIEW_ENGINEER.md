@@ -1,8 +1,8 @@
 # The Roost — Technical Overview (Engineer)
 
 > **Audience**: AI assistants, senior developers, contributors
-> **Last updated**: 2026-02-22
-> **Version**: 0.1.0 (Phase 12a complete)
+> **Last updated**: 2026-02-24
+> **Version**: 1.2.0 (Route error boundaries)
 
 ---
 
@@ -17,7 +17,7 @@
 | Framework | Tauri v2 (Rust) + React 18 + TypeScript + Vite |
 | State | Zustand (17 slices) |
 | Routing | React Router v6 data router (`createBrowserRouter`) |
-| Database | SQLite via rusqlite (bundled), WAL mode, schema v15 |
+| Database | SQLite via rusqlite (bundled), WAL mode, schema v17 |
 | Platform | Windows 11 (registry, credential manager, WASAPI, SMTC, NVML, PDH) |
 | Launch | `npm run tauri dev` |
 
@@ -46,9 +46,10 @@ TheRoost/
 │   │
 │   ├── components/
 │   │   ├── common/               # AppIcon, Button, Input, LoadingSpinner, ErrorBoundary,
-│   │   │                         #   GenreTag, StatCard, UserTag, DrillDownOverlay, EmojiPicker
+│   │   │                         #   RouteErrorFallback, GenreTag, StatCard, UserTag,
+│   │   │                         #   DrillDownOverlay, EmojiPicker
 │   │   ├── layout/               # AppLayout, IconRail, Header, CommandCenter,
-│   │   │                         #   CommandSlot, CommandPaletteResults,
+│   │   │                         #   CommandSlot, CommandPaletteResults, UpdateBanner,
 │   │   │                         #   ThemePickerPopover, QuickStatsPopover,
 │   │   │                         #   RandomGamePopover, TagFilterPopover
 │   │   ├── library/              # LibraryView, LibraryControls, GameGrid, GameList,
@@ -106,13 +107,13 @@ TheRoost/
 │   ├── Cargo.toml
 │   ├── tauri.conf.json
 │   ├── capabilities/
-│   │   └── default.json          # Permissions: shell, dialog, global-shortcut, window
+│   │   └── default.json          # Permissions: shell, dialog, global-shortcut, window, updater, autostart
 │   │
 │   └── src/
 │       ├── main.rs               # Entry → lib::run()
-│       ├── lib.rs                # Tauri setup, tracing init, 89 commands, background services
+│       ├── lib.rs                # Tauri setup, tracing init, 104 commands, background services
 │       │
-│       ├── commands/             # 24 command modules, 89 total commands (see §3.1)
+│       ├── commands/             # 27 command modules, 104 total commands (see §3.1)
 │       │   ├── steam_scanner.rs, steam_api.rs, settings.rs, game_launcher.rs
 │       │   ├── metadata.rs, sessions.rs, tags.rs, favorites.rs
 │       │   ├── hidden_games.rs, saved_filters.rs, developer.rs
@@ -120,17 +121,18 @@ TheRoost/
 │       │   ├── achievements.rs, friends.rs, news.rs
 │       │   ├── overlay.rs, notes.rs, system_monitor.rs
 │       │   ├── media_controls.rs, media_bookmarks.rs, audio.rs
+│       │   ├── ai.rs, updater.rs, autostart.rs
 │       │   └── mod.rs
 │       │
-│       ├── models/               # 18 model files, 48+ structs (see §3.3)
+│       ├── models/               # 19 model files, 48+ structs (see §3.3)
 │       │   ├── game.rs, settings.rs, metadata.rs, session.rs, tag.rs
 │       │   ├── saved_filter.rs, steam_api.rs, store_api.rs, log_event.rs
 │       │   ├── achievement.rs, friend.rs, news.rs, note.rs
 │       │   ├── media_session.rs, media_bookmark.rs, audio.rs, system_metrics.rs
 │       │   └── mod.rs
 │       │
-│       ├── services/             # 30 service modules (see §3.5)
-│       │   ├── cache_db.rs       # SQLite: schema v15, 19 tables, WAL mode
+│       ├── services/             # 39 service modules (see §3.5)
+│       │   ├── cache_db.rs       # SQLite: schema v17, 19 tables, WAL mode
 │       │   ├── steam_client.rs   # Shared HTTP client (OnceLock, 15s timeout, sanitized errors)
 │       │   ├── store_client.rs, steamspy_client.rs, steamgriddb.rs
 │       │   ├── metadata_service.rs, achievement_service.rs
@@ -141,6 +143,9 @@ TheRoost/
 │       │   ├── overlay.rs, tray.rs
 │       │   ├── media_controls.rs, audio_control.rs
 │       │   ├── launchers/ (mod, epic, gog, ea, ubisoft, battlenet)
+│       │   ├── ai/ (mod, orchestrator, pattern_matcher, context_builder, types,
+│       │   │        cloud_resolver, cloud_provider, gemini_provider,
+│       │   │        cloud_config, cloud_cache)
 │       │   └── mod.rs
 │       │
 │       └── utils/
@@ -154,7 +159,7 @@ TheRoost/
 
 ### 3.1 Command Registry (lib.rs)
 
-89 Tauri commands across 24 modules:
+104 Tauri commands across 27 modules:
 
 | Module | Commands |
 |--------|----------|
@@ -181,6 +186,9 @@ TheRoost/
 | `media_controls` | `get_media_session`, `media_toggle_play_pause`, `media_skip_next`, `media_skip_previous` |
 | `media_bookmarks` | `get_media_bookmarks`, `add_media_bookmark`, `update_media_bookmark`, `delete_media_bookmark`, `reorder_media_bookmarks`, `open_media_bookmark` |
 | `audio` | `get_audio_snapshot`, `set_session_volume`, `set_session_mute`, `set_master_volume`, `set_master_mute`, `set_default_output_device`, `set_default_input_device`, `set_audio_device_alias`, `delete_audio_device_alias`, `set_audio_session_hidden` |
+| `ai` | `ai_resolve_intent`, `ai_cloud_resolve`, `store_cloud_api_key`, `delete_cloud_api_key`, `get_cloud_api_key_status`, `test_cloud_api_key`, `get_cloud_ai_usage`, `update_cloud_ai_settings` |
+| `updater` | `check_for_update`, `install_update`, `get_app_version` |
+| `autostart` | `get_autostart_enabled`, `set_autostart_enabled` |
 
 ### 3.2 Background Services (started in lib.rs setup)
 
@@ -242,12 +250,12 @@ All scanners register games into the unified UUID-based `games` table with their
 
 - `credential_store.rs`: `keyring` crate with `windows-native` feature
 - Service name: `app.theroost`
-- Accounts: `steam_api_key`, `sgdb_api_key`
+- Accounts: `steam_api_key`, `sgdb_api_key`, `cloud_ai_gemini` (Gemini API key)
 - API keys **never** written to `settings.json` — `save_settings()` strips them before write, `load_settings()` injects from credential manager after read
 
 ### 3.7 SQLite Schema (cache_db.rs)
 
-**Current schema version: v15** — Location: `%APPDATA%/app.theroost/theroost.db`
+**Current schema version: v17** — Location: `%APPDATA%/app.theroost/theroost.db`
 
 19 tables:
 
@@ -274,7 +282,7 @@ All scanners register games into the unified UUID-based `games` table with their
 
 Database features: WAL mode, foreign keys enforced, 7 indexes for query performance.
 
-Migration system checks `user_version` pragma and applies incremental migrations v1→v15.
+Migration system checks `user_version` pragma and applies incremental migrations v1→v17.
 
 ### 3.8 Process Monitor & Session Tracking
 
@@ -358,7 +366,24 @@ tracing::info!(key = value, "message")
 
 Category auto-detection from module target (e.g., `steam_client` → `api`, `session` → `activity`, `overlay` → `overlay`).
 
-### 3.14 Key Dependencies (Cargo.toml)
+### 3.14 Auto-Updates & Autostart
+
+**Updater** (`commands/updater.rs`):
+- `tauri-plugin-updater` v2 — checks GitHub Releases `latest.json` endpoint
+- Ed25519 signature verification: public key in `tauri.conf.json`, private key in CI secrets
+- `check_for_update()` returns `UpdateInfo { version, body, date }` or `None`
+- `install_update()` downloads, verifies signature, installs, and restarts the app
+- `get_app_version()` returns current version from Tauri config
+
+**Autostart** (`commands/autostart.rs`):
+- `tauri-plugin-autostart` v2 — registers with Windows startup via `LaunchAgent`
+- `get_autostart_enabled()` / `set_autostart_enabled(bool)` — simple toggle
+
+**CI/CD** (`.github/workflows/`):
+- `release.yml`: triggered on `v*` tags — builds NSIS installer + `.nsis.zip` + `.sig`, generates `latest.json` with correct signature and URL-encoded download links, creates GitHub Release
+- `ci.yml`: triggered on master pushes — ESLint, `tsc --noEmit`, `cargo fmt --check`, `cargo clippy -D warnings`, `npx vitest run`, `cargo test`
+
+### 3.15 Key Dependencies (Cargo.toml)
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
@@ -366,6 +391,8 @@ Category auto-detection from module target (e.g., `steam_client` → `api`, `ses
 | `tauri-plugin-shell` | 2 | Process launching |
 | `tauri-plugin-dialog` | 2 | File dialogs |
 | `tauri-plugin-global-shortcut` | 2 | Overlay hotkey |
+| `tauri-plugin-updater` | 2 | Auto-updates (OTA) |
+| `tauri-plugin-autostart` | 2 | Launch on startup |
 | `reqwest` | 0.12 | HTTP client (JSON feature) |
 | `rusqlite` | 0.32 | SQLite (bundled) |
 | `keyring` | 3 | Windows Credential Manager |
@@ -398,7 +425,7 @@ main.tsx → ErrorBoundary → App
     if settings.isFirstRun → <FirstRunSetup />
     else → <RouterProvider router={dataRouter} />
 
-  Routes:
+  Routes (all content routes have errorElement: <RouteErrorFallback />):
     /          → redirect to /library
     /library   → LibraryView
     /activity  → ActivityView
@@ -410,6 +437,8 @@ main.tsx → ErrorBoundary → App
 ```
 
 **Critical**: Must use `createBrowserRouter` (data router), not `<BrowserRouter>`. Required for `useBlocker` in SettingsView.
+
+**Route error boundaries**: Each content route has `errorElement: <RouteErrorFallback />`. Crashes render the fallback in-place via `<Outlet />`, keeping `AppLayout` (IconRail, UpdateBanner) intact. Layout-level crashes bubble to the global `ErrorBoundary` in `main.tsx`.
 
 **Overlay** (`overlay-main.tsx`): Separate React app with `ErrorBoundary` → `OverlayApp`. No router, no Zustand. Loads its own data via direct `invoke()` calls.
 
@@ -525,10 +554,11 @@ Key type definitions in `src/types/`:
 | `profile.ts` | `RadarDataPoint`, `ScatterPoint`, `LeaderboardEntry`, `QuickStats` |
 | `tag.ts` | `Tag`, `GameTagAssignment` |
 | `activity.ts` | `DailyPlaytimePoint`, `MostPlayedEntry`, `SessionLengthBucket`, `ActivityQuickStats` |
+| `updater.ts` | `UpdateInfo` |
 
 ### 4.6 Frontend API Layer (services/tauri.ts)
 
-20 API namespaces wrapping `invoke()` calls:
+25 API namespaces wrapping `invoke()` calls:
 
 | Namespace | Methods | Purpose |
 |-----------|---------|---------|
@@ -553,6 +583,10 @@ Key type definitions in `src/types/`:
 | `mediaControlsApi` | 4 | SMTC transport controls |
 | `mediaBookmarksApi` | 6 | Bookmark CRUD + reorder + open |
 | `audioMixerApi` | 10 | Per-app volume, device switching, aliases |
+| `aiApi` | 1 | Local AI intent resolution |
+| `updaterApi` | 3 | Update check, install, version |
+| `autostartApi` | 2 | Launch-on-startup toggle |
+| `cloudAiApi` | 8 | Cloud AI key management, resolve, usage, settings |
 | `developerApi` | 1 | Clear all data |
 
 ### 4.7 Image CDN & CSP
@@ -748,6 +782,8 @@ GameDetail sidebar:
 - Window: 1280×800 default, 1024×768 minimum
 - Dev URL: `http://localhost:1420`
 - CSP: Steam CDN + SteamGridDB CDN + GOG CDN domains
+- Updater: GitHub Releases `latest.json` endpoint + Ed25519 public key
+- Bundle: NSIS target with `createUpdaterArtifacts: "v1Compatible"`
 
 ### Settings file
 
@@ -759,7 +795,9 @@ steam_id, is_first_run, theme, icon_set, font_family, ui_scale,
 card_display, profile_chart_options, command_center_slots,
 command_center_shortcut, rail_mode, shelves, minimize_to_tray,
 dev_settings_enabled, activity_layout, has_seen_welcome,
-overlay_panel_positions, media_controls_mode
+overlay_panel_positions, media_controls_mode,
+cloud_ai_provider, cloud_ai_daily_limit, cloud_ai_context_scope,
+cloud_ai_exclude_games, cloud_ai_include_games
 ```
 
 ---
@@ -777,34 +815,40 @@ overlay_panel_positions, media_controls_mode
 | Recharts | Charts (activity + profile pages) |
 | @dnd-kit | Drag-and-drop (activity cards) |
 | react-icons | 6 icon set libraries |
+| GitHub Actions | CI (lint + test) + Release (build + sign + publish) |
 
-**Test Coverage (477 total)**:
+**Test Coverage (559 total)**:
 
-**Rust (138 tests)**:
-- CacheDb: 69 tests (schema, CRUD for all 19 tables, transactions)
+**Rust (205 tests)**:
+- CacheDb: 90 tests (schema, CRUD for all 19 tables, transactions, migrations v1→v17)
+- AI pattern matcher: 34 tests (9 extractors, fuzzy matching, confidence scoring)
 - VDF parser: 15 tests (parsing, escapes, real-world formats)
-- URL parsing: 13 tests (Steam profile/vanity URL extraction)
+- Steam API URL parsing: 13 tests (Steam profile/vanity URL extraction)
 - Process monitor: 12 tests (exe matching, metrics, state)
+- Epic scanner: 7 tests
+- AI cloud resolver: 7 tests (cloud provider integration)
 - GPU monitor: 5 tests
-- Audio: 5 tests
-- Media: 3 tests
-- Epic scanner: 6 tests
-- Misc model tests: 10 tests
+- Audio: 3 tests + 4 model tests
+- Game model: 4 tests
+- AI cloud cache: 4 tests
+- Media: 2 tests + 2 model tests + 2 bookmark tests
+- AI Gemini provider: 1 test
 
-**Frontend (339 tests)**:
+**Frontend (354 tests)**:
+- Command palette: 71 tests (action registry, search, result capping, category prefix matching, hints, AI heuristic)
 - Activity stats: 56 tests (daily playtime, most played, session distribution, day-of-week)
 - Profile stats: 46 tests (genre DNA, playtime distribution, Metacritic scatter, leaderboard)
 - Shelf filtering: 21 tests (presets, filters, search, hidden games, genre grouping)
-- Command palette: 60 tests (action registry, search, result capping, category prefix matching, hints)
 - Library slice: 19 tests (mergeGames dedup/sort, refreshLibrary, scanLocalOnly, addGame, removeGame)
 - Metadata slice: 17 tests (fetch cached/uncached, dedup guard, batch, refreshAll, error fallback)
+- Formatters: 17 tests (playtime, bytes, source names, formatLastPlayed)
 - Shelves slice: 16 tests (init, add, update, remove, reorder, displayMode, groupByGenre)
-- Sorting: 14 tests (all sort modes, null handling, immutability)
 - Filtering: 16 tests (all filter types, edge cases)
+- Sorting: 14 tests (all sort modes, null handling, immutability)
 - Streaks: 11 tests (calculatePlayStreak, computePlaytimeInRange, edge cases)
 - FloatingPanel: 10 tests (render, pin/close, resize handle, className)
 - AddCustomGameDialog: 9 tests (add/edit mode, validation, button states, delete confirmation)
-- Formatters: 17 tests (playtime, bytes, source names, formatLastPlayed)
+- RouteErrorFallback: 4 tests (error rendering, page name, recovery buttons, navigation)
 - Errors: 8 tests (AppError extraction)
 - Settings slice: 7 tests (load/save success/error, icon set migration)
 - useSteamLibrary hook: 6 tests (full/local mode, refresh function)
@@ -854,6 +898,9 @@ overlay_panel_positions, media_controls_mode
 | 11.5 | Done | Overlay HUD: game notes, process monitor, media controls, audio mixer |
 | Pre-12 | Done | P3 backlog (6 items) + test coverage (107 new frontend tests) |
 | 12a | Done | Command palette standardization (category prefixes, hints, overlay sync) |
-| 12 | Planned | AI & Companion Features |
+| 12b | Done | AI pattern matcher + foundation (9 extractors, fuzzy tag matching) |
+| 12c | Done | Cloud AI integration (Gemini 3 Flash, "Ask Assistant", context builder) |
+| R1+R3 | Done | Build pipeline, NSIS installer, auto-updates (OTA), autostart |
+| v1.2.0 | Done | Route error boundaries (per-route `errorElement`, `RouteErrorFallback`) |
 
 See `docs/ROADMAP.md` for the full roadmap.
