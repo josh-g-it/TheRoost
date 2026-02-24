@@ -79,6 +79,4 @@ cd src-tauri && cargo test
 
 ## License
 
-Copyright 2025-2026 kickinchicken. All rights reserved.
-
-This source code is provided for reference and educational purposes. Unauthorized copying, modification, distribution, or use of this software is prohibited without explicit permission from the author.
+This project is licensed under the [GNU General Public License v3.0](LICENSE). You are free to use, modify, and distribute this software under the terms of the GPL-3.0. Any derivative work must also be open-sourced under the same license.

@@ -46,7 +46,7 @@
       "icons/icon.png"
     ],
     "resources": [],
-    "copyright": "Copyright 2025-2026 kickinchicken",
+    "copyright": "Copyright 2025-2026 josh-g-it. Licensed under GPL-3.0.",
     "shortDescription": "Where your games come home to roost",
     "longDescription": "The Roost is a multi-launcher game library manager with a system overlay, AI-powered command palette, session tracking, and rich statistics. Supports Steam, Epic, GOG, EA, Ubisoft, and Battle.net.",
     "windows": {
