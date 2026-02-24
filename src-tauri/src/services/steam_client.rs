@@ -36,9 +36,7 @@ pub(crate) fn sanitize_steam_error(err: reqwest::Error, endpoint: &str) -> AppEr
             status.as_u16()
         ))
     } else if err.is_decode() {
-        AppError::StoreApi(format!(
-            "Failed to parse Steam API response: {endpoint}"
-        ))
+        AppError::StoreApi(format!("Failed to parse Steam API response: {endpoint}"))
     } else {
         AppError::StoreApi(format!("Steam API request failed: {endpoint}"))
     }
@@ -82,10 +80,7 @@ pub(crate) async fn steam_get_raw(
 // ── Public API functions ────────────────────────────────────────────
 
 /// Fetch all owned games with playtime data from the Steam Web API.
-pub async fn fetch_owned_games(
-    api_key: &str,
-    steam_id: &str,
-) -> Result<Vec<Game>, AppError> {
+pub async fn fetch_owned_games(api_key: &str, steam_id: &str) -> Result<Vec<Game>, AppError> {
     tracing::info!(endpoint = "GetOwnedGames/v1", "Steam API request");
 
     let resp: OwnedGamesResponse = steam_get_json(
@@ -128,19 +123,12 @@ pub async fn fetch_owned_games(
 }
 
 /// Fetch recently played games (last 2 weeks).
-pub async fn fetch_recent_games(
-    api_key: &str,
-    steam_id: &str,
-) -> Result<Vec<Game>, AppError> {
+pub async fn fetch_recent_games(api_key: &str, steam_id: &str) -> Result<Vec<Game>, AppError> {
     tracing::info!(endpoint = "GetRecentlyPlayedGames/v1", "Steam API request");
 
     let resp: RecentGamesResponse = steam_get_json(
         "/IPlayerService/GetRecentlyPlayedGames/v1/",
-        &[
-            ("key", api_key),
-            ("steamid", steam_id),
-            ("format", "json"),
-        ],
+        &[("key", api_key), ("steamid", steam_id), ("format", "json")],
     )
     .await?;
 
@@ -180,11 +168,7 @@ pub async fn fetch_player_summary(
 
     let resp: PlayerSummariesResponse = steam_get_json(
         "/ISteamUser/GetPlayerSummaries/v2/",
-        &[
-            ("key", api_key),
-            ("steamids", steam_id),
-            ("format", "json"),
-        ],
+        &[("key", api_key), ("steamids", steam_id), ("format", "json")],
     )
     .await?;
 
@@ -206,11 +190,12 @@ pub async fn fetch_player_summary(
 }
 
 /// Resolve a Steam vanity URL name to a 64-bit Steam ID.
-pub async fn resolve_vanity_url(
-    api_key: &str,
-    vanity_name: &str,
-) -> Result<String, AppError> {
-    tracing::info!(endpoint = "ResolveVanityURL/v1", vanity_name = vanity_name, "Steam API request");
+pub async fn resolve_vanity_url(api_key: &str, vanity_name: &str) -> Result<String, AppError> {
+    tracing::info!(
+        endpoint = "ResolveVanityURL/v1",
+        vanity_name = vanity_name,
+        "Steam API request"
+    );
 
     let resp: VanityUrlResponse = steam_get_json(
         "/ISteamUser/ResolveVanityURL/v1/",
@@ -224,24 +209,17 @@ pub async fn resolve_vanity_url(
 
     match resp.response.success {
         1 => {
-            let id = resp
-                .response
-                .steamid
-                .ok_or_else(|| {
-                    AppError::NotFound(
-                        "Vanity URL resolved but no Steam ID returned".to_string(),
-                    )
-                })?;
+            let id = resp.response.steamid.ok_or_else(|| {
+                AppError::NotFound("Vanity URL resolved but no Steam ID returned".to_string())
+            })?;
             tracing::info!("Vanity URL resolved successfully");
             Ok(id)
         }
         _ => {
             tracing::warn!(vanity_name = vanity_name, "Vanity URL resolution failed");
-            Err(AppError::NotFound(
-                resp.response
-                    .message
-                    .unwrap_or_else(|| "No match found for that username".to_string()),
-            ))
+            Err(AppError::NotFound(resp.response.message.unwrap_or_else(
+                || "No match found for that username".to_string(),
+            )))
         }
     }
 }

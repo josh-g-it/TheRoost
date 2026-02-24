@@ -5,13 +5,18 @@ mod utils;
 
 use std::sync::{Arc, Mutex};
 
-use commands::{achievements, ai, audio, autostart, cover_art, custom_games, developer, external_scanner, favorites, friends, game_launcher, hidden_games, media_bookmarks, media_controls, metadata, news, notes, overlay, saved_filters, sessions, settings, steam_api, steam_scanner, system_monitor, tags, updater};
+use commands::{
+    achievements, ai, audio, autostart, cover_art, custom_games, developer, external_scanner,
+    favorites, friends, game_launcher, hidden_games, media_bookmarks, media_controls, metadata,
+    news, notes, overlay, saved_filters, sessions, settings, steam_api, steam_scanner,
+    system_monitor, tags, updater,
+};
 use models::ai::CloudProvider;
 use services::ai::cloud_config::CloudConfig;
 use services::cache_db::CacheDb;
 use services::log_bridge::TauriLogLayer;
-use services::{library_sync, process_monitor};
 use services::settings_store;
+use services::{library_sync, process_monitor};
 use tauri::Manager;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -151,21 +156,24 @@ pub fn run() {
             tracing::info!("The Roost backend initialized");
 
             // Initialize SQLite cache database
-            let app_data = app.path().app_data_dir()
-                .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, e.to_string())))?;
+            let app_data = app.path().app_data_dir().map_err(|e| {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    e.to_string(),
+                ))
+            })?;
             std::fs::create_dir_all(&app_data)?;
             let db_path = app_data.join("theroost.db");
             let cache_db = CacheDb::new(&db_path)
-                .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+                .map_err(|e| Box::new(std::io::Error::other(e.to_string())))?;
             let db_handle = Arc::new(Mutex::new(cache_db));
             app.manage(db_handle.clone());
             tracing::info!("Cache database initialized");
 
             // Initialize cloud AI config from settings
-            let cloud_settings = settings_store::load_settings(app.handle())
-                .unwrap_or_default();
-            let cloud_provider = CloudProvider::from_str(&cloud_settings.cloud_ai_provider)
-                .unwrap_or_default();
+            let cloud_settings = settings_store::load_settings(app.handle()).unwrap_or_default();
+            let cloud_provider =
+                CloudProvider::from_str(&cloud_settings.cloud_ai_provider).unwrap_or_default();
             let cloud_config = CloudConfig::new(
                 cloud_settings.cloud_ai_enabled,
                 cloud_provider,
@@ -182,9 +190,7 @@ pub fn run() {
             });
 
             // Create system metrics shared state (read by overlay commands)
-            let metrics_handle = Arc::new(Mutex::new(
-                process_monitor::SystemMetrics::new()
-            ));
+            let metrics_handle = Arc::new(Mutex::new(process_monitor::SystemMetrics::new()));
             app.manage(metrics_handle.clone());
 
             // Spawn process monitor background task (5-second process scanning + metrics)

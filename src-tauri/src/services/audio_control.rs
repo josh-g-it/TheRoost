@@ -7,13 +7,12 @@ use std::os::windows::ffi::OsStringExt;
 
 use windows::core::{Interface, GUID, HRESULT, PCWSTR, PWSTR};
 use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
-use windows::Win32::Media::Audio::{
-    eCapture, eConsole, eRender, EDataFlow,
-    IAudioSessionControl, IAudioSessionControl2, IAudioSessionEnumerator,
-    IAudioSessionManager2, IMMDevice, IMMDeviceCollection, IMMDeviceEnumerator,
-    ISimpleAudioVolume, MMDeviceEnumerator, DEVICE_STATE_ACTIVE,
-};
 use windows::Win32::Media::Audio::Endpoints::{IAudioEndpointVolume, IAudioMeterInformation};
+use windows::Win32::Media::Audio::{
+    eCapture, eConsole, eRender, EDataFlow, IAudioSessionControl, IAudioSessionControl2,
+    IAudioSessionEnumerator, IAudioSessionManager2, IMMDevice, IMMDeviceCollection,
+    IMMDeviceEnumerator, ISimpleAudioVolume, MMDeviceEnumerator, DEVICE_STATE_ACTIVE,
+};
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED, STGM_READ,
 };
@@ -24,6 +23,7 @@ use crate::models::audio::{AudioDevice, AudioSession, AudioSnapshot};
 // ── IPolicyConfig (undocumented but stable COM interface) ─────────────
 
 // IPolicyConfig interface GUID
+#[allow(dead_code)]
 const IPOLICYCONFIG_GUID: GUID = GUID::from_values(
     0xf8679f50,
     0x850a,
@@ -90,9 +90,7 @@ pub fn set_session_volume(pid: u32, volume: f32) -> Result<(), String> {
 
 /// Set mute state for a specific audio session by PID.
 pub fn set_session_mute(pid: u32, muted: bool) -> Result<(), String> {
-    with_session_volume(pid, |vol| unsafe {
-        vol.SetMute(muted, std::ptr::null())
-    })
+    with_session_volume(pid, |vol| unsafe { vol.SetMute(muted, std::ptr::null()) })
 }
 
 /// Set the master volume of the default render device.
@@ -307,10 +305,7 @@ fn get_process_exe_name(pid: u32) -> String {
     }
 }
 
-unsafe fn enumerate_devices(
-    enumerator: &IMMDeviceEnumerator,
-    flow: EDataFlow,
-) -> Vec<AudioDevice> {
+unsafe fn enumerate_devices(enumerator: &IMMDeviceEnumerator, flow: EDataFlow) -> Vec<AudioDevice> {
     let collection: IMMDeviceCollection =
         match enumerator.EnumAudioEndpoints(flow, DEVICE_STATE_ACTIVE) {
             Ok(c) => c,
@@ -327,7 +322,7 @@ unsafe fn enumerate_devices(
         .GetDefaultAudioEndpoint(flow, eConsole)
         .ok()
         .and_then(|d| d.GetId().ok())
-        .map(|id| pwstr_to_string(id));
+        .map(pwstr_to_string);
 
     let mut devices = Vec::new();
 
@@ -379,7 +374,8 @@ unsafe fn get_device_name(device: &IMMDevice) -> String {
         return "Unknown Device".to_string();
     }
 
-    pwsz.to_string().unwrap_or_else(|_| "Unknown Device".to_string())
+    pwsz.to_string()
+        .unwrap_or_else(|_| "Unknown Device".to_string())
 }
 
 /// Convert a PWSTR to a Rust String (without freeing the pointer).
@@ -406,10 +402,13 @@ where
             .GetDefaultAudioEndpoint(eRender, eConsole)
             .map_err(|e| e.to_string())?;
 
-        let session_mgr: IAudioSessionManager2 =
-            device.Activate(CLSCTX_ALL, None).map_err(|e| e.to_string())?;
+        let session_mgr: IAudioSessionManager2 = device
+            .Activate(CLSCTX_ALL, None)
+            .map_err(|e| e.to_string())?;
 
-        let session_enum = session_mgr.GetSessionEnumerator().map_err(|e| e.to_string())?;
+        let session_enum = session_mgr
+            .GetSessionEnumerator()
+            .map_err(|e| e.to_string())?;
         let count = session_enum.GetCount().map_err(|e| e.to_string())?;
 
         for i in 0..count {

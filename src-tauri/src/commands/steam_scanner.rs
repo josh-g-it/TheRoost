@@ -48,10 +48,8 @@ pub async fn scan_local_library() -> Result<Vec<Game>, AppError> {
             match vdf_parser::parse_app_manifest(&entry.path()) {
                 Ok(info) => {
                     folder_count += 1;
-                    let full_path = format!(
-                        "{}\\steamapps\\common\\{}",
-                        folder.path, info.install_dir
-                    );
+                    let full_path =
+                        format!("{}\\steamapps\\common\\{}", folder.path, info.install_dir);
                     games.push(Game {
                         game_id: String::new(), // Placeholder — assigned after DB registration
                         source: GameSource::Steam,
@@ -106,7 +104,10 @@ pub async fn get_full_library(
     tracing::info!(local_count = local_games.len(), "Local scan phase complete");
 
     // Build lookup of local game info by source_id (Steam appid as string)
-    let local_map: HashMap<&str, &Game> = local_games.iter().map(|g| (g.source_id.as_str(), g)).collect();
+    let local_map: HashMap<&str, &Game> = local_games
+        .iter()
+        .map(|g| (g.source_id.as_str(), g))
+        .collect();
 
     // Fetch API data (owned games with playtime)
     let api_games = steam_client::fetch_owned_games(&api_key, &steam_id).await?;
@@ -140,11 +141,7 @@ pub async fn get_full_library(
 
     let mut games: Vec<Game> = merged.into_values().collect();
     for game in &mut games {
-        let game_id = db_guard.register_game(
-            game.source.as_str(),
-            &game.source_id,
-            &game.name,
-        )?;
+        let game_id = db_guard.register_game(game.source.as_str(), &game.source_id, &game.name)?;
         game.game_id = game_id.clone();
         if let Some(ref path) = game.install_path {
             let _ = db_guard.set_install_path(&game_id, path);
@@ -168,5 +165,9 @@ pub async fn get_full_library(
         "Library merge complete"
     );
 
-    Ok(GameLibrary { games, total_count, warnings })
+    Ok(GameLibrary {
+        games,
+        total_count,
+        warnings,
+    })
 }

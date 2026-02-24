@@ -102,15 +102,14 @@ describe("AddCustomGameDialog", () => {
       source: "manual" as const,
       sourceId: "custom-1",
       playtimeForever: 0,
-      playtime2Weeks: 0,
+      playtime2weeks: 0,
       imgIconUrl: null,
-      imgLogoUrl: null,
       lastPlayed: null,
       isInstalled: true,
+      installDir: null,
       installPath: "C:\\Games",
       sizeOnDisk: null,
-      launchId: null,
-      launchMode: "direct" as const,
+      launchArgs: null,
       lastUpdated: Date.now(),
     };
 

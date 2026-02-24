@@ -11,6 +11,7 @@ pub struct StoreAppDetailsWrapper {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct StoreAppData {
     pub steam_appid: u32,
     pub name: String,

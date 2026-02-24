@@ -3,8 +3,8 @@ use std::pin::Pin;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use crate::utils::error::AppError;
 use super::cloud_provider::CloudProviderApi;
+use crate::utils::error::AppError;
 
 const GEMINI_ENDPOINT: &str =
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent";
@@ -100,9 +100,7 @@ async fn send_query_impl(
         .and_then(|p| p.get(0))
         .and_then(|p| p.get("text"))
         .and_then(|t| t.as_str())
-        .ok_or_else(|| {
-            AppError::Parse("Unexpected Gemini response structure".into())
-        })?;
+        .ok_or_else(|| AppError::Parse("Unexpected Gemini response structure".into()))?;
 
     Ok(text.to_string())
 }
@@ -113,13 +111,9 @@ fn sanitize_cloud_error(err: reqwest::Error, endpoint: &str) -> AppError {
     if err.is_timeout() {
         AppError::StoreApi(format!("Cloud AI request timed out: {endpoint}"))
     } else if err.is_connect() {
-        AppError::StoreApi(format!(
-            "Failed to connect to Cloud AI service: {endpoint}"
-        ))
+        AppError::StoreApi(format!("Failed to connect to Cloud AI service: {endpoint}"))
     } else if err.is_decode() {
-        AppError::StoreApi(format!(
-            "Failed to parse Cloud AI response: {endpoint}"
-        ))
+        AppError::StoreApi(format!("Failed to parse Cloud AI response: {endpoint}"))
     } else {
         // Generic — never include the raw error which may contain URL with key
         AppError::StoreApi(format!("Cloud AI request failed: {endpoint}"))

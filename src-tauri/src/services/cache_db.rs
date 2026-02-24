@@ -6,7 +6,9 @@ use uuid::Uuid;
 
 use crate::models::achievement::GameAchievement;
 use crate::models::media_bookmark::MediaBookmark;
-use crate::models::metadata::{CategoryInfo, GenreInfo, ScreenshotInfo, SteamTagInfo, StoreMetadata};
+use crate::models::metadata::{
+    CategoryInfo, GenreInfo, ScreenshotInfo, SteamTagInfo, StoreMetadata,
+};
 use crate::models::news::GameNewsItem;
 use crate::models::note::{GameNote, GameNoteWithName};
 use crate::models::saved_filter::SavedFilterRow;
@@ -15,6 +17,29 @@ use crate::models::tag::Tag;
 use crate::utils::error::AppError;
 
 pub type CacheDbHandle = Arc<Mutex<CacheDb>>;
+
+/// `(game_id, source, source_id, name, install_path, playtime_minutes)` — overlay game row.
+pub type OverlayGameRow = (String, String, String, String, Option<String>, u32);
+
+/// `(game_id, source_id, name, install_path, description, launch_args)` — manual game row.
+pub type ManualGameRow = (
+    String,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+/// `(game_id, name, genres_json, tags_json, playtime_hours, last_played_ts)` — game with genre/tag context.
+pub type GameGenreTagRow = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    f64,
+    Option<i64>,
+);
 
 /// Metadata cache TTL: 7 days in seconds.
 const METADATA_TTL_SECS: i64 = 7 * 24 * 60 * 60;
@@ -32,7 +57,9 @@ pub struct CacheDb {
 impl CacheDb {
     pub fn new(path: &Path) -> Result<Self, AppError> {
         let conn = Connection::open(path)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;")?;
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
+        )?;
         let db = Self { conn };
         db.init_schema()?;
         Ok(db)
@@ -635,11 +662,7 @@ impl CacheDb {
     }
 
     /// Set whether an audio session (by exe name) should be hidden.
-    pub fn set_audio_session_hidden(
-        &self,
-        exe_name: &str,
-        hidden: bool,
-    ) -> Result<(), AppError> {
+    pub fn set_audio_session_hidden(&self, exe_name: &str, hidden: bool) -> Result<(), AppError> {
         self.conn.execute(
             "INSERT OR REPLACE INTO audio_session_prefs (exe_name, hidden) VALUES (?1, ?2)",
             params![exe_name, hidden as i32],
@@ -687,7 +710,10 @@ impl CacheDb {
     }
 
     /// Look up full game info: (source, source_id, name) for a game_id.
-    pub fn get_game_info(&self, game_id: &str) -> Result<Option<(String, String, String)>, AppError> {
+    pub fn get_game_info(
+        &self,
+        game_id: &str,
+    ) -> Result<Option<(String, String, String)>, AppError> {
         let result = self.conn.query_row(
             "SELECT source, source_id, COALESCE(name, '') FROM games WHERE game_id = ?1",
             params![game_id],
@@ -757,7 +783,11 @@ impl CacheDb {
 
     /// Set or clear the launch arguments for a game.
     pub fn set_launch_args(&self, game_id: &str, args: &str) -> Result<(), AppError> {
-        let val = if args.trim().is_empty() { None } else { Some(args) };
+        let val = if args.trim().is_empty() {
+            None
+        } else {
+            Some(args)
+        };
         self.conn.execute(
             "UPDATE games SET launch_args = ?1 WHERE game_id = ?2",
             params![val, game_id],
@@ -788,9 +818,9 @@ impl CacheDb {
 
     /// Get all games that have a non-NULL install_path.
     pub fn get_all_install_paths(&self) -> Result<Vec<(String, String)>, AppError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT game_id, install_path FROM games WHERE install_path IS NOT NULL",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT game_id, install_path FROM games WHERE install_path IS NOT NULL")?;
         let rows = stmt
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<Result<Vec<(String, String)>, _>>()?;
@@ -799,7 +829,7 @@ impl CacheDb {
 
     /// Lightweight read of all registered games for the overlay.
     /// Returns (game_id, source, source_id, name, install_path, playtime_minutes).
-    pub fn get_overlay_games(&self) -> Result<Vec<(String, String, String, String, Option<String>, u32)>, AppError> {
+    pub fn get_overlay_games(&self) -> Result<Vec<OverlayGameRow>, AppError> {
         let mut stmt = self.conn.prepare(
             "SELECT g.game_id, g.source, g.source_id, COALESCE(g.name, ''),
                     g.install_path,
@@ -844,9 +874,9 @@ impl CacheDb {
 
     /// Get all known game executables.
     pub fn get_all_game_executables(&self) -> Result<Vec<(String, String, String)>, AppError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT game_id, exe_path, exe_name FROM game_executables",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT game_id, exe_path, exe_name FROM game_executables")?;
         let rows = stmt
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
             .collect::<Result<Vec<(String, String, String)>, _>>()?;
@@ -854,13 +884,14 @@ impl CacheDb {
     }
 
     /// Look up game_ids by executable name (for fast-path matching).
+    #[allow(dead_code)]
     pub fn find_games_by_exe_name(
         &self,
         exe_name: &str,
     ) -> Result<Vec<(String, String)>, AppError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT game_id, exe_path FROM game_executables WHERE exe_name = ?1",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT game_id, exe_path FROM game_executables WHERE exe_name = ?1")?;
         let rows = stmt
             .query_map(params![exe_name], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<Result<Vec<(String, String)>, _>>()?;
@@ -963,17 +994,14 @@ impl CacheDb {
                 params![game_id],
             )?;
         }
-        tx.execute(
-            "DELETE FROM games WHERE game_id = ?1",
-            params![game_id],
-        )?;
+        tx.execute("DELETE FROM games WHERE game_id = ?1", params![game_id])?;
         tx.commit()?;
         Ok(())
     }
 
     /// Get all manually added games (source = 'manual').
     /// Returns (game_id, source_id, name, install_path, description, launch_args).
-    pub fn get_manual_games(&self) -> Result<Vec<(String, String, String, Option<String>, Option<String>, Option<String>)>, AppError> {
+    pub fn get_manual_games(&self) -> Result<Vec<ManualGameRow>, AppError> {
         let mut stmt = self.conn.prepare(
             "SELECT game_id, source_id, COALESCE(name, ''), install_path, description, launch_args
              FROM games WHERE source = 'manual'",
@@ -1016,7 +1044,11 @@ impl CacheDb {
 
     /// Get a cached image URL if it exists and is still fresh (within TTL).
     /// User-selected images never expire.
-    pub fn get_game_image(&self, game_id: &str, image_type: &str) -> Result<Option<String>, AppError> {
+    pub fn get_game_image(
+        &self,
+        game_id: &str,
+        image_type: &str,
+    ) -> Result<Option<String>, AppError> {
         let now = chrono::Utc::now().timestamp();
         let result = self.conn.query_row(
             "SELECT image_url FROM game_images
@@ -1033,7 +1065,11 @@ impl CacheDb {
     }
 
     /// Check if a user has explicitly selected an image for this game+type.
-    pub fn is_user_selected_image(&self, game_id: &str, image_type: &str) -> Result<bool, AppError> {
+    pub fn is_user_selected_image(
+        &self,
+        game_id: &str,
+        image_type: &str,
+    ) -> Result<bool, AppError> {
         let result = self.conn.query_row(
             "SELECT user_selected FROM game_images WHERE game_id = ?1 AND image_type = ?2",
             params![game_id, image_type],
@@ -1048,7 +1084,9 @@ impl CacheDb {
 
     /// Get non-Steam games that have no cached cover art.
     /// Returns (game_id, source, source_id, name).
-    pub fn get_games_missing_images(&self) -> Result<Vec<(String, String, String, String)>, AppError> {
+    pub fn get_games_missing_images(
+        &self,
+    ) -> Result<Vec<(String, String, String, String)>, AppError> {
         let mut stmt = self.conn.prepare(
             "SELECT g.game_id, g.source, g.source_id, COALESCE(g.name, '')
              FROM games g
@@ -1059,7 +1097,9 @@ impl CacheDb {
                )",
         )?;
         let rows = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
     }
@@ -1162,18 +1202,17 @@ impl CacheDb {
 
     /// Invalidate all cached metadata so it will be re-fetched on next access.
     pub fn invalidate_metadata_cache(&self) -> Result<usize, AppError> {
-        let updated = self.conn.execute(
-            "UPDATE store_metadata SET cached_at = 0",
-            [],
-        )?;
+        let updated = self
+            .conn
+            .execute("UPDATE store_metadata SET cached_at = 0", [])?;
         Ok(updated)
     }
 
     /// Get game_ids of games that have cached metadata but no SteamSpy tags yet.
     pub fn get_game_ids_missing_tags(&self) -> Result<Vec<String>, AppError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT game_id FROM store_metadata WHERE steam_tags IS NULL",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT game_id FROM store_metadata WHERE steam_tags IS NULL")?;
         let ids = stmt
             .query_map([], |row| row.get(0))?
             .collect::<Result<Vec<String>, _>>()?;
@@ -1384,11 +1423,7 @@ impl CacheDb {
         Ok(sessions)
     }
 
-    pub fn get_sessions(
-        &self,
-        game_id: &str,
-        limit: u32,
-    ) -> Result<Vec<GameSession>, AppError> {
+    pub fn get_sessions(&self, game_id: &str, limit: u32) -> Result<Vec<GameSession>, AppError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, game_id, start_time, end_time, duration_minutes
              FROM game_sessions
@@ -1475,11 +1510,9 @@ impl CacheDb {
     pub fn create_tag(&self, name: &str, color_index: u32) -> Result<Tag, AppError> {
         let max_order: i64 = self
             .conn
-            .query_row(
-                "SELECT COALESCE(MAX(sort_order), -1) FROM tags",
-                [],
-                |r| r.get(0),
-            )
+            .query_row("SELECT COALESCE(MAX(sort_order), -1) FROM tags", [], |r| {
+                r.get(0)
+            })
             .unwrap_or(-1);
         self.conn.execute(
             "INSERT INTO tags (name, color_index, sort_order) VALUES (?1, ?2, ?3)",
@@ -1564,9 +1597,7 @@ impl CacheDb {
     }
 
     pub fn get_all_game_tags(&self) -> Result<Vec<(String, i64)>, AppError> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT game_id, tag_id FROM game_tags")?;
+        let mut stmt = self.conn.prepare("SELECT game_id, tag_id FROM game_tags")?;
         let pairs = stmt
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<Result<Vec<(String, i64)>, _>>()?;
@@ -1619,8 +1650,10 @@ impl CacheDb {
                 params![game_id],
             )?;
         } else {
-            self.conn
-                .execute("DELETE FROM hidden_games WHERE game_id = ?1", params![game_id])?;
+            self.conn.execute(
+                "DELETE FROM hidden_games WHERE game_id = ?1",
+                params![game_id],
+            )?;
         }
         Ok(())
     }
@@ -1689,9 +1722,9 @@ impl CacheDb {
 
     /// Returns all (game_id, appid) pairs for Steam games in the registry.
     pub fn get_all_steam_games(&self) -> Result<Vec<(String, u32)>, AppError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT game_id, source_id FROM games WHERE source = 'steam'",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT game_id, source_id FROM games WHERE source = 'steam'")?;
         let games = stmt
             .query_map([], |row| {
                 let game_id: String = row.get(0)?;
@@ -1699,9 +1732,8 @@ impl CacheDb {
                 Ok((game_id, source_id))
             })?
             .filter_map(|r| {
-                r.ok().and_then(|(gid, sid)| {
-                    sid.parse::<u32>().ok().map(|appid| (gid, appid))
-                })
+                r.ok()
+                    .and_then(|(gid, sid)| sid.parse::<u32>().ok().map(|appid| (gid, appid)))
             })
             .collect();
         Ok(games)
@@ -1813,7 +1845,8 @@ impl CacheDb {
     /// Delete all cached achievement data and freshness markers.
     pub fn clear_achievement_cache(&self) -> Result<u32, AppError> {
         let deleted: usize = self.conn.execute("DELETE FROM game_achievements", [])?;
-        self.conn.execute("DELETE FROM game_achievement_freshness", [])?;
+        self.conn
+            .execute("DELETE FROM game_achievement_freshness", [])?;
         tracing::info!(deleted, "Achievement cache cleared");
         Ok(deleted as u32)
     }
@@ -1833,18 +1866,11 @@ impl CacheDb {
         }
     }
 
-    pub fn cache_game_news(
-        &self,
-        game_id: &str,
-        items: &[GameNewsItem],
-    ) -> Result<(), AppError> {
+    pub fn cache_game_news(&self, game_id: &str, items: &[GameNewsItem]) -> Result<(), AppError> {
         let tx = self.conn.unchecked_transaction()?;
         let now = chrono::Utc::now().timestamp();
         // Clear old news for this game first
-        tx.execute(
-            "DELETE FROM game_news WHERE game_id = ?1",
-            params![game_id],
-        )?;
+        tx.execute("DELETE FROM game_news WHERE game_id = ?1", params![game_id])?;
 
         let mut stmt = tx.prepare(
             "INSERT INTO game_news (game_id, news_id, title, url, author, contents, date, feed_label, cached_at)
@@ -2089,9 +2115,7 @@ impl CacheDb {
     /// Playtime is only included for Steam games — non-Steam sources lack
     /// reliable total-playtime data so they report 0.
     /// Last-played is the best timestamp from either Steam metadata or session tracking.
-    pub fn get_games_with_genre_tags(
-        &self,
-    ) -> Result<Vec<(String, String, Option<String>, Option<String>, f64, Option<i64>)>, AppError> {
+    pub fn get_games_with_genre_tags(&self) -> Result<Vec<GameGenreTagRow>, AppError> {
         let mut stmt = self.conn.prepare(
             "SELECT g.game_id, g.name, sm.genres, sm.steam_tags,
                     CASE WHEN g.source = 'steam'
@@ -2180,9 +2204,9 @@ impl CacheDb {
 
     /// Get game counts grouped by source: `(source_name, count)`.
     pub fn get_game_count_by_source(&self) -> Result<Vec<(String, u32)>, AppError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT source, COUNT(*) FROM games GROUP BY source ORDER BY COUNT(*) DESC",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT source, COUNT(*) FROM games GROUP BY source ORDER BY COUNT(*) DESC")?;
         let rows = stmt
             .query_map([], |row| Ok((row.get(0)?, row.get::<_, u32>(1)?)))?
             .collect::<Result<Vec<(String, u32)>, _>>()?;
@@ -2191,7 +2215,10 @@ impl CacheDb {
 
     /// Get the top N games by total playtime: `(game_id, name, hours)`.
     /// Uses the latest playtime snapshot per game.
-    pub fn get_top_games_by_playtime(&self, limit: usize) -> Result<Vec<(String, String, f64)>, AppError> {
+    pub fn get_top_games_by_playtime(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<(String, String, f64)>, AppError> {
         let mut stmt = self.conn.prepare(
             "SELECT g.game_id, g.name, ps.playtime_minutes / 60.0 as hours
              FROM (
@@ -2205,13 +2232,18 @@ impl CacheDb {
              LIMIT ?1",
         )?;
         let rows = stmt
-            .query_map(params![limit as u32], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .query_map(params![limit as u32], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
             .collect::<Result<Vec<(String, String, f64)>, _>>()?;
         Ok(rows)
     }
 
     /// Get recently played games (completed sessions only): `(game_id, name)`.
-    pub fn get_recently_played_game_names(&self, limit: usize) -> Result<Vec<(String, String)>, AppError> {
+    pub fn get_recently_played_game_names(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<(String, String)>, AppError> {
         let mut stmt = self.conn.prepare(
             "SELECT gs.game_id, COALESCE(g.name, 'Unknown Game') as name
              FROM game_sessions gs
@@ -2272,11 +2304,13 @@ impl CacheDb {
     }
 
     /// Get genre distribution: `(genre_name, game_count)` sorted by count descending.
+    #[allow(dead_code)]
     pub fn get_genre_distribution(&self) -> Result<Vec<(String, u32)>, AppError> {
         let mut stmt = self
             .conn
             .prepare("SELECT genres FROM store_metadata WHERE genres IS NOT NULL")?;
-        let mut genre_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        let mut genre_counts: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
         let rows = stmt.query_map([], |row| {
             let json: String = row.get(0)?;
             Ok(json)
@@ -2428,13 +2462,13 @@ mod tests {
         let meta = make_metadata("test-440");
         db.cache_store_metadata(&meta).unwrap();
 
-        let fetched = db.get_store_metadata("test-440").unwrap().expect("should exist");
+        let fetched = db
+            .get_store_metadata("test-440")
+            .unwrap()
+            .expect("should exist");
         assert_eq!(fetched.game_id, "test-440");
         assert_eq!(fetched.name, "Game test-440");
-        assert_eq!(
-            fetched.short_description,
-            Some("A test game".to_string())
-        );
+        assert_eq!(fetched.short_description, Some("A test game".to_string()));
         assert_eq!(
             fetched.header_image_url,
             Some("https://example.com/img.jpg".to_string())
@@ -2550,7 +2584,10 @@ mod tests {
         let id = db.start_session("test-440", now).unwrap();
         assert!(id > 0);
 
-        let active = db.get_active_session("test-440").unwrap().expect("should exist");
+        let active = db
+            .get_active_session("test-440")
+            .unwrap()
+            .expect("should exist");
         assert_eq!(active.id, id);
         assert_eq!(active.game_id, "test-440");
         assert_eq!(active.start_time, now);
@@ -2765,7 +2802,11 @@ mod tests {
 
         db.set_game_tags("test-440", &[t1.id, t2.id]).unwrap();
 
-        let ids: HashSet<i64> = db.get_game_tag_ids("test-440").unwrap().into_iter().collect();
+        let ids: HashSet<i64> = db
+            .get_game_tag_ids("test-440")
+            .unwrap()
+            .into_iter()
+            .collect();
         let expected: HashSet<i64> = [t1.id, t2.id].into_iter().collect();
         assert_eq!(ids, expected);
     }
@@ -2876,9 +2917,7 @@ mod tests {
     #[test]
     fn test_delete_saved_filter() {
         let db = test_db();
-        let filter = db
-            .save_filter("ToDelete", r#"{}"#, None, None)
-            .unwrap();
+        let filter = db.save_filter("ToDelete", r#"{}"#, None, None).unwrap();
 
         db.delete_saved_filter(filter.id).unwrap();
 
@@ -2920,11 +2959,9 @@ mod tests {
         // Verify only the recent one remains
         let count: i64 = db
             .conn
-            .query_row(
-                "SELECT COUNT(*) FROM playtime_snapshots",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT COUNT(*) FROM playtime_snapshots", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(count, 1);
     }
@@ -3068,10 +3105,22 @@ mod tests {
     #[test]
     fn test_register_game_all_sources() {
         let db = test_db();
-        let sources = ["steam", "manual", "epic", "gog", "ea_app", "ubisoft", "battlenet"];
+        let sources = [
+            "steam",
+            "manual",
+            "epic",
+            "gog",
+            "ea_app",
+            "ubisoft",
+            "battlenet",
+        ];
         for source in sources {
             let gid = db.register_game(source, "test-id", "Test Game").unwrap();
-            assert!(!gid.is_empty(), "game_id should not be empty for source '{}'", source);
+            assert!(
+                !gid.is_empty(),
+                "game_id should not be empty for source '{}'",
+                source
+            );
             let (s, sid) = db.get_game_source(&gid).unwrap().unwrap();
             assert_eq!(s, source);
             assert_eq!(sid, "test-id");
@@ -3083,8 +3132,14 @@ mod tests {
     #[test]
     fn test_cache_game_image_roundtrip() {
         let db = test_db();
-        db.cache_game_image("game-1", "grid", "https://cdn.example.com/img.jpg", "steamgriddb", false)
-            .unwrap();
+        db.cache_game_image(
+            "game-1",
+            "grid",
+            "https://cdn.example.com/img.jpg",
+            "steamgriddb",
+            false,
+        )
+        .unwrap();
         let url = db.get_game_image("game-1", "grid").unwrap();
         assert_eq!(url, Some("https://cdn.example.com/img.jpg".to_string()));
     }
@@ -3092,10 +3147,22 @@ mod tests {
     #[test]
     fn test_cache_game_image_upsert() {
         let db = test_db();
-        db.cache_game_image("game-1", "grid", "https://old.com/img.jpg", "steamgriddb", false)
-            .unwrap();
-        db.cache_game_image("game-1", "grid", "https://new.com/img.jpg", "steamgriddb", false)
-            .unwrap();
+        db.cache_game_image(
+            "game-1",
+            "grid",
+            "https://old.com/img.jpg",
+            "steamgriddb",
+            false,
+        )
+        .unwrap();
+        db.cache_game_image(
+            "game-1",
+            "grid",
+            "https://new.com/img.jpg",
+            "steamgriddb",
+            false,
+        )
+        .unwrap();
         let url = db.get_game_image("game-1", "grid").unwrap();
         assert_eq!(url, Some("https://new.com/img.jpg".to_string()));
     }
@@ -3117,8 +3184,14 @@ mod tests {
         let gog_id = db.register_game("gog", "12345", "Witcher 3").unwrap();
 
         // Give one of them an image
-        db.cache_game_image(&epic_id, "grid", "https://example.com/fortnite.jpg", "steamgriddb", false)
-            .unwrap();
+        db.cache_game_image(
+            &epic_id,
+            "grid",
+            "https://example.com/fortnite.jpg",
+            "steamgriddb",
+            false,
+        )
+        .unwrap();
 
         let missing = db.get_games_missing_images().unwrap();
         // Only the GOG game should be missing
@@ -3132,8 +3205,14 @@ mod tests {
     #[test]
     fn test_cache_game_image_user_selected() {
         let db = test_db();
-        db.cache_game_image("game-1", "grid", "https://user-pick.com/img.jpg", "steamgriddb", true)
-            .unwrap();
+        db.cache_game_image(
+            "game-1",
+            "grid",
+            "https://user-pick.com/img.jpg",
+            "steamgriddb",
+            true,
+        )
+        .unwrap();
         let url = db.get_game_image("game-1", "grid").unwrap();
         assert_eq!(url, Some("https://user-pick.com/img.jpg".to_string()));
         assert!(db.is_user_selected_image("game-1", "grid").unwrap());
@@ -3162,12 +3241,24 @@ mod tests {
         // Not found → false
         assert!(!db.is_user_selected_image("game-1", "grid").unwrap());
         // Auto-selected → false
-        db.cache_game_image("game-1", "grid", "https://auto.com/img.jpg", "steamgriddb", false)
-            .unwrap();
+        db.cache_game_image(
+            "game-1",
+            "grid",
+            "https://auto.com/img.jpg",
+            "steamgriddb",
+            false,
+        )
+        .unwrap();
         assert!(!db.is_user_selected_image("game-1", "grid").unwrap());
         // User-selected → true
-        db.cache_game_image("game-1", "grid", "https://user.com/img.jpg", "steamgriddb", true)
-            .unwrap();
+        db.cache_game_image(
+            "game-1",
+            "grid",
+            "https://user.com/img.jpg",
+            "steamgriddb",
+            true,
+        )
+        .unwrap();
         assert!(db.is_user_selected_image("game-1", "grid").unwrap());
     }
 
@@ -3176,14 +3267,22 @@ mod tests {
     #[test]
     fn test_delete_game_cascades() {
         let db = test_db();
-        let game_id = db.register_game("manual", "my-game-1", "Test Game").unwrap();
+        let game_id = db
+            .register_game("manual", "my-game-1", "Test Game")
+            .unwrap();
 
         // Populate related tables
         db.set_install_path(&game_id, "C:\\Games\\Test").unwrap();
         db.add_game_executable(&game_id, "C:\\Games\\Test\\game.exe", "game.exe")
             .unwrap();
-        db.cache_game_image(&game_id, "grid", "https://img.com/grid.jpg", "steamgriddb", false)
-            .unwrap();
+        db.cache_game_image(
+            &game_id,
+            "grid",
+            "https://img.com/grid.jpg",
+            "steamgriddb",
+            false,
+        )
+        .unwrap();
         let tag = db.create_tag("RPG", 0).unwrap();
         db.set_game_tags(&game_id, &[tag.id]).unwrap();
 
@@ -3207,11 +3306,15 @@ mod tests {
         let db = test_db();
 
         // Register a manual game and a steam game
-        let manual_id = db.register_game("manual", "custom-1", "Custom Game").unwrap();
+        let manual_id = db
+            .register_game("manual", "custom-1", "Custom Game")
+            .unwrap();
         let _steam_id = db.register_game("steam", "12345", "Steam Game").unwrap();
 
-        db.set_install_path(&manual_id, "C:\\Games\\Custom").unwrap();
-        db.set_game_description(&manual_id, "My favorite game").unwrap();
+        db.set_install_path(&manual_id, "C:\\Games\\Custom")
+            .unwrap();
+        db.set_game_description(&manual_id, "My favorite game")
+            .unwrap();
 
         let manual_games = db.get_manual_games().unwrap();
         assert_eq!(manual_games.len(), 1);
@@ -3241,7 +3344,8 @@ mod tests {
         );
 
         // Update description
-        db.set_game_description(&game_id, "An amazing game").unwrap();
+        db.set_game_description(&game_id, "An amazing game")
+            .unwrap();
         assert_eq!(
             db.get_game_description(&game_id).unwrap(),
             Some("An amazing game".to_string())
@@ -3267,8 +3371,10 @@ mod tests {
         let db = test_db();
         let game_id = db.register_game("manual", "exe-1", "Exe Game").unwrap();
 
-        db.add_game_executable(&game_id, "C:\\a.exe", "a.exe").unwrap();
-        db.add_game_executable(&game_id, "C:\\b.exe", "b.exe").unwrap();
+        db.add_game_executable(&game_id, "C:\\a.exe", "a.exe")
+            .unwrap();
+        db.add_game_executable(&game_id, "C:\\b.exe", "b.exe")
+            .unwrap();
         assert!(db.get_primary_executable(&game_id).unwrap().is_some());
 
         db.delete_game_executables(&game_id).unwrap();
@@ -3299,7 +3405,8 @@ mod tests {
             unlock_time: Some(1234567890),
             global_percent: Some(45.2),
         };
-        db.cache_game_achievements(&game_id, &[achievement]).unwrap();
+        db.cache_game_achievements(&game_id, &[achievement])
+            .unwrap();
         db.mark_achievements_checked(&game_id).unwrap();
 
         // Verify data exists
@@ -3468,7 +3575,9 @@ mod tests {
         let db = test_db();
 
         // __general__ note works without a games table entry
-        let saved = db.save_game_note("__general__", "General scratchpad").unwrap();
+        let saved = db
+            .save_game_note("__general__", "General scratchpad")
+            .unwrap();
         assert_eq!(saved.game_id, "__general__");
         assert_eq!(saved.content, "General scratchpad");
 
@@ -3556,8 +3665,13 @@ mod tests {
         assert_eq!(bookmarks[1].id, bm2.id);
 
         // Update first bookmark
-        db.update_media_bookmark(bm1.id, "Chill Beats", "https://youtube.com/watch?v=xyz", Some("🎶"))
-            .unwrap();
+        db.update_media_bookmark(
+            bm1.id,
+            "Chill Beats",
+            "https://youtube.com/watch?v=xyz",
+            Some("🎶"),
+        )
+        .unwrap();
         let bookmarks = db.get_media_bookmarks().unwrap();
         assert_eq!(bookmarks[0].title, "Chill Beats");
         assert_eq!(bookmarks[0].url, "https://youtube.com/watch?v=xyz");
@@ -3628,15 +3742,27 @@ mod tests {
 
         let mut meta1 = make_metadata(&g1);
         meta1.genres = vec![
-            GenreInfo { id: "1".into(), description: "Action".into() },
-            GenreInfo { id: "4".into(), description: "RPG".into() },
+            GenreInfo {
+                id: "1".into(),
+                description: "Action".into(),
+            },
+            GenreInfo {
+                id: "4".into(),
+                description: "RPG".into(),
+            },
         ];
         db.cache_store_metadata(&meta1).unwrap();
 
         let mut meta2 = make_metadata(&g2);
         meta2.genres = vec![
-            GenreInfo { id: "4".into(), description: "RPG".into() },
-            GenreInfo { id: "25".into(), description: "Adventure".into() },
+            GenreInfo {
+                id: "4".into(),
+                description: "RPG".into(),
+            },
+            GenreInfo {
+                id: "25".into(),
+                description: "Adventure".into(),
+            },
         ];
         db.cache_store_metadata(&meta2).unwrap();
 
@@ -3656,15 +3782,27 @@ mod tests {
 
         let mut meta1 = make_metadata(&g1);
         meta1.steam_tags = vec![
-            SteamTagInfo { name: "Action".into(), votes: 100 },
-            SteamTagInfo { name: "Singleplayer".into(), votes: 80 },
+            SteamTagInfo {
+                name: "Action".into(),
+                votes: 100,
+            },
+            SteamTagInfo {
+                name: "Singleplayer".into(),
+                votes: 80,
+            },
         ];
         db.cache_store_metadata(&meta1).unwrap();
 
         let mut meta2 = make_metadata(&g2);
         meta2.steam_tags = vec![
-            SteamTagInfo { name: "Singleplayer".into(), votes: 90 },
-            SteamTagInfo { name: "Open World".into(), votes: 70 },
+            SteamTagInfo {
+                name: "Singleplayer".into(),
+                votes: 90,
+            },
+            SteamTagInfo {
+                name: "Open World".into(),
+                votes: 70,
+            },
         ];
         db.cache_store_metadata(&meta2).unwrap();
 
@@ -3683,15 +3821,27 @@ mod tests {
 
         let mut meta1 = make_metadata(&g1);
         meta1.categories = vec![
-            CategoryInfo { id: 2, description: "Single-player".into() },
-            CategoryInfo { id: 22, description: "Steam Achievements".into() },
+            CategoryInfo {
+                id: 2,
+                description: "Single-player".into(),
+            },
+            CategoryInfo {
+                id: 22,
+                description: "Steam Achievements".into(),
+            },
         ];
         db.cache_store_metadata(&meta1).unwrap();
 
         let mut meta2 = make_metadata(&g2);
         meta2.categories = vec![
-            CategoryInfo { id: 22, description: "Steam Achievements".into() },
-            CategoryInfo { id: 28, description: "Full controller support".into() },
+            CategoryInfo {
+                id: 22,
+                description: "Steam Achievements".into(),
+            },
+            CategoryInfo {
+                id: 28,
+                description: "Full controller support".into(),
+            },
         ];
         db.cache_store_metadata(&meta2).unwrap();
 
@@ -3738,8 +3888,10 @@ mod tests {
         let _g3 = db.register_game("steam", "3", "No Playtime").unwrap();
 
         // Add playtime snapshots (in minutes)
-        db.insert_snapshot(&g1, 6000, chrono::Utc::now().timestamp()).unwrap(); // 100 hours
-        db.insert_snapshot(&g2, 120, chrono::Utc::now().timestamp()).unwrap(); // 2 hours
+        db.insert_snapshot(&g1, 6000, chrono::Utc::now().timestamp())
+            .unwrap(); // 100 hours
+        db.insert_snapshot(&g2, 120, chrono::Utc::now().timestamp())
+            .unwrap(); // 2 hours
 
         let top = db.get_top_games_by_playtime(10).unwrap();
         assert_eq!(top.len(), 2);
@@ -3756,9 +3908,12 @@ mod tests {
         let g2 = db.register_game("steam", "2", "Game B").unwrap();
         let g3 = db.register_game("steam", "3", "Game C").unwrap();
 
-        db.insert_snapshot(&g1, 300, chrono::Utc::now().timestamp()).unwrap();
-        db.insert_snapshot(&g2, 200, chrono::Utc::now().timestamp()).unwrap();
-        db.insert_snapshot(&g3, 100, chrono::Utc::now().timestamp()).unwrap();
+        db.insert_snapshot(&g1, 300, chrono::Utc::now().timestamp())
+            .unwrap();
+        db.insert_snapshot(&g2, 200, chrono::Utc::now().timestamp())
+            .unwrap();
+        db.insert_snapshot(&g3, 100, chrono::Utc::now().timestamp())
+            .unwrap();
 
         let top = db.get_top_games_by_playtime(2).unwrap();
         assert_eq!(top.len(), 2);
@@ -3843,15 +3998,27 @@ mod tests {
 
         let mut meta1 = make_metadata(&g1);
         meta1.genres = vec![
-            GenreInfo { id: "1".into(), description: "Action".into() },
-            GenreInfo { id: "2".into(), description: "RPG".into() },
+            GenreInfo {
+                id: "1".into(),
+                description: "Action".into(),
+            },
+            GenreInfo {
+                id: "2".into(),
+                description: "RPG".into(),
+            },
         ];
         db.cache_store_metadata(&meta1).unwrap();
 
         let mut meta2 = make_metadata(&g2);
         meta2.genres = vec![
-            GenreInfo { id: "1".into(), description: "Action".into() },
-            GenreInfo { id: "3".into(), description: "Strategy".into() },
+            GenreInfo {
+                id: "1".into(),
+                description: "Action".into(),
+            },
+            GenreInfo {
+                id: "3".into(),
+                description: "Strategy".into(),
+            },
         ];
         db.cache_store_metadata(&meta2).unwrap();
 
@@ -3964,7 +4131,8 @@ mod tests {
         // g2 has no session, but Steam says it was played 5 days ago
         db.set_last_played(&g2, (now - 5 * 86400) as u64).unwrap();
         // g3 has Steam last_played 400 days ago (out of range)
-        db.set_last_played(&_g3, (now - 400 * 86400) as u64).unwrap();
+        db.set_last_played(&_g3, (now - 400 * 86400) as u64)
+            .unwrap();
 
         let ids = db.get_recently_played_game_ids(365).unwrap();
         assert_eq!(ids.len(), 2);
@@ -4003,7 +4171,8 @@ mod tests {
         assert!(tags.is_some());
         assert!((hours - 2.0).abs() < 0.01); // 120 min = 2h
 
-        let (_, name2, genres2, tags2, hours2, _lp2) = games.iter().find(|(id, ..)| id == &_g2).unwrap();
+        let (_, name2, genres2, tags2, hours2, _lp2) =
+            games.iter().find(|(id, ..)| id == &_g2).unwrap();
         assert_eq!(name2, "No Metadata");
         assert!(genres2.is_none());
         assert!(tags2.is_none());

@@ -1,6 +1,5 @@
 use windows::Media::Control::{
-    GlobalSystemMediaTransportControlsSession,
-    GlobalSystemMediaTransportControlsSessionManager,
+    GlobalSystemMediaTransportControlsSession, GlobalSystemMediaTransportControlsSessionManager,
     GlobalSystemMediaTransportControlsSessionPlaybackStatus,
 };
 

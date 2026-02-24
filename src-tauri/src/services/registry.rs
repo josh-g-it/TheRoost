@@ -43,14 +43,15 @@ pub fn get_steam_install_path() -> Result<String, AppError> {
     }
 
     // Last resort: check common default paths
-    let defaults = [
-        "C:\\Program Files (x86)\\Steam",
-        "C:\\Program Files\\Steam",
-    ];
+    let defaults = ["C:\\Program Files (x86)\\Steam", "C:\\Program Files\\Steam"];
 
     for default_path in &defaults {
         if std::path::Path::new(default_path).exists() {
-            tracing::info!(path = default_path, source = "default path", "Steam installation found");
+            tracing::info!(
+                path = default_path,
+                source = "default path",
+                "Steam installation found"
+            );
             return Ok(default_path.to_string());
         }
     }

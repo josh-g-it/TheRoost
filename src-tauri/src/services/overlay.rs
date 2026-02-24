@@ -39,7 +39,10 @@ pub fn register_shortcut(app: &AppHandle, shortcut_str: &str) {
             ),
         }
     } else {
-        tracing::warn!(shortcut = shortcut_str, "Unknown shortcut string, not registered");
+        tracing::warn!(
+            shortcut = shortcut_str,
+            "Unknown shortcut string, not registered"
+        );
     }
 }
 
@@ -81,7 +84,11 @@ pub fn create_overlay(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>>
     .focused(true)
     .build()?;
 
-    tracing::info!(width = width, height = height, "Overlay window created (full-screen)");
+    tracing::info!(
+        width = width,
+        height = height,
+        "Overlay window created (full-screen)"
+    );
     Ok(())
 }
 

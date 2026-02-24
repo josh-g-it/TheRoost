@@ -261,8 +261,7 @@ impl SystemMetrics {
                 exe_name: proc.name().to_string_lossy().to_string(),
                 cpu_percent: proc.cpu_usage() / cpu_div,
                 ram_bytes: proc.memory(),
-                gpu_percent: gpu_snap
-                    .and_then(|g| g.per_process_gpu.get(&self.self_pid).copied()),
+                gpu_percent: gpu_snap.and_then(|g| g.per_process_gpu.get(&self.self_pid).copied()),
                 gpu_vram_bytes: gpu_snap
                     .and_then(|g| g.per_process_vram.get(&self.self_pid).copied()),
             });
@@ -278,10 +277,8 @@ impl SystemMetrics {
                     exe_name: proc.name().to_string_lossy().to_string(),
                     cpu_percent: proc.cpu_usage() / cpu_div,
                     ram_bytes: proc.memory(),
-                    gpu_percent: gpu_snap
-                        .and_then(|g| g.per_process_gpu.get(&pid).copied()),
-                    gpu_vram_bytes: gpu_snap
-                        .and_then(|g| g.per_process_vram.get(&pid).copied()),
+                    gpu_percent: gpu_snap.and_then(|g| g.per_process_gpu.get(&pid).copied()),
+                    gpu_vram_bytes: gpu_snap.and_then(|g| g.per_process_vram.get(&pid).copied()),
                 });
             }
         }
@@ -415,7 +412,7 @@ fn scan_once(
 ) {
     // Periodically reload caches from DB to pick up newly-added install paths
     state.scan_count += 1;
-    if state.scan_count % CACHE_RELOAD_INTERVAL == 0 {
+    if state.scan_count.is_multiple_of(CACHE_RELOAD_INTERVAL) {
         let old_path_count = state.install_paths.len();
         let old_exe_count = state.exe_cache.len();
         if let Err(e) = state.load_from_db(db) {
@@ -464,7 +461,7 @@ fn scan_once(
             m.update_tracked_pids(tracked);
             // Warm sample every 2nd cycle (~10s) to keep sparkline history populated
             // when the overlay is closed. Skips if frontend is actively polling.
-            if state.scan_count % 2 == 0 {
+            if state.scan_count.is_multiple_of(2) {
                 m.warm_sample();
             }
         }
@@ -473,17 +470,10 @@ fn scan_once(
     // ── Session tracking (existing behavior) ────────────────────────────────
 
     // Find games that just started (in running but not in active_games)
-    let started: Vec<String> = running
-        .difference(&state.active_games)
-        .cloned()
-        .collect();
+    let started: Vec<String> = running.difference(&state.active_games).cloned().collect();
 
     // Find games that just stopped (in active_games but not in running)
-    let stopped: Vec<String> = state
-        .active_games
-        .difference(&running)
-        .cloned()
-        .collect();
+    let stopped: Vec<String> = state.active_games.difference(&running).cloned().collect();
 
     let has_transitions = !started.is_empty() || !stopped.is_empty();
 
@@ -727,8 +717,7 @@ mod tests {
 
         // Simulate discovering an exe
         let exe_name = "portal2.exe".to_string();
-        let exe_path =
-            normalize_path(r"D:\SteamLibrary\steamapps\common\Portal 2\portal2.exe");
+        let exe_path = normalize_path(r"D:\SteamLibrary\steamapps\common\Portal 2\portal2.exe");
         state
             .exe_cache
             .entry(exe_name.clone())
@@ -794,7 +783,9 @@ mod tests {
         assert_eq!(snap.current.cpu_percent, 45.0);
         assert_eq!(snap.current.ram_used, 8_000_000_000);
         // The Roost process should appear (since we're running in a test process)
-        assert!(snap.processes.iter().any(|p| p.game_id == "__self__") || snap.processes.is_empty());
+        assert!(
+            snap.processes.iter().any(|p| p.game_id == "__self__") || snap.processes.is_empty()
+        );
     }
 
     #[test]

@@ -24,9 +24,7 @@ pub async fn fetch_library_metadata(
 }
 
 #[tauri::command]
-pub async fn invalidate_metadata_cache(
-    db: State<'_, CacheDbHandle>,
-) -> Result<usize, AppError> {
+pub async fn invalidate_metadata_cache(db: State<'_, CacheDbHandle>) -> Result<usize, AppError> {
     let db = db.lock_or_err("DB")?;
     let count = db.invalidate_metadata_cache()?;
     tracing::info!(count, "Metadata cache invalidated");
@@ -34,17 +32,13 @@ pub async fn invalidate_metadata_cache(
 }
 
 #[tauri::command]
-pub async fn backfill_steam_tags(
-    db: State<'_, CacheDbHandle>,
-) -> Result<usize, AppError> {
+pub async fn backfill_steam_tags(db: State<'_, CacheDbHandle>) -> Result<usize, AppError> {
     let service = MetadataService::new(db.inner().clone());
     service.backfill_steam_tags().await
 }
 
 #[tauri::command]
-pub async fn backfill_store_details(
-    db: State<'_, CacheDbHandle>,
-) -> Result<usize, AppError> {
+pub async fn backfill_store_details(db: State<'_, CacheDbHandle>) -> Result<usize, AppError> {
     let service = MetadataService::new(db.inner().clone());
     service.backfill_store_details().await
 }

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import type { StoreMetadata } from "../types";
 import {
   computeGenreDNA,
   computePlaytimeDistribution,

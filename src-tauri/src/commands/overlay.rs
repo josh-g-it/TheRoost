@@ -104,28 +104,36 @@ pub fn get_overlay_library(db: State<'_, CacheDbHandle>) -> Result<GameLibrary, 
     let rows = db.get_overlay_games()?;
     let games: Vec<Game> = rows
         .into_iter()
-        .map(|(game_id, source, source_id, name, install_path, playtime):
-             (String, String, String, String, Option<String>, u32)| {
-            let game_source = GameSource::from_str(&source).unwrap_or(GameSource::Steam);
-            let installed = install_path.is_some();
-            Game {
-                game_id,
-                source: game_source,
-                source_id,
-                name,
-                install_dir: None,
-                install_path,
-                size_on_disk: None,
-                last_updated: None,
-                playtime_forever: playtime,
-                playtime_2weeks: None,
-                last_played: None,
-                is_installed: installed,
-                img_icon_url: None,
-                description: None,
-                launch_args: None,
-            }
-        })
+        .map(
+            |(game_id, source, source_id, name, install_path, playtime): (
+                String,
+                String,
+                String,
+                String,
+                Option<String>,
+                u32,
+            )| {
+                let game_source = GameSource::from_str(&source).unwrap_or(GameSource::Steam);
+                let installed = install_path.is_some();
+                Game {
+                    game_id,
+                    source: game_source,
+                    source_id,
+                    name,
+                    install_dir: None,
+                    install_path,
+                    size_on_disk: None,
+                    last_updated: None,
+                    playtime_forever: playtime,
+                    playtime_2weeks: None,
+                    last_played: None,
+                    is_installed: installed,
+                    img_icon_url: None,
+                    description: None,
+                    launch_args: None,
+                }
+            },
+        )
         .collect();
     let total_count = games.len();
     Ok(GameLibrary {

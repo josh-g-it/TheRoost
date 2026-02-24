@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useMetadataStore } from "./metadataSlice";
+import type { StoreMetadata } from "../types";
 import { makeMeta } from "../test/factories";
 
 const mockFetchGameMetadata = vi.fn();

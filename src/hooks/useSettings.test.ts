@@ -22,11 +22,19 @@ function makeSettings(overrides: Partial<AppSettings> = {}): AppSettings {
     steamApiKey: null,
     steamId: null,
     isFirstRun: false,
-    theme: "dark",
+    theme: "dark-gaming",
     iconSet: "classic",
     fontFamily: "system",
     uiScale: "normal",
-    cardDisplay: { showPlaytime: true, showLastPlayed: true, showPlatformBadge: true },
+    cardDisplay: {
+      showGenreTags: true,
+      showPlaytime: true,
+      showInstalledBadge: true,
+      showTags: true,
+      gridSize: "medium" as const,
+      listDensity: "default" as const,
+      listColumns: [],
+    },
     profileChartOptions: { bucketPreset: "default", genreTopN: 8, devPubTopN: 10 },
     commandCenterSlots: [],
     commandCenterShortcut: { key: "Space", modifiers: ["Control"] },
@@ -41,21 +49,29 @@ describe("useSettings", () => {
   beforeEach(() => {
     useSettingsStore.setState({ settings: null, isLoading: false, error: null });
     useUIStore.setState({
-      cardDisplay: { showPlaytime: true, showLastPlayed: true, showPlatformBadge: true },
+      cardDisplay: {
+        showGenreTags: true,
+        showPlaytime: true,
+        showInstalledBadge: true,
+        showTags: true,
+        gridSize: "medium",
+        listDensity: "default",
+        listColumns: [],
+      },
     });
     useShelvesStore.setState({ shelves: [] });
     vi.clearAllMocks();
   });
 
   it("auto-loads settings on mount when not loaded", async () => {
-    const settings = makeSettings({ theme: "light" });
+    const settings = makeSettings({ theme: "arctic-frost" });
     mockLoad.mockResolvedValue(settings);
 
     renderHook(() => useSettings());
 
     await waitFor(() => {
       expect(mockLoad).toHaveBeenCalled();
-      expect(useSettingsStore.getState().settings?.theme).toBe("light");
+      expect(useSettingsStore.getState().settings?.theme).toBe("arctic-frost");
     });
   });
 
@@ -69,9 +85,13 @@ describe("useSettings", () => {
 
   it("syncs cardDisplay to UI store", async () => {
     const cardDisplay = {
+      showGenreTags: false,
       showPlaytime: false,
-      showLastPlayed: true,
-      showPlatformBadge: false,
+      showInstalledBadge: true,
+      showTags: true,
+      gridSize: "medium" as const,
+      listDensity: "default" as const,
+      listColumns: [],
     };
     const settings = makeSettings({ cardDisplay });
     mockLoad.mockResolvedValue(settings);

@@ -13,6 +13,7 @@ pub struct FriendListData {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct ApiFriend {
     pub steamid: String,
     pub relationship: String,

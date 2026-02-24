@@ -15,9 +15,7 @@ pub async fn toggle_favorite(
 }
 
 #[tauri::command]
-pub async fn get_all_favorites(
-    db: State<'_, CacheDbHandle>,
-) -> Result<Vec<String>, AppError> {
+pub async fn get_all_favorites(db: State<'_, CacheDbHandle>) -> Result<Vec<String>, AppError> {
     tracing::debug!("Fetching all favorites");
     let db = db.lock_or_err("DB")?;
     db.get_all_favorites()

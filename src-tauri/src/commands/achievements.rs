@@ -45,13 +45,12 @@ pub async fn batch_fetch_achievements(
     db: State<'_, CacheDbHandle>,
     app_handle: tauri::AppHandle,
 ) -> Result<u32, AppError> {
-    achievement_service::batch_fetch_achievements(&api_key, &steam_id, db.inner(), &app_handle).await
+    achievement_service::batch_fetch_achievements(&api_key, &steam_id, db.inner(), &app_handle)
+        .await
 }
 
 #[tauri::command]
-pub async fn clear_achievement_cache(
-    db: State<'_, CacheDbHandle>,
-) -> Result<u32, AppError> {
+pub async fn clear_achievement_cache(db: State<'_, CacheDbHandle>) -> Result<u32, AppError> {
     let db = db.lock_or_err("DB")?;
     db.clear_achievement_cache()
 }

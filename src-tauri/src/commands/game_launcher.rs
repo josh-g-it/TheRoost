@@ -61,10 +61,7 @@ fn find_ea_app_launcher() -> Option<String> {
 }
 
 /// Launch a game executable directly, including any stored launch arguments.
-fn launch_direct(
-    game_id: &str,
-    db: &crate::services::cache_db::CacheDb,
-) -> Result<(), AppError> {
+fn launch_direct(game_id: &str, db: &crate::services::cache_db::CacheDb) -> Result<(), AppError> {
     match db.get_primary_executable(game_id)? {
         Some(exe_path) => {
             let launch_args = db.get_launch_args(game_id)?;
@@ -111,10 +108,7 @@ fn resolve_launch_mode(source: &str, stored: Option<String>) -> &'static str {
 /// Launch a game by its game_id. Routes to the appropriate launcher by source
 /// and respects the per-game launch mode preference.
 #[tauri::command]
-pub async fn launch_game(
-    game_id: String,
-    db: State<'_, CacheDbHandle>,
-) -> Result<(), AppError> {
+pub async fn launch_game(game_id: String, db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
     let db = db.lock_or_err("DB")?;
 
     let (source, source_id) = db
@@ -193,12 +187,10 @@ pub async fn launch_game(
                 // Launcher mode: open EA App
                 if let Some(ea_path) = find_ea_app_launcher() {
                     tracing::info!(game_id = %game_id, launcher = %ea_path, "Opening EA App");
-                    std::process::Command::new(&ea_path)
-                        .spawn()
-                        .map_err(|e| {
-                            tracing::error!(game_id = %game_id, error = %e, "EA App launch failed");
-                            AppError::Io(e)
-                        })?;
+                    std::process::Command::new(&ea_path).spawn().map_err(|e| {
+                        tracing::error!(game_id = %game_id, error = %e, "EA App launch failed");
+                        AppError::Io(e)
+                    })?;
                 } else {
                     tracing::warn!(game_id = %game_id, "EA App not found, falling back to direct exe");
                     launch_direct(&game_id, &db)?;
@@ -226,7 +218,10 @@ pub async fn launch_game(
         }
         _ => {
             tracing::warn!(game_id = %game_id, source = %source, "No launcher implemented for this source");
-            return Err(AppError::NotFound(format!("No launcher for source: {}", source)));
+            return Err(AppError::NotFound(format!(
+                "No launcher for source: {}",
+                source
+            )));
         }
     }
 

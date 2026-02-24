@@ -11,7 +11,9 @@ pub enum ResolutionTier {
 /// Supported cloud AI providers.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum CloudProvider {
+    #[default]
     Gemini,
     OpenAi,
     Claude,
@@ -41,12 +43,6 @@ impl CloudProvider {
             CloudProvider::OpenAi => "OpenAI",
             CloudProvider::Claude => "Claude",
         }
-    }
-}
-
-impl Default for CloudProvider {
-    fn default() -> Self {
-        CloudProvider::Gemini
     }
 }
 

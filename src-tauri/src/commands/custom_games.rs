@@ -17,7 +17,9 @@ pub async fn add_custom_game(
 ) -> Result<Game, AppError> {
     let name = name.trim().to_string();
     if name.is_empty() {
-        return Err(AppError::Validation("Game name cannot be empty".to_string()));
+        return Err(AppError::Validation(
+            "Game name cannot be empty".to_string(),
+        ));
     }
 
     let exe = Path::new(&exe_path);
@@ -136,7 +138,9 @@ pub async fn update_custom_game(
     let current_name = if let Some(ref new_name) = name {
         let new_name = new_name.trim().to_string();
         if new_name.is_empty() {
-            return Err(AppError::Validation("Game name cannot be empty".to_string()));
+            return Err(AppError::Validation(
+                "Game name cannot be empty".to_string(),
+            ));
         }
         db_guard.update_game_name(&game_id, &new_name)?;
         new_name

@@ -48,7 +48,10 @@ pub async fn fetch_game_achievements(
     let player_achievements: Vec<ApiAchievement> = match player_result {
         Ok(achs) => achs,
         Err(ref e) if is_forbidden_error(e) => {
-            tracing::warn!(game_id, "Steam returned 403 — game details are likely set to private");
+            tracing::warn!(
+                game_id,
+                "Steam returned 403 — game details are likely set to private"
+            );
             return Err(AppError::StoreApi(
                 "Steam profile game details are set to private. Set Game details to Public in Steam → Profile → Privacy Settings to enable achievements.".to_string(),
             ));
@@ -79,7 +82,10 @@ pub async fn fetch_game_achievements(
 
     // Global percentages — optional enrichment
     let global_map: HashMap<String, f64> = match global_result {
-        Ok(globals) => globals.into_iter().map(|g| (g.name.clone(), g.percent)).collect(),
+        Ok(globals) => globals
+            .into_iter()
+            .map(|g| (g.name.clone(), g.percent))
+            .collect(),
         Err(e) => {
             tracing::warn!(game_id, error = %e, "Failed to fetch global percentages, continuing without");
             HashMap::new()
@@ -103,7 +109,11 @@ pub async fn fetch_game_achievements(
                 icon_gray_url: schema.and_then(|s| s.icongray.clone()),
                 hidden: schema.map(|s| s.hidden.unwrap_or(0) != 0).unwrap_or(false),
                 achieved: pa.achieved != 0,
-                unlock_time: if pa.achieved != 0 { pa.unlocktime } else { None },
+                unlock_time: if pa.achieved != 0 {
+                    pa.unlocktime
+                } else {
+                    None
+                },
                 global_percent,
             }
         })
@@ -137,9 +147,7 @@ pub async fn fetch_game_achievements(
 pub fn resolve_steam_appid(game_id: &str, db: &CacheDbHandle) -> Result<Option<u32>, AppError> {
     let db = db.lock_or_err("DB")?;
     match db.get_game_source(game_id)? {
-        Some((source, source_id)) if source == "steam" => {
-            Ok(source_id.parse::<u32>().ok())
-        }
+        Some((source, source_id)) if source == "steam" => Ok(source_id.parse::<u32>().ok()),
         _ => Ok(None),
     }
 }
@@ -189,7 +197,9 @@ async fn fetch_player_achievements(
 
     let resp: AchievementsResponse = serde_json::from_str(&body).map_err(|e| {
         tracing::warn!(appid, error = %e, "Failed to parse GetPlayerAchievements response");
-        AppError::StoreApi(format!("Failed to parse achievements response for appid {appid}: {e}"))
+        AppError::StoreApi(format!(
+            "Failed to parse achievements response for appid {appid}: {e}"
+        ))
     })?;
 
     // Check the success field — Steam returns success=false for games with no achievements
@@ -248,20 +258,26 @@ pub async fn batch_fetch_achievements(
     tracing::info!(total, "Starting batch achievement fetch");
 
     // Emit initial progress
-    let _ = app_handle.emit("achievement-batch-progress",
-        serde_json::json!({ "total": total, "current": 0 }));
+    let _ = app_handle.emit(
+        "achievement-batch-progress",
+        serde_json::json!({ "total": total, "current": 0 }),
+    );
 
     let mut fetched = 0u32;
     let mut skipped = 0u32;
     for (i, (game_id, appid)) in steam_games.iter().enumerate() {
         // Check if cache is already fresh (skip if so)
         {
-            let db = db.lock().map_err(|e| AppError::Database(rusqlite::Error::ToSqlConversionFailure(Box::new(
-                std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
-            ))))?;
+            let db = db.lock().map_err(|e| {
+                AppError::Database(rusqlite::Error::ToSqlConversionFailure(Box::new(
+                    std::io::Error::other(e.to_string()),
+                )))
+            })?;
             if db.is_achievements_fresh(game_id)? {
-                let _ = app_handle.emit("achievement-batch-progress",
-                    serde_json::json!({ "total": total, "current": i + 1 }));
+                let _ = app_handle.emit(
+                    "achievement-batch-progress",
+                    serde_json::json!({ "total": total, "current": i + 1 }),
+                );
                 continue;
             }
         }
@@ -282,8 +298,10 @@ pub async fn batch_fetch_achievements(
         }
 
         // Emit progress after each game
-        let _ = app_handle.emit("achievement-batch-progress",
-            serde_json::json!({ "total": total, "current": i + 1 }));
+        let _ = app_handle.emit(
+            "achievement-batch-progress",
+            serde_json::json!({ "total": total, "current": i + 1 }),
+        );
 
         // Delay between games to avoid Steam API rate limiting.
         tokio::time::sleep(std::time::Duration::from_millis(1500)).await;

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import type { StoreMetadata } from "../types";
 import { processShelfGames, groupGamesByGenre } from "./shelfFiltering";
 import type { ShelfFilters } from "../types/shelf";
 import { DEFAULT_SHELF_FILTERS } from "../types/shelf";

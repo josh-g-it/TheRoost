@@ -1,5 +1,5 @@
-use crate::models::ai::{IntentAction, ResolvedIntent, ResolutionTier};
 use super::types::QueryContext;
+use crate::models::ai::{IntentAction, ResolutionTier, ResolvedIntent};
 
 pub struct PatternMatcher;
 
@@ -80,14 +80,42 @@ fn extract_reset(tokens: &[&str], actions: &mut Vec<IntentAction>, consumed: &mu
 
 /// "go to library", "open settings", "show profile", "navigate to activity"
 fn extract_navigation(tokens: &[&str], actions: &mut Vec<IntentAction>, consumed: &mut [bool]) {
-    let nav_triggers = ["go to", "go", "open", "show", "navigate to", "navigate", "switch to"];
+    let nav_triggers = [
+        "go to",
+        "go",
+        "open",
+        "show",
+        "navigate to",
+        "navigate",
+        "switch to",
+    ];
     let pages = [
-        (&["library", "games", "collection"][..], "nav:library", "Go to Library"),
-        (&["activity", "dashboard"][..], "nav:activity", "Go to Activity"),
-        (&["profile", "stats", "statistics"][..], "nav:profile", "Go to Profile"),
+        (
+            &["library", "games", "collection"][..],
+            "nav:library",
+            "Go to Library",
+        ),
+        (
+            &["activity", "dashboard"][..],
+            "nav:activity",
+            "Go to Activity",
+        ),
+        (
+            &["profile", "stats", "statistics"][..],
+            "nav:profile",
+            "Go to Profile",
+        ),
         (&["notes", "journal"][..], "nav:notes", "Go to Notes"),
-        (&["settings", "preferences", "config"][..], "nav:settings", "Go to Settings"),
-        (&["debug", "developer", "dev"][..], "nav:debug", "Go to Debug"),
+        (
+            &["settings", "preferences", "config"][..],
+            "nav:settings",
+            "Go to Settings",
+        ),
+        (
+            &["debug", "developer", "dev"][..],
+            "nav:debug",
+            "Go to Debug",
+        ),
     ];
 
     let joined = tokens.join(" ");
@@ -96,7 +124,7 @@ fn extract_navigation(tokens: &[&str], actions: &mut Vec<IntentAction>, consumed
         if let Some(rest) = joined.strip_prefix(trigger) {
             let rest = rest.trim();
             for (aliases, action_id, desc) in &pages {
-                if aliases.iter().any(|a| *a == rest) {
+                if aliases.contains(&rest) {
                     actions.push(IntentAction {
                         action_id: action_id.to_string(),
                         game_id: None,
@@ -125,13 +153,21 @@ fn extract_sort(
         if let Some(rest) = joined.find(prefix).map(|i| &joined[i + prefix.len()..]) {
             let rest = rest.trim();
             // Check for direction suffix
-            let (field_str, _direction) = if rest.ends_with(" desc") || rest.ends_with(" descending") {
-                (rest.trim_end_matches(" descending").trim_end_matches(" desc"), "desc")
-            } else if rest.ends_with(" asc") || rest.ends_with(" ascending") {
-                (rest.trim_end_matches(" ascending").trim_end_matches(" asc"), "asc")
-            } else {
-                (rest, "")
-            };
+            let (field_str, _direction) =
+                if rest.ends_with(" desc") || rest.ends_with(" descending") {
+                    (
+                        rest.trim_end_matches(" descending")
+                            .trim_end_matches(" desc"),
+                        "desc",
+                    )
+                } else if rest.ends_with(" asc") || rest.ends_with(" ascending") {
+                    (
+                        rest.trim_end_matches(" ascending").trim_end_matches(" asc"),
+                        "asc",
+                    )
+                } else {
+                    (rest, "")
+                };
 
             for (sort_id, aliases) in &ctx.sort_fields {
                 if aliases.iter().any(|a| field_str.contains(a)) {
@@ -142,8 +178,17 @@ fn extract_sort(
                     });
                     // Mark sort-related tokens as consumed
                     for (i, t) in tokens.iter().enumerate() {
-                        if ["sort", "sorted", "order", "by", "asc", "desc", "ascending", "descending"]
-                            .contains(t)
+                        if [
+                            "sort",
+                            "sorted",
+                            "order",
+                            "by",
+                            "asc",
+                            "desc",
+                            "ascending",
+                            "descending",
+                        ]
+                        .contains(t)
                             || aliases.iter().any(|a| t.contains(a))
                         {
                             consumed[i] = true;
@@ -157,14 +202,24 @@ fn extract_sort(
 }
 
 /// "installed", "favorites", "hidden"
-fn extract_quick_filters(
-    tokens: &[&str],
-    actions: &mut Vec<IntentAction>,
-    consumed: &mut [bool],
-) {
+fn extract_quick_filters(tokens: &[&str], actions: &mut Vec<IntentAction>, consumed: &mut [bool]) {
     let filters = [
-        (&["installed"][..], "filter:installed", "Filter: installed games"),
-        (&["favorites", "favourite", "favourites", "favorite", "starred"][..], "filter:favorites", "Filter: favorites"),
+        (
+            &["installed"][..],
+            "filter:installed",
+            "Filter: installed games",
+        ),
+        (
+            &[
+                "favorites",
+                "favourite",
+                "favourites",
+                "favorite",
+                "starred",
+            ][..],
+            "filter:favorites",
+            "Filter: favorites",
+        ),
         (&["hidden"][..], "action:hidden-games", "Show hidden games"),
     ];
 
@@ -188,7 +243,10 @@ fn extract_quick_filters(
     }
 
     // Also consume filler words around filters
-    let fillers = ["show", "me", "my", "all", "the", "only", "just", "games", "game", "with", "that", "are", "is"];
+    let fillers = [
+        "show", "me", "my", "all", "the", "only", "just", "games", "game", "with", "that", "are",
+        "is",
+    ];
     for (i, token) in tokens.iter().enumerate() {
         if fillers.contains(token) {
             consumed[i] = true;
@@ -207,13 +265,17 @@ fn extract_theme_options(
 
     // Theme matching
     let theme_prefixes = [
-        "change theme to ", "switch theme to ", "set theme to ",
-        "theme ", "change to ",
+        "change theme to ",
+        "switch theme to ",
+        "set theme to ",
+        "theme ",
+        "change to ",
     ];
     for prefix in &theme_prefixes {
-        if let Some(rest) = joined.strip_prefix(prefix).or_else(|| {
-            joined.find(prefix).map(|i| &joined[i + prefix.len()..])
-        }) {
+        if let Some(rest) = joined
+            .strip_prefix(prefix)
+            .or_else(|| joined.find(prefix).map(|i| &joined[i + prefix.len()..]))
+        {
             let rest = rest.trim();
             for (action_id, display_name, aliases) in &ctx.themes {
                 if rest == display_name.to_lowercase()
@@ -232,11 +294,17 @@ fn extract_theme_options(
     }
 
     // Font matching
-    let font_prefixes = ["change font to ", "switch font to ", "set font to ", "font "];
+    let font_prefixes = [
+        "change font to ",
+        "switch font to ",
+        "set font to ",
+        "font ",
+    ];
     for prefix in &font_prefixes {
-        if let Some(rest) = joined.strip_prefix(prefix).or_else(|| {
-            joined.find(prefix).map(|i| &joined[i + prefix.len()..])
-        }) {
+        if let Some(rest) = joined
+            .strip_prefix(prefix)
+            .or_else(|| joined.find(prefix).map(|i| &joined[i + prefix.len()..]))
+        {
             let rest = rest.trim();
             for (action_id, display_name, aliases) in &ctx.fonts {
                 if rest == display_name.to_lowercase()
@@ -255,11 +323,17 @@ fn extract_theme_options(
     }
 
     // Icon set matching
-    let icon_prefixes = ["change icons to ", "switch icons to ", "set icons to ", "icons "];
+    let icon_prefixes = [
+        "change icons to ",
+        "switch icons to ",
+        "set icons to ",
+        "icons ",
+    ];
     for prefix in &icon_prefixes {
-        if let Some(rest) = joined.strip_prefix(prefix).or_else(|| {
-            joined.find(prefix).map(|i| &joined[i + prefix.len()..])
-        }) {
+        if let Some(rest) = joined
+            .strip_prefix(prefix)
+            .or_else(|| joined.find(prefix).map(|i| &joined[i + prefix.len()..]))
+        {
             let rest = rest.trim();
             for (action_id, display_name, aliases) in &ctx.icon_sets {
                 if rest == display_name.to_lowercase()
@@ -280,9 +354,10 @@ fn extract_theme_options(
     // UI scale matching
     let scale_prefixes = ["set scale to ", "scale ", "ui scale "];
     for prefix in &scale_prefixes {
-        if let Some(rest) = joined.strip_prefix(prefix).or_else(|| {
-            joined.find(prefix).map(|i| &joined[i + prefix.len()..])
-        }) {
+        if let Some(rest) = joined
+            .strip_prefix(prefix)
+            .or_else(|| joined.find(prefix).map(|i| &joined[i + prefix.len()..]))
+        {
             let rest = rest.trim();
             for (action_id, display_name, aliases) in &ctx.scales {
                 if rest == display_name.to_lowercase()
@@ -309,7 +384,11 @@ fn extract_game_actions(
     consumed: &mut [bool],
 ) {
     let game_action_prefixes = [
-        (&["favorite", "fav", "unfavorite", "unfav"][..], "game:favorite", "Toggle favorite"),
+        (
+            &["favorite", "fav", "unfavorite", "unfav"][..],
+            "game:favorite",
+            "Toggle favorite",
+        ),
         (&["notes", "note"][..], "game:notes", "Open notes for"),
     ];
 
@@ -336,8 +415,8 @@ fn extract_game_actions(
                     });
                     // Mark all tokens as consumed
                     consumed[prefix_idx] = true;
-                    for i in (prefix_idx + 1)..tokens.len() {
-                        consumed[i] = true;
+                    for flag in consumed.iter_mut().skip(prefix_idx + 1) {
+                        *flag = true;
                     }
                     return;
                 }
@@ -430,18 +509,20 @@ fn extract_genre_tag_category(
 
     // Try multi-word genre matches first (e.g., "role playing" for RPG)
     for (genre_id, genre_name) in &ctx.genres {
-        if remaining.contains(genre_name.as_str()) {
-            if !actions.iter().any(|a| a.action_id == format!("genre-filter:{}", genre_id)) {
-                actions.push(IntentAction {
-                    action_id: format!("genre-filter:{}", genre_id),
-                    game_id: None,
-                    description: format!("Genre: {}", genre_name),
-                });
-                // Mark consumed tokens
-                for (i, t) in tokens.iter().enumerate() {
-                    if !consumed[i] && genre_name.contains(t) {
-                        consumed[i] = true;
-                    }
+        if remaining.contains(genre_name.as_str())
+            && !actions
+                .iter()
+                .any(|a| a.action_id == format!("genre-filter:{}", genre_id))
+        {
+            actions.push(IntentAction {
+                action_id: format!("genre-filter:{}", genre_id),
+                game_id: None,
+                description: format!("Genre: {}", genre_name),
+            });
+            // Mark consumed tokens
+            for (i, t) in tokens.iter().enumerate() {
+                if !consumed[i] && genre_name.contains(t) {
+                    consumed[i] = true;
                 }
             }
         }
@@ -453,9 +534,7 @@ fn extract_genre_tag_category(
             continue;
         }
         for (genre_id, genre_name) in &ctx.genres {
-            if genre_name == token
-                || (token.len() >= 3 && genre_name.starts_with(token))
-            {
+            if genre_name == token || (token.len() >= 3 && genre_name.starts_with(token)) {
                 let aid = format!("genre-filter:{}", genre_id);
                 if !actions.iter().any(|a| a.action_id == aid) {
                     actions.push(IntentAction {
@@ -570,9 +649,7 @@ fn extract_genre_tag_category(
             continue;
         }
         for (cat_id, lower_desc, original_desc) in &ctx.categories {
-            if lower_desc == token
-                || (token.len() >= 4 && lower_desc.contains(token))
-            {
+            if lower_desc == token || (token.len() >= 4 && lower_desc.contains(token)) {
                 let aid = format!("category-filter:{}", cat_id);
                 if !actions.iter().any(|a| a.action_id == aid) {
                     actions.push(IntentAction {
@@ -658,21 +735,37 @@ mod tests {
                 (2, "single-player".into(), "Single-player".into()),
                 (1, "multi-player".into(), "Multi-player".into()),
                 (22, "steam achievements".into(), "Steam Achievements".into()),
-                (29, "steam trading cards".into(), "Steam Trading Cards".into()),
+                (
+                    29,
+                    "steam trading cards".into(),
+                    "Steam Trading Cards".into(),
+                ),
                 (23, "steam cloud".into(), "Steam Cloud".into()),
-                (28, "full controller support".into(), "Full controller support".into()),
+                (
+                    28,
+                    "full controller support".into(),
+                    "Full controller support".into(),
+                ),
             ],
             themes: vec![
                 ("theme:dark-gaming", "Dark Gaming", &["dark", "gaming"]),
                 ("theme:arctic-frost", "Arctic Frost", &["arctic", "frost"]),
                 ("theme:ember-forge", "Ember Forge", &["ember", "forge"]),
-                ("theme:midnight-purple", "Midnight Purple", &["midnight", "purple"]),
+                (
+                    "theme:midnight-purple",
+                    "Midnight Purple",
+                    &["midnight", "purple"],
+                ),
                 ("theme:sakura", "Sakura", &["sakura", "cherry", "blossom"]),
             ],
             fonts: vec![
                 ("font:system", "System Default", &["system", "default"]),
                 ("font:inter", "Inter", &["inter"]),
-                ("font:jetbrains-mono", "JetBrains Mono", &["jetbrains", "mono", "monospace"]),
+                (
+                    "font:jetbrains-mono",
+                    "JetBrains Mono",
+                    &["jetbrains", "mono", "monospace"],
+                ),
             ],
             icon_sets: vec![
                 ("icons:classic", "Classic", &["classic"]),
@@ -681,7 +774,11 @@ mod tests {
             ],
             scales: vec![
                 ("scale:minimal", "Minimal", &["minimal", "small", "compact"]),
-                ("scale:comfortable", "Comfortable", &["comfortable", "default", "normal"]),
+                (
+                    "scale:comfortable",
+                    "Comfortable",
+                    &["comfortable", "default", "normal"],
+                ),
                 ("scale:expanded", "Expanded", &["expanded", "spacious"]),
                 ("scale:large", "Large", &["large", "big"]),
             ],
@@ -699,8 +796,16 @@ mod tests {
                 ("epic", "Epic Games", &["epic", "epic games"]),
                 ("gog", "GOG", &["gog"]),
                 ("ea_app", "EA App", &["ea", "ea app", "origin"]),
-                ("ubisoft", "Ubisoft Connect", &["ubisoft", "ubisoft connect", "uplay"]),
-                ("battlenet", "Battle.net", &["battlenet", "battle.net", "blizzard"]),
+                (
+                    "ubisoft",
+                    "Ubisoft Connect",
+                    &["ubisoft", "ubisoft connect", "uplay"],
+                ),
+                (
+                    "battlenet",
+                    "Battle.net",
+                    &["battlenet", "battle.net", "blizzard"],
+                ),
                 ("manual", "Manual", &["manual", "custom"]),
             ],
         }
@@ -762,14 +867,21 @@ mod tests {
     fn test_show_favorites() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("show my favorites", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "filter:favorites"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "filter:favorites"));
     }
 
     #[test]
     fn test_installed_rpg_games() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("show me installed rpg games", &ctx).unwrap();
-        let ids: Vec<&str> = result.actions.iter().map(|a| a.action_id.as_str()).collect();
+        let ids: Vec<&str> = result
+            .actions
+            .iter()
+            .map(|a| a.action_id.as_str())
+            .collect();
         assert!(ids.contains(&"filter:installed"));
         assert!(ids.contains(&"genre-filter:4"));
     }
@@ -777,8 +889,14 @@ mod tests {
     #[test]
     fn test_compound_three_step() {
         let ctx = test_context();
-        let result = PatternMatcher::resolve("installed singleplayer games sorted by playtime", &ctx).unwrap();
-        let ids: Vec<&str> = result.actions.iter().map(|a| a.action_id.as_str()).collect();
+        let result =
+            PatternMatcher::resolve("installed singleplayer games sorted by playtime", &ctx)
+                .unwrap();
+        let ids: Vec<&str> = result
+            .actions
+            .iter()
+            .map(|a| a.action_id.as_str())
+            .collect();
         assert!(ids.contains(&"filter:installed"));
         assert!(ids.contains(&"tag-filter:Single-player"));
         assert!(ids.contains(&"sort:playtime"));
@@ -825,14 +943,20 @@ mod tests {
     fn test_genre_by_name() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("show me action games", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "genre-filter:1"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "genre-filter:1"));
     }
 
     #[test]
     fn test_tag_by_name() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("show open world games", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "tag-filter:Open World"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "tag-filter:Open World"));
     }
 
     #[test]
@@ -869,7 +993,10 @@ mod tests {
     fn test_tag_preserves_original_casing() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("show atmospheric games", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "tag-filter:Atmospheric"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "tag-filter:Atmospheric"));
     }
 
     #[test]
@@ -877,7 +1004,10 @@ mod tests {
         // User types "singleplayer" but tag is "Single-player"
         let ctx = test_context();
         let result = PatternMatcher::resolve("show singleplayer games", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "tag-filter:Single-player"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "tag-filter:Single-player"));
     }
 
     #[test]
@@ -885,14 +1015,20 @@ mod tests {
         // User types "coop" but tag is "Co-op"
         let ctx = test_context();
         let result = PatternMatcher::resolve("show coop games", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "tag-filter:Co-op"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "tag-filter:Co-op"));
     }
 
     #[test]
     fn test_tag_multi_word_story_rich() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("show story rich games", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "tag-filter:Story Rich"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "tag-filter:Story Rich"));
     }
 
     // ── Category/feature tests ──
@@ -901,21 +1037,30 @@ mod tests {
     fn test_category_controller_support() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("show games with controller support", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "category-filter:28"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "category-filter:28"));
     }
 
     #[test]
     fn test_category_achievements() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("games with steam achievements", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "category-filter:22"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "category-filter:22"));
     }
 
     #[test]
     fn test_category_trading_cards() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("games with trading cards", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "category-filter:29"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "category-filter:29"));
     }
 
     // ── Source/launcher tests ──
@@ -924,42 +1069,61 @@ mod tests {
     fn test_source_steam() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("show steam games", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "filter:source:steam"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "filter:source:steam"));
     }
 
     #[test]
     fn test_source_epic() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("show epic games", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "filter:source:epic"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "filter:source:epic"));
     }
 
     #[test]
     fn test_source_gog() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("show gog games", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "filter:source:gog"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "filter:source:gog"));
     }
 
     #[test]
     fn test_source_ea_by_origin() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("show origin games", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "filter:source:ea_app"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "filter:source:ea_app"));
     }
 
     #[test]
     fn test_source_battlenet() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("show blizzard games", &ctx).unwrap();
-        assert!(result.actions.iter().any(|a| a.action_id == "filter:source:battlenet"));
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "filter:source:battlenet"));
     }
 
     #[test]
     fn test_source_compound_with_genre() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("show epic rpg games", &ctx).unwrap();
-        let ids: Vec<&str> = result.actions.iter().map(|a| a.action_id.as_str()).collect();
+        let ids: Vec<&str> = result
+            .actions
+            .iter()
+            .map(|a| a.action_id.as_str())
+            .collect();
         assert!(ids.contains(&"filter:source:epic"));
         assert!(ids.contains(&"genre-filter:4"));
     }

@@ -25,9 +25,6 @@ pub async fn fetch_game_news(
 }
 
 #[tauri::command]
-pub async fn fetch_followed_games(
-    api_key: String,
-    steam_id: String,
-) -> Result<Vec<u32>, AppError> {
+pub async fn fetch_followed_games(api_key: String, steam_id: String) -> Result<Vec<u32>, AppError> {
     news_service::fetch_followed_games(&api_key, &steam_id).await
 }

@@ -83,10 +83,7 @@ fn extract_youtube_playlist_id(url: &str) -> Option<String> {
 /// Fetches the YouTube playlist page and extracts the first video ID
 /// from the page's embedded JSON data.
 async fn fetch_first_video_id(playlist_id: &str) -> Option<String> {
-    let page_url = format!(
-        "https://www.youtube.com/playlist?list={}",
-        playlist_id
-    );
+    let page_url = format!("https://www.youtube.com/playlist?list={}", playlist_id);
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(8))
@@ -95,7 +92,10 @@ async fn fetch_first_video_id(playlist_id: &str) -> Option<String> {
 
     let response = client
         .get(&page_url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
         .header("Accept-Language", "en-US,en;q=0.9")
         .send()
         .await
@@ -150,14 +150,16 @@ pub async fn update_media_bookmark(
     validate_url(&request.url)?;
     tracing::info!(id = request.id, title = %request.title, "Updating media bookmark");
     let db = db.lock_or_err("DB")?;
-    db.update_media_bookmark(request.id, &request.title, &request.url, request.icon.as_deref())
+    db.update_media_bookmark(
+        request.id,
+        &request.title,
+        &request.url,
+        request.icon.as_deref(),
+    )
 }
 
 #[tauri::command]
-pub async fn delete_media_bookmark(
-    id: i64,
-    db: State<'_, CacheDbHandle>,
-) -> Result<(), AppError> {
+pub async fn delete_media_bookmark(id: i64, db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
     tracing::info!(id = id, "Deleting media bookmark");
     let db = db.lock_or_err("DB")?;
     db.delete_media_bookmark(id)
@@ -202,7 +204,9 @@ mod tests {
     #[test]
     fn test_extract_youtube_playlist_id() {
         assert_eq!(
-            extract_youtube_playlist_id("https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"),
+            extract_youtube_playlist_id(
+                "https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"
+            ),
             Some("PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf".to_string())
         );
         assert_eq!(

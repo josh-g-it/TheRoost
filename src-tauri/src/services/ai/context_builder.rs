@@ -1,7 +1,7 @@
-use crate::models::metadata::{GenreInfo, SteamTagInfo};
-use crate::services::cache_db::CacheDb;
-use crate::utils::error::AppError;
 use super::types::QueryContext;
+use crate::models::metadata::{GenreInfo, SteamTagInfo};
+use crate::services::cache_db::{CacheDb, GameGenreTagRow};
+use crate::utils::error::AppError;
 
 /// Static system prompt for cloud AI providers. Explains The Roost,
 /// available action types, and expected JSON response format.
@@ -70,12 +70,9 @@ fn format_game_line(
         .unwrap_or_default();
 
     // Name with optional playtime and last-played date
-    let lp_str = last_played
-        .filter(|&ts| ts > 0)
-        .and_then(|ts| {
-            chrono::DateTime::from_timestamp(ts, 0)
-                .map(|dt| dt.format("%b %Y").to_string())
-        });
+    let lp_str = last_played.filter(|&ts| ts > 0).and_then(|ts| {
+        chrono::DateTime::from_timestamp(ts, 0).map(|dt| dt.format("%b %Y").to_string())
+    });
 
     let label = match (hours >= 1.0, lp_str) {
         (true, Some(lp)) => format!("{name} ({hours:.0}h, last played {lp})"),
@@ -97,6 +94,7 @@ fn format_game_line(
 
 /// Build a rich library summary from the database for cloud AI context.
 /// Each game is listed with its genres, tags, and playtime.
+#[allow(dead_code)]
 pub fn build_library_summary(db: &CacheDb) -> Result<String, AppError> {
     let mut parts = Vec::new();
 
@@ -139,7 +137,9 @@ pub fn build_library_summary(db: &CacheDb) -> Result<String, AppError> {
     if !all_games.is_empty() {
         let lines: Vec<String> = all_games
             .iter()
-            .map(|(_, name, genres, tags, hours, lp)| format_game_line(name, genres, tags, *hours, *lp))
+            .map(|(_, name, genres, tags, hours, lp)| {
+                format_game_line(name, genres, tags, *hours, *lp)
+            })
             .collect();
         parts.push(format!("All games:\n{}", lines.join("\n")));
     }
@@ -194,7 +194,10 @@ pub fn build_filtered_library_summary(
         .filter(|(id, _)| !excluded.contains(id))
         .collect();
     if !recent_filtered.is_empty() {
-        let names: Vec<&str> = recent_filtered.iter().map(|(_, name)| name.as_str()).collect();
+        let names: Vec<&str> = recent_filtered
+            .iter()
+            .map(|(_, name)| name.as_str())
+            .collect();
         parts.push(format!("Recently played: {}", names.join(", ")));
     }
 
@@ -219,7 +222,7 @@ pub fn build_filtered_library_summary(
         _ => all_games.iter().map(|(id, ..)| id.clone()).collect(), // "all"
     };
 
-    let filtered: Vec<&(String, String, Option<String>, Option<String>, f64, Option<i64>)> = all_games
+    let filtered: Vec<&GameGenreTagRow> = all_games
         .iter()
         .filter(|(id, ..)| {
             if included.contains(id) {
@@ -235,7 +238,9 @@ pub fn build_filtered_library_summary(
     if !filtered.is_empty() {
         let lines: Vec<String> = filtered
             .iter()
-            .map(|(_, name, genres, tags, hours, lp)| format_game_line(name, genres, tags, *hours, *lp))
+            .map(|(_, name, genres, tags, hours, lp)| {
+                format_game_line(name, genres, tags, *hours, *lp)
+            })
             .collect();
         parts.push(format!(
             "Games in scope ({}):\n{}",

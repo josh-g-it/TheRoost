@@ -273,9 +273,7 @@ mod tests {
     #[test]
     fn test_parse_pid_from_instance_basic() {
         assert_eq!(
-            parse_pid_from_instance(
-                "pid_12345_luid_0x00000000_0x0000ABCD_phys_0_eng_0_engtype_3D"
-            ),
+            parse_pid_from_instance("pid_12345_luid_0x00000000_0x0000ABCD_phys_0_eng_0_engtype_3D"),
             Some(12345)
         );
     }

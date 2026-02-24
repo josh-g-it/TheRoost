@@ -8,10 +8,7 @@ use crate::services::cache_db::CacheDbHandle;
 
 /// Initialize the system tray icon with context menu.
 /// Called from `lib.rs` setup hook.
-pub fn init_tray(
-    app: &tauri::App,
-    db: CacheDbHandle,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn init_tray(app: &tauri::App, db: CacheDbHandle) -> Result<(), Box<dyn std::error::Error>> {
     let menu = build_tray_menu(app.handle(), &db)?;
 
     let db_for_event = db.clone();
@@ -108,7 +105,7 @@ fn build_session_section(
             let label = format!("Playing: {} ({})", name, elapsed);
             let item = MenuItem::with_id(
                 app,
-                &format!("session:{}", game_id),
+                format!("session:{}", game_id),
                 &label,
                 false, // disabled — informational only
                 None::<&str>,
@@ -138,21 +135,21 @@ fn build_recent_section(
         for (game_id, name) in &recent {
             let open_item = MenuItem::with_id(
                 app,
-                &format!("open-game:{}", game_id),
+                format!("open-game:{}", game_id),
                 "Open in The Roost",
                 true,
                 None::<&str>,
             )?;
             let launch_item = MenuItem::with_id(
                 app,
-                &format!("launch-game:{}", game_id),
+                format!("launch-game:{}", game_id),
                 "Launch Game",
                 true,
                 None::<&str>,
             )?;
             let submenu = Submenu::with_id_and_items(
                 app,
-                &format!("recent:{}", game_id),
+                format!("recent:{}", game_id),
                 name,
                 true,
                 &[&open_item, &launch_item],
@@ -166,11 +163,7 @@ fn build_recent_section(
 
 // ── Event handlers ────────────────────────────────────────────
 
-fn handle_menu_event(
-    app: &AppHandle,
-    event: &tauri::menu::MenuEvent,
-    db: &CacheDbHandle,
-) {
+fn handle_menu_event(app: &AppHandle, event: &tauri::menu::MenuEvent, db: &CacheDbHandle) {
     let id = event.id().as_ref();
 
     match id {

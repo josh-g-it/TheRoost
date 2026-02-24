@@ -20,10 +20,7 @@ pub fn load_settings(app_handle: tauri::AppHandle) -> Result<AppSettings, AppErr
 }
 
 #[tauri::command]
-pub fn save_settings(
-    app_handle: tauri::AppHandle,
-    settings: AppSettings,
-) -> Result<(), AppError> {
+pub fn save_settings(app_handle: tauri::AppHandle, settings: AppSettings) -> Result<(), AppError> {
     tracing::info!(theme = %settings.theme, "Saving settings");
     let result = settings_store::save_settings(&app_handle, &settings);
     match &result {

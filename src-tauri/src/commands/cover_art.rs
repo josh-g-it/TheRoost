@@ -17,9 +17,7 @@ pub async fn get_cover_art_url(
 }
 
 #[tauri::command]
-pub async fn fetch_cover_art_batch(
-    db: State<'_, CacheDbHandle>,
-) -> Result<usize, AppError> {
+pub async fn fetch_cover_art_batch(db: State<'_, CacheDbHandle>) -> Result<usize, AppError> {
     let service = CoverArtService::new(db.inner().clone());
     service.backfill_missing(100).await
 }

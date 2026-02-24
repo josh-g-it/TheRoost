@@ -14,7 +14,12 @@ pub async fn save_filter(
 ) -> Result<SavedFilterRow, AppError> {
     tracing::info!(name = %name, "Saving filter preset");
     let db = db.lock_or_err("DB")?;
-    db.save_filter(&name, &filter_json, sort_by.as_deref(), sort_order.as_deref())
+    db.save_filter(
+        &name,
+        &filter_json,
+        sort_by.as_deref(),
+        sort_order.as_deref(),
+    )
 }
 
 #[tauri::command]
@@ -27,10 +32,7 @@ pub async fn get_all_saved_filters(
 }
 
 #[tauri::command]
-pub async fn delete_saved_filter(
-    id: i64,
-    db: State<'_, CacheDbHandle>,
-) -> Result<(), AppError> {
+pub async fn delete_saved_filter(id: i64, db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
     tracing::info!(id, "Deleting saved filter");
     let db = db.lock_or_err("DB")?;
     db.delete_saved_filter(id)

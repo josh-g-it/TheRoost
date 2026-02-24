@@ -1,14 +1,14 @@
 use std::sync::OnceLock;
 
-use crate::models::ai::{CloudProvider, IntentAction, ResolvedIntent, ResolutionTier};
-use crate::services::credential_store;
-use crate::utils::error::AppError;
 use super::cloud_cache::CloudQueryCache;
 use super::cloud_config::CloudConfig;
 use super::cloud_provider::CloudProviderApi;
 use super::context_builder;
 use super::gemini_provider::GeminiProvider;
 use super::types::QueryContext;
+use crate::models::ai::{CloudProvider, IntentAction, ResolutionTier, ResolvedIntent};
+use crate::services::credential_store;
+use crate::utils::error::AppError;
 
 fn cache() -> &'static CloudQueryCache {
     static CACHE: OnceLock<CloudQueryCache> = OnceLock::new();
@@ -45,18 +45,16 @@ impl CloudResolver {
         let system_prompt = context_builder::build_system_prompt();
         let action_context = context_builder::build_action_context(ctx);
 
-        let user_message = format!(
-            "{library_summary}\n\n{action_context}\n\nUser query: {query}"
-        );
+        let user_message = format!("{library_summary}\n\n{action_context}\n\nUser query: {query}");
 
         // 4. Call provider
         let provider = get_provider(&config.provider);
-        tracing::info!(
-            provider = provider.name(),
-            "Sending cloud AI query"
-        );
+        tracing::info!(provider = provider.name(), "Sending cloud AI query");
 
-        let raw_response = match provider.send_query(system_prompt, &user_message, &api_key).await {
+        let raw_response = match provider
+            .send_query(system_prompt, &user_message, &api_key)
+            .await
+        {
             Ok(text) => text,
             Err(e) => {
                 tracing::warn!(error = %e, "Cloud AI request failed");
@@ -92,7 +90,7 @@ impl CloudResolver {
             return Ok(Some(ResolvedIntent {
                 actions: vec![],
                 tier: ResolutionTier::CloudApi,
-                confidence: parsed.confidence.min(1.0).max(0.0),
+                confidence: parsed.confidence.clamp(0.0, 1.0),
                 summary: parsed.summary,
                 original_query: query.to_string(),
             }));
@@ -101,7 +99,7 @@ impl CloudResolver {
         let result = ResolvedIntent {
             actions: valid_actions,
             tier: ResolutionTier::CloudApi,
-            confidence: parsed.confidence.min(1.0).max(0.0),
+            confidence: parsed.confidence.clamp(0.0, 1.0),
             summary: parsed.summary,
             original_query: query.to_string(),
         };

@@ -45,7 +45,7 @@ impl CoverArtService {
         {
             let db = self.db.lock_or_err("DB")?;
             if db.is_user_selected_image(game_id, image_type)? {
-                return Ok(db.get_game_image(game_id, image_type)?);
+                return db.get_game_image(game_id, image_type);
             }
         }
 
@@ -99,8 +99,9 @@ impl CoverArtService {
             }
         };
 
-        let api_key = credential_store::load_sgdb_api_key()?
-            .ok_or_else(|| AppError::Credential("SteamGridDB API key not configured".to_string()))?;
+        let api_key = credential_store::load_sgdb_api_key()?.ok_or_else(|| {
+            AppError::Credential("SteamGridDB API key not configured".to_string())
+        })?;
 
         let client = SteamGridDbClient::new(api_key)?;
         let search_term = search_query.unwrap_or(&name);
@@ -145,8 +146,7 @@ impl CoverArtService {
         let mut not_found = 0;
         let mut errors = 0;
 
-        for (i, (game_id, _source, _source_id, _name)) in
-            games.into_iter().take(limit).enumerate()
+        for (i, (game_id, _source, _source_id, _name)) in games.into_iter().take(limit).enumerate()
         {
             if i > 0 {
                 SteamGridDbClient::batch_delay().await;
@@ -169,7 +169,13 @@ impl CoverArtService {
             }
         }
 
-        tracing::info!(found, not_found, errors, total, "Cover art backfill complete");
+        tracing::info!(
+            found,
+            not_found,
+            errors,
+            total,
+            "Cover art backfill complete"
+        );
         Ok(found)
     }
 }

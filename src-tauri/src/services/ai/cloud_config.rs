@@ -71,8 +71,7 @@ impl CloudConfig {
 
     /// Set a rate-limit cooldown (e.g., 60s after a 429).
     pub fn set_rate_limited(&mut self, seconds: u64) {
-        self.rate_limited_until =
-            Some(Instant::now() + std::time::Duration::from_secs(seconds));
+        self.rate_limited_until = Some(Instant::now() + std::time::Duration::from_secs(seconds));
     }
 }
 

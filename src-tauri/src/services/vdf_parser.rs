@@ -91,10 +91,7 @@ fn parse_quoted_string(
     match chars.next() {
         Some('"') => {}
         other => {
-            return Err(AppError::Parse(format!(
-                "Expected '\"', got {:?}",
-                other
-            )));
+            return Err(AppError::Parse(format!("Expected '\"', got {:?}", other)));
         }
     }
 
@@ -135,7 +132,7 @@ fn skip_whitespace(chars: &mut std::iter::Peekable<std::str::Chars>) {
 }
 
 fn skip_line(chars: &mut std::iter::Peekable<std::str::Chars>) {
-    while let Some(c) = chars.next() {
+    for c in chars.by_ref() {
         if c == '\n' {
             break;
         }
@@ -172,9 +169,7 @@ pub fn parse_library_folders(steam_path: &str) -> Result<Vec<LibraryFolder>, App
         .iter()
         .find(|(k, _)| k.to_lowercase() == "libraryfolders")
         .and_then(|(_, v)| v.as_section())
-        .ok_or_else(|| {
-            AppError::Parse("Missing 'libraryfolders' section in VDF".to_string())
-        })?;
+        .ok_or_else(|| AppError::Parse("Missing 'libraryfolders' section in VDF".to_string()))?;
 
     let mut result = Vec::new();
 
@@ -197,7 +192,7 @@ pub fn parse_library_folders(steam_path: &str) -> Result<Vec<LibraryFolder>, App
 
             let mut apps = Vec::new();
             if let Some(apps_section) = section.get("apps").and_then(|v| v.as_section()) {
-                for (appid_str, _) in apps_section {
+                for appid_str in apps_section.keys() {
                     if let Ok(appid) = appid_str.parse::<u32>() {
                         apps.push(appid);
                     }
@@ -359,10 +354,7 @@ mod tests {
     fn test_unknown_escape() {
         let input = r#""val" "test\xdata""#;
         let result = parse_vdf(input).unwrap();
-        assert_eq!(
-            result.get("val").unwrap().as_str().unwrap(),
-            "test\\xdata"
-        );
+        assert_eq!(result.get("val").unwrap().as_str().unwrap(), "test\\xdata");
     }
 
     #[test]

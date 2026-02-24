@@ -1,6 +1,6 @@
+use super::types::QueryContext;
 use crate::services::cache_db::CacheDb;
 use crate::utils::error::AppError;
-use super::types::QueryContext;
 
 pub struct AiOrchestrator;
 
@@ -47,35 +47,95 @@ impl AiOrchestrator {
             tags,
             categories,
             themes: vec![
-                ("theme:dark-gaming", "Dark Gaming", &["dark", "gaming"] as &[&str]),
+                (
+                    "theme:dark-gaming",
+                    "Dark Gaming",
+                    &["dark", "gaming"] as &[&str],
+                ),
                 ("theme:fae", "Fae", &["fae", "wood", "cottage"]),
-                ("theme:midnight-purple", "Midnight Purple", &["midnight", "purple", "amethyst"]),
-                ("theme:cyber-neon", "Cyber Neon", &["cyber", "neon", "cyberpunk"]),
-                ("theme:arctic-frost", "Arctic Frost", &["arctic", "frost", "ice"]),
-                ("theme:ember-forge", "Ember Forge", &["ember", "forge", "volcanic"]),
-                ("theme:ocean-depths", "Ocean Depths", &["ocean", "marine", "aqua"]),
-                ("theme:sakura", "Sakura", &["sakura", "cherry", "blossom", "pink"]),
-                ("theme:verdant", "Verdant", &["verdant", "forest", "emerald", "green"]),
+                (
+                    "theme:midnight-purple",
+                    "Midnight Purple",
+                    &["midnight", "purple", "amethyst"],
+                ),
+                (
+                    "theme:cyber-neon",
+                    "Cyber Neon",
+                    &["cyber", "neon", "cyberpunk"],
+                ),
+                (
+                    "theme:arctic-frost",
+                    "Arctic Frost",
+                    &["arctic", "frost", "ice"],
+                ),
+                (
+                    "theme:ember-forge",
+                    "Ember Forge",
+                    &["ember", "forge", "volcanic"],
+                ),
+                (
+                    "theme:ocean-depths",
+                    "Ocean Depths",
+                    &["ocean", "marine", "aqua"],
+                ),
+                (
+                    "theme:sakura",
+                    "Sakura",
+                    &["sakura", "cherry", "blossom", "pink"],
+                ),
+                (
+                    "theme:verdant",
+                    "Verdant",
+                    &["verdant", "forest", "emerald", "green"],
+                ),
             ],
             fonts: vec![
-                ("font:system", "System Default", &["system", "default"] as &[&str]),
+                (
+                    "font:system",
+                    "System Default",
+                    &["system", "default"] as &[&str],
+                ),
                 ("font:inter", "Inter", &["inter"]),
                 ("font:space-grotesk", "Space Grotesk", &["space", "grotesk"]),
                 ("font:exo2", "Exo 2", &["exo"]),
-                ("font:jetbrains-mono", "JetBrains Mono", &["jetbrains", "mono", "monospace"]),
+                (
+                    "font:jetbrains-mono",
+                    "JetBrains Mono",
+                    &["jetbrains", "mono", "monospace"],
+                ),
             ],
             icon_sets: vec![
                 ("icons:default", "Modern", &["modern", "remix"] as &[&str]),
                 ("icons:minimal", "Minimal", &["minimal", "thin", "lucide"]),
                 ("icons:heroic", "Heroic", &["heroic", "hero"]),
-                ("icons:playful", "Playful", &["playful", "rounded", "friendly"]),
-                ("icons:classic", "Classic", &["classic", "fa", "font awesome"]),
+                (
+                    "icons:playful",
+                    "Playful",
+                    &["playful", "rounded", "friendly"],
+                ),
+                (
+                    "icons:classic",
+                    "Classic",
+                    &["classic", "fa", "font awesome"],
+                ),
                 ("icons:fantasy", "Fantasy", &["fantasy", "game"]),
             ],
             scales: vec![
-                ("scale:minimal", "Minimal", &["minimal", "small", "compact", "tight"] as &[&str]),
-                ("scale:comfortable", "Comfortable", &["comfortable", "default", "normal", "balanced"]),
-                ("scale:expanded", "Expanded", &["expanded", "spacious", "roomy"]),
+                (
+                    "scale:minimal",
+                    "Minimal",
+                    &["minimal", "small", "compact", "tight"] as &[&str],
+                ),
+                (
+                    "scale:comfortable",
+                    "Comfortable",
+                    &["comfortable", "default", "normal", "balanced"],
+                ),
+                (
+                    "scale:expanded",
+                    "Expanded",
+                    &["expanded", "spacious", "roomy"],
+                ),
                 ("scale:large", "Large", &["large", "big", "maximum"]),
             ],
             sort_fields: vec![
@@ -92,8 +152,16 @@ impl AiOrchestrator {
                 ("epic", "Epic Games", &["epic", "epic games"]),
                 ("gog", "GOG", &["gog"]),
                 ("ea_app", "EA App", &["ea", "ea app", "origin"]),
-                ("ubisoft", "Ubisoft Connect", &["ubisoft", "ubisoft connect", "uplay"]),
-                ("battlenet", "Battle.net", &["battlenet", "battle.net", "blizzard"]),
+                (
+                    "ubisoft",
+                    "Ubisoft Connect",
+                    &["ubisoft", "ubisoft connect", "uplay"],
+                ),
+                (
+                    "battlenet",
+                    "Battle.net",
+                    &["battlenet", "battle.net", "blizzard"],
+                ),
                 ("manual", "Manual", &["manual", "custom"]),
             ],
         })

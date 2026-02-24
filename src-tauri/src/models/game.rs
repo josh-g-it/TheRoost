@@ -106,8 +106,14 @@ mod tests {
         assert_eq!(GameSource::from_str("epic"), Some(GameSource::Epic));
         assert_eq!(GameSource::from_str("gog"), Some(GameSource::Gog));
         assert_eq!(GameSource::from_str("ea_app"), Some(GameSource::EaApp));
-        assert_eq!(GameSource::from_str("ubisoft"), Some(GameSource::UbisoftConnect));
-        assert_eq!(GameSource::from_str("battlenet"), Some(GameSource::BattleNet));
+        assert_eq!(
+            GameSource::from_str("ubisoft"),
+            Some(GameSource::UbisoftConnect)
+        );
+        assert_eq!(
+            GameSource::from_str("battlenet"),
+            Some(GameSource::BattleNet)
+        );
         assert_eq!(GameSource::from_str("unknown"), None);
         assert_eq!(GameSource::from_str(""), None);
     }
@@ -125,8 +131,8 @@ mod tests {
         ];
         for source in sources {
             let s = source.as_str();
-            let recovered = GameSource::from_str(s)
-                .unwrap_or_else(|| panic!("from_str failed for '{}'", s));
+            let recovered =
+                GameSource::from_str(s).unwrap_or_else(|| panic!("from_str failed for '{}'", s));
             assert_eq!(recovered, source);
         }
     }

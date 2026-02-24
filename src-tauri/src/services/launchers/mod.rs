@@ -19,6 +19,9 @@ pub struct ScannedGame {
     pub executable_path: Option<String>,
 }
 
+/// A named launcher scanner function.
+type LauncherScanner = (&'static str, fn() -> Result<Vec<ScannedGame>, String>);
+
 /// Scan all non-Steam launchers. Returns scanned games + warnings for any
 /// launcher that fails (failure is non-fatal — one broken launcher doesn't
 /// block the others).
@@ -26,7 +29,7 @@ pub fn scan_all_launchers() -> (Vec<ScannedGame>, Vec<String>) {
     let mut all_games = Vec::new();
     let mut warnings = Vec::new();
 
-    let scanners: Vec<(&str, fn() -> Result<Vec<ScannedGame>, String>)> = vec![
+    let scanners: Vec<LauncherScanner> = vec![
         ("Epic Games Store", epic::scan),
         ("GOG Galaxy", gog::scan),
         ("EA App", ea::scan),
@@ -37,7 +40,11 @@ pub fn scan_all_launchers() -> (Vec<ScannedGame>, Vec<String>) {
     for (name, scanner) in scanners {
         match scanner() {
             Ok(games) => {
-                tracing::info!(launcher = name, found = games.len(), "Launcher scan complete");
+                tracing::info!(
+                    launcher = name,
+                    found = games.len(),
+                    "Launcher scan complete"
+                );
                 all_games.extend(games);
             }
             Err(e) => {

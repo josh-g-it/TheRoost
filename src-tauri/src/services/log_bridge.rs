@@ -46,9 +46,7 @@ where
         event.record(&mut visitor);
 
         // Use "message" field as the log message, fall back to target
-        let message = visitor
-            .message
-            .unwrap_or_else(|| format!("[{}]", target));
+        let message = visitor.message.unwrap_or_else(|| format!("[{}]", target));
 
         // Use "category" field if present, otherwise derive from target
         let category = visitor.category.unwrap_or_else(|| {
@@ -62,17 +60,15 @@ where
                 "credential".to_string()
             } else if target.contains("launcher") {
                 "launch".to_string()
-            } else if target.contains("registry") {
-                "system".to_string()
             } else {
                 "system".to_string()
             }
         });
 
         // Use "source" field if present, otherwise use last segment of target
-        let source = visitor.source.unwrap_or_else(|| {
-            target.rsplit("::").next().unwrap_or(target).to_string()
-        });
+        let source = visitor
+            .source
+            .unwrap_or_else(|| target.rsplit("::").next().unwrap_or(target).to_string());
 
         // Collect remaining fields as metadata
         let metadata = if visitor.fields.is_empty() {
@@ -105,7 +101,10 @@ impl Visit for FieldVisitor {
             "message" => self.message = Some(value.to_string()),
             "category" => self.category = Some(value.to_string()),
             "source" => self.source = Some(value.to_string()),
-            name => self.fields.push((name.to_string(), serde_json::Value::String(value.to_string()))),
+            name => self.fields.push((
+                name.to_string(),
+                serde_json::Value::String(value.to_string()),
+            )),
         }
     }
 
@@ -115,7 +114,9 @@ impl Visit for FieldVisitor {
             "message" => self.message = Some(s),
             "category" => self.category = Some(s),
             "source" => self.source = Some(s),
-            name => self.fields.push((name.to_string(), serde_json::Value::String(s))),
+            name => self
+                .fields
+                .push((name.to_string(), serde_json::Value::String(s))),
         }
     }
 
@@ -134,18 +135,14 @@ impl Visit for FieldVisitor {
     }
 
     fn record_bool(&mut self, field: &Field, value: bool) {
-        self.fields.push((
-            field.name().to_string(),
-            serde_json::Value::Bool(value),
-        ));
+        self.fields
+            .push((field.name().to_string(), serde_json::Value::Bool(value)));
     }
 
     fn record_f64(&mut self, field: &Field, value: f64) {
         if let Some(n) = serde_json::Number::from_f64(value) {
-            self.fields.push((
-                field.name().to_string(),
-                serde_json::Value::Number(n),
-            ));
+            self.fields
+                .push((field.name().to_string(), serde_json::Value::Number(n)));
         }
     }
 }

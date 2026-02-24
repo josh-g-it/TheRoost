@@ -8,9 +8,7 @@ use crate::utils::error::{AppError, MutexExt};
 /// Scan all non-Steam launchers for installed games and include custom games.
 /// Registers discovered games in the database and returns them with stable UUIDs.
 #[tauri::command]
-pub async fn scan_external_games(
-    db: State<'_, CacheDbHandle>,
-) -> Result<GameLibrary, AppError> {
+pub async fn scan_external_games(db: State<'_, CacheDbHandle>) -> Result<GameLibrary, AppError> {
     tracing::info!("Starting external launcher scan");
 
     let (scanned, warnings) = launchers::scan_all_launchers();
@@ -25,8 +23,7 @@ pub async fn scan_external_games(
     let mut games = Vec::new();
 
     for sg in scanned {
-        let game_id =
-            db_guard.register_game(sg.source.as_str(), &sg.source_id, &sg.name)?;
+        let game_id = db_guard.register_game(sg.source.as_str(), &sg.source_id, &sg.name)?;
 
         if let Some(ref path) = sg.install_path {
             let _ = db_guard.set_install_path(&game_id, path);

@@ -158,10 +158,7 @@ impl SteamSpyClient {
     /// Fetch tags for multiple games concurrently with bounded concurrency.
     /// Retries rate-limited requests with exponential backoff.
     /// Returns results for all appids; failed fetches return empty tag lists.
-    pub async fn fetch_tags_batch(
-        &self,
-        appids: &[u32],
-    ) -> Vec<(u32, Vec<SteamTagInfo>)> {
+    pub async fn fetch_tags_batch(&self, appids: &[u32]) -> Vec<(u32, Vec<SteamTagInfo>)> {
         let mut all_results: Vec<(u32, Vec<SteamTagInfo>)> = Vec::with_capacity(appids.len());
         let mut pending: Vec<u32> = appids.to_vec();
         let mut backoff = INITIAL_BACKOFF;
@@ -193,8 +190,7 @@ impl SteamSpyClient {
 
             for (i, chunk) in chunks.iter().enumerate() {
                 let (results, failed) = self.fetch_tags_batch_pass(chunk).await;
-                let failed_set: std::collections::HashSet<u32> =
-                    failed.iter().copied().collect();
+                let failed_set: std::collections::HashSet<u32> = failed.iter().copied().collect();
 
                 for (appid, tags) in results {
                     if !failed_set.contains(&appid) {
@@ -249,10 +245,8 @@ impl SteamSpyClient {
     // ── Richer app data methods (tags + genres + developers + publishers) ──
 
     /// Fetch richer game data for a single game from SteamSpy.
-    pub async fn fetch_app_data(
-        &self,
-        appid: u32,
-    ) -> Result<Option<SteamSpyAppData>, AppError> {
+    #[allow(dead_code)]
+    pub async fn fetch_app_data(&self, appid: u32) -> Result<Option<SteamSpyAppData>, AppError> {
         Self::fetch_app_data_impl(&self.client, appid).await
     }
 
@@ -349,52 +343,48 @@ impl SteamSpyClient {
         let rate_limited_appids = Arc::new(StdMutex::new(Vec::<u32>::new()));
         let next_slot = Arc::new(StdMutex::new(Instant::now()));
 
-        let results: Vec<(u32, Option<SteamSpyAppData>)> =
-            stream::iter(appids.iter().copied())
-                .map(|appid| {
-                    let client = self.client.clone();
-                    let rate_limited = Arc::clone(&rate_limited);
-                    let rate_limited_appids = Arc::clone(&rate_limited_appids);
-                    let next_slot = Arc::clone(&next_slot);
-                    async move {
-                        if rate_limited.load(Ordering::Relaxed) {
+        let results: Vec<(u32, Option<SteamSpyAppData>)> = stream::iter(appids.iter().copied())
+            .map(|appid| {
+                let client = self.client.clone();
+                let rate_limited = Arc::clone(&rate_limited);
+                let rate_limited_appids = Arc::clone(&rate_limited_appids);
+                let next_slot = Arc::clone(&next_slot);
+                async move {
+                    if rate_limited.load(Ordering::Relaxed) {
+                        rate_limited_appids.lock().unwrap().push(appid);
+                        return (appid, None);
+                    }
+
+                    let wait_until = {
+                        let mut slot = next_slot.lock().unwrap();
+                        let target = *slot;
+                        *slot = (*slot).max(Instant::now()) + MIN_REQUEST_INTERVAL;
+                        target
+                    };
+                    tokio::time::sleep_until(wait_until).await;
+
+                    match Self::fetch_app_data_impl(&client, appid).await {
+                        Ok(data) => (appid, data),
+                        Err(AppError::StoreApi(_)) => {
+                            tracing::warn!(appid, "SteamSpy rate limited, signaling stop");
+                            rate_limited.store(true, Ordering::Relaxed);
                             rate_limited_appids.lock().unwrap().push(appid);
-                            return (appid, None);
+                            (appid, None)
                         }
-
-                        let wait_until = {
-                            let mut slot = next_slot.lock().unwrap();
-                            let target = *slot;
-                            *slot = (*slot).max(Instant::now()) + MIN_REQUEST_INTERVAL;
-                            target
-                        };
-                        tokio::time::sleep_until(wait_until).await;
-
-                        match Self::fetch_app_data_impl(&client, appid).await {
-                            Ok(data) => (appid, data),
-                            Err(AppError::StoreApi(_)) => {
-                                tracing::warn!(
-                                    appid,
-                                    "SteamSpy rate limited, signaling stop"
-                                );
-                                rate_limited.store(true, Ordering::Relaxed);
-                                rate_limited_appids.lock().unwrap().push(appid);
-                                (appid, None)
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    appid,
-                                    error = %e,
-                                    "SteamSpy fetch failed"
-                                );
-                                (appid, None)
-                            }
+                        Err(e) => {
+                            tracing::warn!(
+                                appid,
+                                error = %e,
+                                "SteamSpy fetch failed"
+                            );
+                            (appid, None)
                         }
                     }
-                })
-                .buffer_unordered(STEAMSPY_CONCURRENCY)
-                .collect()
-                .await;
+                }
+            })
+            .buffer_unordered(STEAMSPY_CONCURRENCY)
+            .collect()
+            .await;
 
         let failed = rate_limited_appids.lock().unwrap().clone();
         let with_data = results.iter().filter(|(_, d)| d.is_some()).count();
@@ -413,8 +403,7 @@ impl SteamSpyClient {
         &self,
         appids: &[u32],
     ) -> Vec<(u32, Option<SteamSpyAppData>)> {
-        let mut all_results: Vec<(u32, Option<SteamSpyAppData>)> =
-            Vec::with_capacity(appids.len());
+        let mut all_results: Vec<(u32, Option<SteamSpyAppData>)> = Vec::with_capacity(appids.len());
         let mut pending: Vec<u32> = appids.to_vec();
         let mut backoff = INITIAL_BACKOFF;
 
@@ -444,8 +433,7 @@ impl SteamSpyClient {
 
             for (i, chunk) in chunks.iter().enumerate() {
                 let (results, failed) = self.fetch_app_data_batch_pass(chunk).await;
-                let failed_set: std::collections::HashSet<u32> =
-                    failed.iter().copied().collect();
+                let failed_set: std::collections::HashSet<u32> = failed.iter().copied().collect();
 
                 for (appid, data) in results {
                     if !failed_set.contains(&appid) {

@@ -42,13 +42,13 @@ describe("settingsSlice", () => {
 
   describe("loadSettings", () => {
     it("loads settings from API and stores them", async () => {
-      const settings = makeSettings({ theme: "light" });
+      const settings = makeSettings({ theme: "arctic-frost" });
       mockLoad.mockResolvedValue(settings);
 
       await useSettingsStore.getState().loadSettings();
 
       const state = useSettingsStore.getState();
-      expect(state.settings?.theme).toBe("light");
+      expect(state.settings?.theme).toBe("arctic-frost");
       expect(state.isLoading).toBe(false);
       expect(state.error).toBeNull();
     });
@@ -88,12 +88,12 @@ describe("settingsSlice", () => {
   describe("saveSettings", () => {
     it("saves settings to API and updates state", async () => {
       mockSave.mockResolvedValue(undefined);
-      const settings = makeSettings({ theme: "midnight" });
+      const settings = makeSettings({ theme: "midnight-purple" });
 
       await useSettingsStore.getState().saveSettings(settings);
 
       expect(mockSave).toHaveBeenCalledWith(settings);
-      expect(useSettingsStore.getState().settings?.theme).toBe("midnight");
+      expect(useSettingsStore.getState().settings?.theme).toBe("midnight-purple");
       expect(useSettingsStore.getState().error).toBeNull();
     });
 

@@ -17,7 +17,7 @@ beforeEach(() => {
 
 describe("FloatingPanel", () => {
   const defaultProps = {
-    panelId: "notes" as const,
+    panelId: "game-notes" as const,
     title: "Test Panel",
     defaultPosition: { x: 100, y: 100 },
     onPositionChange: vi.fn(),

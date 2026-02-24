@@ -83,7 +83,11 @@ pub async fn bulk_add_tag(
     tag_ids: Vec<i64>,
     db: State<'_, CacheDbHandle>,
 ) -> Result<(), AppError> {
-    tracing::info!(game_count = game_ids.len(), tag_count = tag_ids.len(), "Bulk adding tags");
+    tracing::info!(
+        game_count = game_ids.len(),
+        tag_count = tag_ids.len(),
+        "Bulk adding tags"
+    );
     let db = db.lock_or_err("DB")?;
     db.bulk_set_game_tags(&game_ids, &tag_ids)
 }

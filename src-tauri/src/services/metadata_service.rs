@@ -25,7 +25,9 @@ impl MetadataService {
     }
 
     /// Helper to lock the database, mapping poison errors to AppError.
-    fn lock_db(&self) -> Result<std::sync::MutexGuard<'_, crate::services::cache_db::CacheDb>, AppError> {
+    fn lock_db(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, crate::services::cache_db::CacheDb>, AppError> {
         self.db.lock_or_err("DB")
     }
 
@@ -33,9 +35,7 @@ impl MetadataService {
     fn resolve_steam_appid(&self, game_id: &str) -> Result<Option<u32>, AppError> {
         let db = self.lock_db()?;
         match db.get_game_source(game_id)? {
-            Some((source, source_id)) if source == "steam" => {
-                Ok(source_id.parse::<u32>().ok())
-            }
+            Some((source, source_id)) if source == "steam" => Ok(source_id.parse::<u32>().ok()),
             _ => Ok(None),
         }
     }
@@ -193,11 +193,11 @@ impl MetadataService {
                     developers: d.developers,
                     publishers: d.publishers,
                     genres: d.genres,
-                    categories: Vec::new(),    // Store API-only field
-                    screenshots: Vec::new(),   // Store API-only field
-                    release_date: None,        // Store API-only field
-                    metacritic_score: None,    // Store API-only field
-                    metacritic_url: None,      // Store API-only field
+                    categories: Vec::new(),  // Store API-only field
+                    screenshots: Vec::new(), // Store API-only field
+                    release_date: None,      // Store API-only field
+                    metacritic_score: None,  // Store API-only field
+                    metacritic_url: None,    // Store API-only field
                     steam_tags: d.tags,
                 });
 
@@ -221,13 +221,11 @@ impl MetadataService {
             // Resolve each game_id to Steam appid
             game_ids
                 .into_iter()
-                .filter_map(|gid| {
-                    match db.get_game_source(&gid) {
-                        Ok(Some((source, source_id))) if source == "steam" => {
-                            source_id.parse::<u32>().ok().map(|appid| (gid, appid))
-                        }
-                        _ => None,
+                .filter_map(|gid| match db.get_game_source(&gid) {
+                    Ok(Some((source, source_id))) if source == "steam" => {
+                        source_id.parse::<u32>().ok().map(|appid| (gid, appid))
                     }
+                    _ => None,
                 })
                 .collect()
         };
@@ -260,7 +258,11 @@ impl MetadataService {
             }
         }
 
-        tracing::info!(updated, total = appids.len(), "SteamSpy tag backfill complete");
+        tracing::info!(
+            updated,
+            total = appids.len(),
+            "SteamSpy tag backfill complete"
+        );
         Ok(updated)
     }
 
@@ -275,13 +277,11 @@ impl MetadataService {
             // Resolve each to Steam appid
             game_ids
                 .into_iter()
-                .filter_map(|gid| {
-                    match db.get_game_source(&gid) {
-                        Ok(Some((source, source_id))) if source == "steam" => {
-                            source_id.parse::<u32>().ok().map(|appid| (gid, appid))
-                        }
-                        _ => None,
+                .filter_map(|gid| match db.get_game_source(&gid) {
+                    Ok(Some((source, source_id))) if source == "steam" => {
+                        source_id.parse::<u32>().ok().map(|appid| (gid, appid))
                     }
+                    _ => None,
                 })
                 .collect()
         };
@@ -291,7 +291,10 @@ impl MetadataService {
             return Ok(0);
         }
 
-        tracing::info!(count = games_to_enrich.len(), "Starting Store API background enrichment");
+        tracing::info!(
+            count = games_to_enrich.len(),
+            "Starting Store API background enrichment"
+        );
         let mut enriched = 0;
 
         for (game_id, appid) in &games_to_enrich {
@@ -339,7 +342,11 @@ impl MetadataService {
             }
         }
 
-        tracing::info!(enriched, total = games_to_enrich.len(), "Store API enrichment complete");
+        tracing::info!(
+            enriched,
+            total = games_to_enrich.len(),
+            "Store API enrichment complete"
+        );
         Ok(enriched)
     }
 }

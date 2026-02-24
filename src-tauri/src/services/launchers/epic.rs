@@ -5,8 +5,7 @@ use crate::models::game::GameSource;
 use super::ScannedGame;
 
 /// Default manifest directory for Epic Games Store.
-const DEFAULT_MANIFESTS_DIR: &str =
-    r"C:\ProgramData\Epic\EpicGamesLauncher\Data\Manifests";
+const DEFAULT_MANIFESTS_DIR: &str = r"C:\ProgramData\Epic\EpicGamesLauncher\Data\Manifests";
 
 /// Scan for installed Epic Games Store games by reading JSON manifest files.
 pub fn scan() -> Result<Vec<ScannedGame>, String> {
@@ -101,7 +100,12 @@ mod tests {
     #[test]
     fn test_scan_valid_game() {
         let dir = tempfile::tempdir().unwrap();
-        let manifest = make_manifest("Fortnite", "Fortnite", r"C:\Epic\Fortnite", "FortniteClient-Win64-Shipping.exe");
+        let manifest = make_manifest(
+            "Fortnite",
+            "Fortnite",
+            r"C:\Epic\Fortnite",
+            "FortniteClient-Win64-Shipping.exe",
+        );
         fs::write(dir.path().join("abc123.item"), &manifest).unwrap();
 
         let games = scan_from(dir.path()).unwrap();

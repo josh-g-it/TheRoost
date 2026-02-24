@@ -48,13 +48,10 @@ async fn sync_once(
     let now = chrono::Utc::now().timestamp();
 
     // Register all games and record playtime snapshots
-    let db_guard = db
-        .lock()
-        .map_err(|e| format!("DB lock poisoned: {}", e))?;
+    let db_guard = db.lock().map_err(|e| format!("DB lock poisoned: {}", e))?;
 
     for game in &mut games {
-        let game_id =
-            db_guard.register_game(game.source.as_str(), &game.source_id, &game.name)?;
+        let game_id = db_guard.register_game(game.source.as_str(), &game.source_id, &game.name)?;
         game.game_id = game_id.clone();
         db_guard.insert_snapshot(&game_id, game.playtime_forever, now)?;
 

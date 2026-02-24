@@ -1,15 +1,14 @@
 use std::collections::HashMap;
 
 use crate::models::friend::*;
-use crate::models::steam_api::{ApiGame, ApiPlayerSummary, OwnedGamesResponse, PlayerSummariesResponse};
+use crate::models::steam_api::{
+    ApiGame, ApiPlayerSummary, OwnedGamesResponse, PlayerSummariesResponse,
+};
 use crate::services::steam_client::{steam_get_json, steam_get_raw};
 use crate::utils::error::AppError;
 
 /// Fetch the user's friend list enriched with profile data (online status, current game).
-pub async fn fetch_friends(
-    api_key: &str,
-    steam_id: &str,
-) -> Result<Vec<FriendInfo>, AppError> {
+pub async fn fetch_friends(api_key: &str, steam_id: &str) -> Result<Vec<FriendInfo>, AppError> {
     tracing::info!("Fetching friend list from Steam API");
 
     // Step 1: Get friend list
@@ -120,7 +119,11 @@ pub async fn fetch_friend_library(
         })
         .collect();
 
-    tracing::info!(friend_steam_id, count = games.len(), "Friend library fetched");
+    tracing::info!(
+        friend_steam_id,
+        count = games.len(),
+        "Friend library fetched"
+    );
     Ok(FriendLibrary {
         steam_id: friend_steam_id.to_string(),
         games,

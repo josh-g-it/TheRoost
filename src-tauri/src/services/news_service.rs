@@ -67,10 +67,7 @@ pub async fn fetch_game_news(
 }
 
 /// Fetch the list of game appids the user follows on Steam.
-pub async fn fetch_followed_games(
-    api_key: &str,
-    steam_id: &str,
-) -> Result<Vec<u32>, AppError> {
+pub async fn fetch_followed_games(api_key: &str, steam_id: &str) -> Result<Vec<u32>, AppError> {
     tracing::info!("Fetching followed games from Steam API");
 
     let followed: FollowedGamesResponse = steam_get_json(

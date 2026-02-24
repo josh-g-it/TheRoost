@@ -1,8 +1,6 @@
 use std::time::Duration;
 
-use crate::models::metadata::{
-    CategoryInfo, GenreInfo, ScreenshotInfo, StoreMetadata,
-};
+use crate::models::metadata::{CategoryInfo, GenreInfo, ScreenshotInfo, StoreMetadata};
 use crate::models::store_api::StoreAppDetailsWrapper;
 use crate::utils::error::AppError;
 
@@ -24,10 +22,7 @@ impl StoreClient {
 
     /// Fetch app details for a single game from the Steam Store API.
     /// Used for on-demand enrichment (GameDetail open) and slow background backfill.
-    pub async fn fetch_app_details(
-        &self,
-        appid: u32,
-    ) -> Result<Option<StoreMetadata>, AppError> {
+    pub async fn fetch_app_details(&self, appid: u32) -> Result<Option<StoreMetadata>, AppError> {
         let url = format!("{}/appdetails?appids={}", STORE_API_BASE, appid);
 
         let resp = self.client.get(&url).send().await?;

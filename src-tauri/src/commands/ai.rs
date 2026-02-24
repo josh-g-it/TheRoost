@@ -45,9 +45,8 @@ pub async fn ai_cloud_resolve(
     let (ctx, library_summary) = {
         let db = db.lock_or_err("DB")?;
         let ctx = AiOrchestrator::build_context(&db)?;
-        let summary = context_builder::build_filtered_library_summary(
-            &db, &scope, &excluded, &included,
-        )?;
+        let summary =
+            context_builder::build_filtered_library_summary(&db, &scope, &excluded, &included)?;
         (ctx, summary)
     }; // DB lock dropped
 
@@ -149,9 +148,7 @@ pub async fn test_cloud_api_key(provider: String) -> Result<bool, AppError> {
 }
 
 #[tauri::command]
-pub fn get_cloud_ai_usage(
-    cloud: State<'_, CloudConfigHandle>,
-) -> Result<CloudAiUsage, AppError> {
+pub fn get_cloud_ai_usage(cloud: State<'_, CloudConfigHandle>) -> Result<CloudAiUsage, AppError> {
     let mut config = cloud.lock_or_err("CloudConfig")?;
     config.maybe_reset_daily();
     Ok(CloudAiUsage {
@@ -170,8 +167,7 @@ pub fn update_cloud_ai_settings(
     cloud: State<'_, CloudConfigHandle>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), AppError> {
-    let cloud_provider = CloudProvider::from_str(&provider)
-        .unwrap_or(CloudProvider::Gemini);
+    let cloud_provider = CloudProvider::from_str(&provider).unwrap_or(CloudProvider::Gemini);
 
     let clamped_limit = daily_limit.max(1);
 

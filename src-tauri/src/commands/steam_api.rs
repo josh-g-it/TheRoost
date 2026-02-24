@@ -90,7 +90,10 @@ fn extract_vanity_from_url(input: &str) -> Option<String> {
     let pattern = "steamcommunity.com/id/";
     if let Some(pos) = input.find(pattern) {
         let after = &input[pos + pattern.len()..];
-        let vanity: String = after.chars().take_while(|c| *c != '/' && *c != '?').collect();
+        let vanity: String = after
+            .chars()
+            .take_while(|c| *c != '/' && *c != '?')
+            .collect();
         if !vanity.is_empty() {
             return Some(vanity);
         }
@@ -107,7 +110,9 @@ mod tests {
     #[test]
     fn test_extract_steam_id_https() {
         assert_eq!(
-            extract_steam_id_from_profile_url("https://steamcommunity.com/profiles/76561198012345678"),
+            extract_steam_id_from_profile_url(
+                "https://steamcommunity.com/profiles/76561198012345678"
+            ),
             Some("76561198012345678".to_string())
         );
     }
@@ -115,7 +120,9 @@ mod tests {
     #[test]
     fn test_extract_steam_id_http() {
         assert_eq!(
-            extract_steam_id_from_profile_url("http://steamcommunity.com/profiles/76561198012345678"),
+            extract_steam_id_from_profile_url(
+                "http://steamcommunity.com/profiles/76561198012345678"
+            ),
             Some("76561198012345678".to_string())
         );
     }
@@ -123,7 +130,9 @@ mod tests {
     #[test]
     fn test_extract_steam_id_trailing_slash() {
         assert_eq!(
-            extract_steam_id_from_profile_url("https://steamcommunity.com/profiles/76561198012345678/"),
+            extract_steam_id_from_profile_url(
+                "https://steamcommunity.com/profiles/76561198012345678/"
+            ),
             Some("76561198012345678".to_string())
         );
     }
@@ -155,7 +164,9 @@ mod tests {
     #[test]
     fn test_extract_steam_id_wrong_prefix() {
         assert_eq!(
-            extract_steam_id_from_profile_url("https://steamcommunity.com/profiles/12345678901234567"),
+            extract_steam_id_from_profile_url(
+                "https://steamcommunity.com/profiles/12345678901234567"
+            ),
             None
         );
     }
@@ -204,9 +215,6 @@ mod tests {
 
     #[test]
     fn test_extract_vanity_plain_text() {
-        assert_eq!(
-            extract_vanity_from_url("gaben"),
-            None
-        );
+        assert_eq!(extract_vanity_from_url("gaben"), None);
     }
 }

@@ -154,8 +154,7 @@ impl SteamGridDbClient {
                             url: item.get("url")?.as_str()?.to_string(),
                             thumb: item.get("thumb")?.as_str()?.to_string(),
                             width: item.get("width").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                            height: item.get("height").and_then(|v| v.as_u64()).unwrap_or(0)
-                                as u32,
+                            height: item.get("height").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
                         })
                     })
                     .collect()
@@ -215,10 +214,7 @@ impl SteamGridDbClient {
 
 /// Fetch a cover image URL for a GOG game using GOG's public product API (no key needed).
 pub async fn fetch_gog_image(product_id: &str) -> Result<Option<String>, AppError> {
-    let url = format!(
-        "https://api.gog.com/products/{}?expand=images",
-        product_id
-    );
+    let url = format!("https://api.gog.com/products/{}?expand=images", product_id);
     tracing::debug!(product_id, "Fetching GOG product images");
 
     let client = reqwest::Client::builder()

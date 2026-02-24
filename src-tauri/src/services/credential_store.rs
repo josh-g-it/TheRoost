@@ -8,12 +8,10 @@ pub fn store_api_key(key: &str) -> Result<(), AppError> {
     tracing::info!("Storing API key in credential manager");
     let entry = keyring::Entry::new(SERVICE_NAME, API_KEY_ACCOUNT)
         .map_err(|e| AppError::Credential(format!("Keyring init error: {e}")))?;
-    entry
-        .set_password(key)
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to store API key");
-            AppError::Credential(format!("Keyring store error: {e}"))
-        })?;
+    entry.set_password(key).map_err(|e| {
+        tracing::error!(error = %e, "Failed to store API key");
+        AppError::Credential(format!("Keyring store error: {e}"))
+    })?;
     tracing::info!("API key stored successfully");
     Ok(())
 }
@@ -61,12 +59,10 @@ pub fn store_sgdb_api_key(key: &str) -> Result<(), AppError> {
     tracing::info!("Storing SteamGridDB API key in credential manager");
     let entry = keyring::Entry::new(SERVICE_NAME, SGDB_API_KEY_ACCOUNT)
         .map_err(|e| AppError::Credential(format!("Keyring init error: {e}")))?;
-    entry
-        .set_password(key)
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to store SteamGridDB API key");
-            AppError::Credential(format!("Keyring store error: {e}"))
-        })?;
+    entry.set_password(key).map_err(|e| {
+        tracing::error!(error = %e, "Failed to store SteamGridDB API key");
+        AppError::Credential(format!("Keyring store error: {e}"))
+    })?;
     tracing::info!("SteamGridDB API key stored successfully");
     Ok(())
 }
@@ -116,12 +112,10 @@ pub fn store_cloud_key(provider: &str, key: &str) -> Result<(), AppError> {
     tracing::info!(provider, "Storing cloud AI API key");
     let entry = keyring::Entry::new(SERVICE_NAME, &account)
         .map_err(|e| AppError::Credential(format!("Keyring init error: {e}")))?;
-    entry
-        .set_password(key)
-        .map_err(|e| {
-            tracing::error!(provider, error = %e, "Failed to store cloud AI API key");
-            AppError::Credential(format!("Keyring store error: {e}"))
-        })?;
+    entry.set_password(key).map_err(|e| {
+        tracing::error!(provider, error = %e, "Failed to store cloud AI API key");
+        AppError::Credential(format!("Keyring store error: {e}"))
+    })?;
     tracing::info!(provider, "Cloud AI API key stored");
     Ok(())
 }
