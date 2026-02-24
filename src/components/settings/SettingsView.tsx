@@ -247,8 +247,12 @@ export function SettingsView() {
                     setUpdateMessage("Downloading update...");
                     try {
                       await updaterApi.installUpdate();
-                    } catch {
-                      setUpdateMessage("Update install failed");
+                    } catch (err: unknown) {
+                      const msg =
+                        err && typeof err === "object" && "message" in err
+                          ? String((err as { message: string }).message)
+                          : String(err);
+                      setUpdateMessage(`Install failed: ${msg}`);
                       setUpdateInstalling(false);
                     }
                   }}

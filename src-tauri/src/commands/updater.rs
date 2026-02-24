@@ -58,10 +58,13 @@ pub async fn install_update(app_handle: AppHandle) -> Result<(), AppError> {
 
     tracing::info!(version = %update.version, "Downloading and installing update");
 
-    update
+    if let Err(e) = update
         .download_and_install(|_chunk_len, _content_len| {}, || {})
         .await
-        .map_err(|e| AppError::StoreApi(format!("Update install failed: {e}")))?;
+    {
+        tracing::error!(error = %e, "Update install failed");
+        return Err(AppError::StoreApi(format!("Update install failed: {e}")));
+    }
 
     tracing::info!("Update installed, restarting");
     app_handle.restart();

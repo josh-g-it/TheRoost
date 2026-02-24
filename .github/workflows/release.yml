@@ -103,13 +103,16 @@ jobs:
           fi
 
           VERSION="${GITHUB_REF_NAME#v}"
-          SIGNATURE=$(cat "$NSIS_SIG")
+          # .sig file is already base64-encoded by Tauri — read it directly
+          SIGNATURE=$(cat "$NSIS_SIG" | tr -d '\r\n')
           NSIS_ZIP_NAME=$(basename "$NSIS_ZIP")
+          # URL-encode the filename (spaces → %20) for the download URL
+          NSIS_ZIP_URL_NAME=$(echo "$NSIS_ZIP_NAME" | sed 's/ /%20/g')
           PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
           # Generate latest.json for the Tauri updater
           printf '{\n  "version": "%s",\n  "notes": "The Roost %s",\n  "pub_date": "%s",\n  "platforms": {\n    "windows-x86_64": {\n      "signature": "%s",\n      "url": "https://github.com/josh-g-it/TheRoost/releases/download/%s/%s"\n    }\n  }\n}\n' \
-            "$VERSION" "$GITHUB_REF_NAME" "$PUB_DATE" "$SIGNATURE" "$GITHUB_REF_NAME" "$NSIS_ZIP_NAME" \
+            "$VERSION" "$GITHUB_REF_NAME" "$PUB_DATE" "$SIGNATURE" "$GITHUB_REF_NAME" "$NSIS_ZIP_URL_NAME" \
             > "$NSIS_DIR/latest.json"
 
           echo "Generated latest.json:"
