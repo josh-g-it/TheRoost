@@ -106,8 +106,8 @@ jobs:
           # .sig file is already base64-encoded by Tauri — read it directly
           SIGNATURE=$(cat "$NSIS_SIG" | tr -d '\r\n')
           NSIS_ZIP_NAME=$(basename "$NSIS_ZIP")
-          # URL-encode the filename (spaces → %20) for the download URL
-          NSIS_ZIP_URL_NAME=$(echo "$NSIS_ZIP_NAME" | sed 's/ /%20/g')
+          # Replace spaces with dots to match how GitHub Release assets are named
+          NSIS_ZIP_URL_NAME=$(echo "$NSIS_ZIP_NAME" | sed 's/ /./g')
           PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
           # Generate latest.json for the Tauri updater
