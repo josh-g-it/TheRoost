@@ -11,7 +11,7 @@ use crate::models::metadata::{
 };
 use crate::models::news::GameNewsItem;
 use crate::models::note::{GameNote, GameNoteWithName};
-use crate::models::rating::{GameRating, GameRatingWithName};
+use crate::models::rating::GameRating;
 use crate::models::saved_filter::SavedFilterRow;
 use crate::models::session::{GameSession, PlaytimeSnapshot};
 use crate::models::tag::Tag;
@@ -2090,27 +2090,6 @@ impl CacheDb {
         Ok(ratings)
     }
 
-    pub fn get_all_ratings_with_names(&self) -> Result<Vec<GameRatingWithName>, AppError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT r.game_id, r.rating, r.review, r.updated_at, g.name
-             FROM game_ratings r
-             LEFT JOIN games g ON g.game_id = r.game_id
-             ORDER BY r.rating DESC, r.updated_at DESC",
-        )?;
-        let ratings = stmt
-            .query_map([], |row| {
-                Ok(GameRatingWithName {
-                    game_id: row.get(0)?,
-                    rating: row.get(1)?,
-                    review: row.get(2)?,
-                    updated_at: row.get(3)?,
-                    game_name: row.get(4)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(ratings)
-    }
-
     // ── Media Bookmarks ───────────────────────────────────────────────
 
     pub fn get_media_bookmarks(&self) -> Result<Vec<MediaBookmark>, AppError> {
@@ -3778,24 +3757,6 @@ mod tests {
         // Delete
         db.delete_game_rating(&game_id).unwrap();
         assert!(db.get_game_rating(&game_id).unwrap().is_none());
-    }
-
-    #[test]
-    fn test_get_all_ratings_with_names() {
-        let db = test_db();
-        let gid_a = db.register_game("steam", "100", "Game A").unwrap();
-        db.save_game_rating(&gid_a, 10, Some("Perfect")).unwrap();
-
-        let gid_b = db.register_game("steam", "200", "Game B").unwrap();
-        db.save_game_rating(&gid_b, 6, None).unwrap();
-
-        let with_names = db.get_all_ratings_with_names().unwrap();
-        assert_eq!(with_names.len(), 2);
-        // Sorted by rating desc — 10 first
-        assert_eq!(with_names[0].rating, 10);
-        assert_eq!(with_names[0].game_name, Some("Game A".to_string()));
-        assert_eq!(with_names[1].rating, 6);
-        assert_eq!(with_names[1].game_name, Some("Game B".to_string()));
     }
 
     #[test]
