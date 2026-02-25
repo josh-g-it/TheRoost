@@ -155,7 +155,14 @@ pub fn build_library_summary(db: &CacheDb) -> Result<String, AppError> {
         let lines: Vec<String> = all_games
             .iter()
             .map(|(id, name, genres, tags, hours, lp)| {
-                format_game_line(name, genres, tags, *hours, *lp, ratings_map.get(id).copied())
+                format_game_line(
+                    name,
+                    genres,
+                    tags,
+                    *hours,
+                    *lp,
+                    ratings_map.get(id).copied(),
+                )
             })
             .collect();
         parts.push(format!("All games:\n{}", lines.join("\n")));
@@ -261,7 +268,14 @@ pub fn build_filtered_library_summary(
         let lines: Vec<String> = filtered
             .iter()
             .map(|(id, name, genres, tags, hours, lp)| {
-                format_game_line(name, genres, tags, *hours, *lp, ratings_map.get(id).copied())
+                format_game_line(
+                    name,
+                    genres,
+                    tags,
+                    *hours,
+                    *lp,
+                    ratings_map.get(id).copied(),
+                )
             })
             .collect();
         parts.push(format!(

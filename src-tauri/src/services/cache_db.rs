@@ -3801,9 +3801,7 @@ mod tests {
     #[test]
     fn test_rating_deleted_with_game() {
         let db = test_db();
-        let game_id = db
-            .register_game("steam", "999", "Deletable")
-            .unwrap();
+        let game_id = db.register_game("steam", "999", "Deletable").unwrap();
         db.save_game_rating(&game_id, 7, Some("Decent")).unwrap();
         assert!(db.get_game_rating(&game_id).unwrap().is_some());
 

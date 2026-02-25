@@ -144,7 +144,10 @@ impl AiOrchestrator {
                 ("lastPlayed", &["last played", "recent", "recently"]),
                 ("recentlyAdded", &["recently added", "newest", "new"]),
                 ("size", &["size", "disk", "storage"]),
-                ("metacritic", &["metacritic", "metacritic score", "critic score"]),
+                (
+                    "metacritic",
+                    &["metacritic", "metacritic score", "critic score"],
+                ),
                 (
                     "personalRating",
                     &["my rating", "personal rating", "stars", "rating", "score"],

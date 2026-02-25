@@ -256,11 +256,7 @@ fn extract_quick_filters(tokens: &[&str], actions: &mut Vec<IntentAction>, consu
 }
 
 /// "rated", "unrated", "highest rated", "top rated", "best rated"
-fn extract_rating_filters(
-    tokens: &[&str],
-    actions: &mut Vec<IntentAction>,
-    consumed: &mut [bool],
-) {
+fn extract_rating_filters(tokens: &[&str], actions: &mut Vec<IntentAction>, consumed: &mut [bool]) {
     let joined = tokens.join(" ");
 
     // "highest rated", "best rated", "top rated" → sort by personalRating + filter rated
@@ -855,7 +851,10 @@ mod tests {
                 ("lastPlayed", &["last played", "recent", "recently"]),
                 ("recentlyAdded", &["recently added", "newest", "new"]),
                 ("size", &["size", "disk", "storage"]),
-                ("metacritic", &["metacritic", "metacritic score", "critic score"]),
+                (
+                    "metacritic",
+                    &["metacritic", "metacritic score", "critic score"],
+                ),
                 (
                     "personalRating",
                     &["my rating", "personal rating", "stars", "rating", "score"],
@@ -1203,10 +1202,7 @@ mod tests {
     fn test_rating_filter_rated() {
         let ctx = test_context();
         let result = PatternMatcher::resolve("show rated games", &ctx).unwrap();
-        assert!(result
-            .actions
-            .iter()
-            .any(|a| a.action_id == "filter:rated"));
+        assert!(result.actions.iter().any(|a| a.action_id == "filter:rated"));
     }
 
     #[test]

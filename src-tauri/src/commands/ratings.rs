@@ -37,9 +37,7 @@ pub async fn delete_game_rating(
 }
 
 #[tauri::command]
-pub async fn get_all_ratings(
-    db: State<'_, CacheDbHandle>,
-) -> Result<Vec<GameRating>, AppError> {
+pub async fn get_all_ratings(db: State<'_, CacheDbHandle>) -> Result<Vec<GameRating>, AppError> {
     tracing::debug!("Fetching all ratings");
     let db = db.lock_or_err("DB")?;
     db.get_all_ratings()
