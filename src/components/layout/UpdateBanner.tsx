@@ -5,7 +5,7 @@ import type { UpdateInfo } from "../../types";
 import "./UpdateBanner.css";
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
-const INITIAL_DELAY_MS = 30 * 1000; // 30 seconds after app start
+const INITIAL_DELAY_MS = 5 * 1000; // 5 seconds after app start
 
 export function UpdateBanner() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);

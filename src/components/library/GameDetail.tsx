@@ -59,27 +59,106 @@ function MetacriticBadge({ score, url }: { score: number; url?: string | null })
 }
 
 function ScreenshotGallery({ screenshots }: { screenshots: ScreenshotInfo[] }) {
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightboxIdx, setLightboxIdx] = useState(0);
+
   if (screenshots.length === 0) return null;
 
+  const openLightbox = (idx: number) => {
+    setLightboxIdx(idx);
+    setLightboxUrl(screenshots[idx].fullUrl);
+  };
+
+  const closeLightbox = () => setLightboxUrl(null);
+
+  const navigateLightbox = (delta: number) => {
+    const next = lightboxIdx + delta;
+    if (next >= 0 && next < screenshots.length) {
+      setLightboxIdx(next);
+      setLightboxUrl(screenshots[next].fullUrl);
+    }
+  };
+
   return (
-    <div className="game-detail__screenshots">
-      {screenshots.map((s) => (
-        <a
-          key={s.id}
-          href={s.fullUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="game-detail__screenshot-link"
+    <>
+      <div className="game-detail__screenshots">
+        {screenshots.map((s, i) => (
+          <button
+            key={s.id}
+            className="game-detail__screenshot-link"
+            onClick={() => openLightbox(i)}
+            type="button"
+          >
+            <img
+              src={s.thumbnailUrl}
+              alt="Screenshot"
+              className="game-detail__screenshot-img"
+              loading="lazy"
+            />
+          </button>
+        ))}
+      </div>
+
+      {lightboxUrl && (
+        <div
+          className="screenshot-lightbox"
+          onClick={closeLightbox}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") closeLightbox();
+            if (e.key === "ArrowLeft") navigateLightbox(-1);
+            if (e.key === "ArrowRight") navigateLightbox(1);
+          }}
+          role="dialog"
+          aria-label="Screenshot viewer"
+          tabIndex={0}
+          ref={(el) => el?.focus()}
         >
+          {lightboxIdx > 0 && (
+            <button
+              className="screenshot-lightbox__nav screenshot-lightbox__nav--prev"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigateLightbox(-1);
+              }}
+              aria-label="Previous screenshot"
+              type="button"
+            >
+              &#8249;
+            </button>
+          )}
           <img
-            src={s.thumbnailUrl}
-            alt="Screenshot"
-            className="game-detail__screenshot-img"
-            loading="lazy"
+            src={lightboxUrl}
+            alt="Screenshot full size"
+            className="screenshot-lightbox__img"
+            onClick={(e) => e.stopPropagation()}
           />
-        </a>
-      ))}
-    </div>
+          {lightboxIdx < screenshots.length - 1 && (
+            <button
+              className="screenshot-lightbox__nav screenshot-lightbox__nav--next"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigateLightbox(1);
+              }}
+              aria-label="Next screenshot"
+              type="button"
+            >
+              &#8250;
+            </button>
+          )}
+          <button
+            className="screenshot-lightbox__close"
+            onClick={closeLightbox}
+            aria-label="Close"
+            type="button"
+          >
+            &times;
+          </button>
+          <span className="screenshot-lightbox__counter">
+            {lightboxIdx + 1} / {screenshots.length}
+          </span>
+        </div>
+      )}
+    </>
   );
 }
 
