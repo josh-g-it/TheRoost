@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Cropper from "react-easy-crop";
 import type { Area } from "react-easy-crop";
+import "react-easy-crop/react-easy-crop.css";
 import { open } from "@tauri-apps/plugin-dialog";
 import { coverArtApi } from "../../services/tauri";
 import type { SgdbImageOption, CropArea, GameArtInfo } from "../../services/tauri";
