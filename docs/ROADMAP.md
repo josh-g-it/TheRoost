@@ -878,14 +878,18 @@ Each feature below ships as an incremental minor version (v1.5.0, v1.6.0, etc.).
 
 ---
 
-### v1.5.0 — Custom Game Art Upload
-Drag-and-drop local images as cover art — works alongside SteamGridDB with user uploads taking priority.
+### v1.5.0 — Custom Game Art Upload ✅ SHIPPED
+Centralized Art Management Menu with local image upload, crop/reposition, and SteamGridDB picker — for ALL games including Steam.
 
-- Drag-and-drop or file picker for local image files (PNG, JPG, WebP)
-- Apply as cover, hero banner, or icon art
-- Stored locally (app data directory) with database reference
-- Works alongside SteamGridDB — user uploads take priority
-- Image validation (dimensions, file size limits, format check)
+- **Art Management Menu**: Single modal with 3 steps (overview → picker → crop) replacing scattered art buttons
+- File picker for local images (PNG, JPG, WebP, max 10 MB) with Tauri dialog
+- `react-easy-crop` for zoom/pan crop with locked aspect ratios per art type
+- Server-side crop + resize via Rust `image` crate (avoids CORS issues)
+- All 3 art types: cover (600×900), hero (1920×620), icon (256×256)
+- Works for ALL games (Steam + non-Steam) — unified resolution pipeline
+- Local storage in `%APPDATA%/app.theroost/art/`, served as data URLs via `read_image_base64` backend command
+- Remove button to reset custom art back to default
+- Schema v20: `local_path` column added to `game_images` table
 
 ---
 

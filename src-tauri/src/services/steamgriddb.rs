@@ -70,13 +70,6 @@ impl SteamGridDbClient {
         Ok(sgdb_id)
     }
 
-    /// Fetch a grid (cover art) image URL for a SteamGridDB game ID.
-    /// Prefers 600x900 portrait format for game cards.
-    pub async fn fetch_grid_url(&self, sgdb_id: u64) -> Result<Option<String>, AppError> {
-        let url = format!("{}/grids/game/{}?dimensions=600x900", SGDB_BASE, sgdb_id);
-        self.fetch_image_url(&url, "grid", sgdb_id).await
-    }
-
     /// Fetch a hero (banner) image URL for a SteamGridDB game ID.
     pub async fn fetch_hero_url(&self, sgdb_id: u64) -> Result<Option<String>, AppError> {
         let url = format!("{}/heroes/game/{}", SGDB_BASE, sgdb_id);
@@ -84,14 +77,16 @@ impl SteamGridDbClient {
     }
 
     /// Fetch multiple grid image options for the art picker.
+    /// Returns portrait-style images that the user can crop to landscape.
     pub async fn fetch_grid_options(
         &self,
         sgdb_id: u64,
         limit: usize,
+        page: u32,
     ) -> Result<Vec<SgdbImageOption>, AppError> {
         let url = format!(
-            "{}/grids/game/{}?dimensions=600x900,460x215,920x430",
-            SGDB_BASE, sgdb_id
+            "{}/grids/game/{}?dimensions=600x900,460x215,920x430&page={}",
+            SGDB_BASE, sgdb_id, page
         );
         self.fetch_image_options(&url, limit).await
     }
@@ -107,8 +102,9 @@ impl SteamGridDbClient {
         &self,
         sgdb_id: u64,
         limit: usize,
+        page: u32,
     ) -> Result<Vec<SgdbImageOption>, AppError> {
-        let url = format!("{}/logos/game/{}", SGDB_BASE, sgdb_id);
+        let url = format!("{}/logos/game/{}?page={}", SGDB_BASE, sgdb_id, page);
         self.fetch_image_options(&url, limit).await
     }
 
@@ -117,8 +113,9 @@ impl SteamGridDbClient {
         &self,
         sgdb_id: u64,
         limit: usize,
+        page: u32,
     ) -> Result<Vec<SgdbImageOption>, AppError> {
-        let url = format!("{}/heroes/game/{}", SGDB_BASE, sgdb_id);
+        let url = format!("{}/heroes/game/{}?page={}", SGDB_BASE, sgdb_id, page);
         self.fetch_image_options(&url, limit).await
     }
 

@@ -1,8 +1,8 @@
 # The Roost — Technical Overview (Engineer)
 
 > **Audience**: AI assistants, senior developers, contributors
-> **Last updated**: 2026-02-24
-> **Version**: 1.4.1 (Last-played tracking fix for non-Steam games)
+> **Last updated**: 2026-02-25
+> **Version**: 1.5.0 (Custom game art upload, crop/reposition, centralized Art Management Menu)
 
 ---
 
@@ -17,7 +17,7 @@
 | Framework | Tauri v2 (Rust) + React 18 + TypeScript + Vite |
 | State | Zustand (18 slices) |
 | Routing | React Router v6 data router (`createBrowserRouter`) |
-| Database | SQLite via rusqlite (bundled), WAL mode, schema v19 |
+| Database | SQLite via rusqlite (bundled), WAL mode, schema v20 |
 | Platform | Windows 11 (registry, credential manager, WASAPI, SMTC, NVML, PDH) |
 | Launch | `npm run tauri dev` |
 
@@ -56,8 +56,8 @@ TheRoost/
 │   │   │                         #   GameCard, GameListItem, GameDetail, GameImage,
 │   │   │                         #   Shelf, ShelfHeader, ShelfEditorDialog, HorizontalScrollRow,
 │   │   │                         #   SavedFilterChips, CardDisplayPopover, CoverArtPicker,
-│   │   │                         #   AchievementSection, TagPicker, AddCustomGameDialog,
-│   │   │                         #   BackgroundTaskBanner, WelcomeDialog,
+│   │   │                         #   ArtManagementMenu, AchievementSection, TagPicker,
+│   │   │                         #   AddCustomGameDialog, BackgroundTaskBanner, WelcomeDialog,
 │   │   │                         #   SourceFilterPopover, SteamTagFilterPopover,
 │   │   │                         #   CategoryFilterPopover
 │   │   ├── activity/             # ActivityView (customizable card layout with dnd-kit),
@@ -93,7 +93,7 @@ TheRoost/
 │   │
 │   ├── store/                    # 18 Zustand slices (see §4.2)
 │   ├── services/
-│   │   └── tauri.ts              # invoke() wrappers — 20 API namespaces (see §4.6)
+│   │   └── tauri.ts              # invoke() wrappers — 26 API namespaces (see §4.6)
 │   │
 │   ├── types/                    # 21 type files (see §4.5)
 │   ├── utils/                    # icons, logger, errors, formatters, sorting, filtering,
@@ -111,9 +111,9 @@ TheRoost/
 │   │
 │   └── src/
 │       ├── main.rs               # Entry → lib::run()
-│       ├── lib.rs                # Tauri setup, tracing init, 108 commands, background services
+│       ├── lib.rs                # Tauri setup, tracing init, 113 commands, background services
 │       │
-│       ├── commands/             # 28 command modules, 108 total commands (see §3.1)
+│       ├── commands/             # 28 command modules, 113 total commands (see §3.1)
 │       │   ├── steam_scanner.rs, steam_api.rs, settings.rs, game_launcher.rs
 │       │   ├── metadata.rs, sessions.rs, tags.rs, favorites.rs
 │       │   ├── hidden_games.rs, saved_filters.rs, developer.rs
@@ -131,12 +131,13 @@ TheRoost/
 │       │   ├── media_session.rs, media_bookmark.rs, audio.rs, system_metrics.rs
 │       │   └── mod.rs
 │       │
-│       ├── services/             # 39 service modules (see §3.5)
-│       │   ├── cache_db.rs       # SQLite: schema v17, 19 tables, WAL mode
+│       ├── services/             # 40 service modules (see §3.5)
+│       │   ├── cache_db.rs       # SQLite: schema v20, 20 tables, WAL mode
 │       │   ├── steam_client.rs   # Shared HTTP client (OnceLock, 15s timeout, sanitized errors)
 │       │   ├── store_client.rs, steamspy_client.rs, steamgriddb.rs
 │       │   ├── metadata_service.rs, achievement_service.rs
 │       │   ├── friends_service.rs, news_service.rs, cover_art.rs
+│       │   ├── image_processing.rs
 │       │   ├── settings_store.rs, credential_store.rs
 │       │   ├── registry.rs, vdf_parser.rs, log_bridge.rs
 │       │   ├── process_monitor.rs, gpu_monitor.rs, library_sync.rs
@@ -159,7 +160,7 @@ TheRoost/
 
 ### 3.1 Command Registry (lib.rs)
 
-108 Tauri commands across 28 modules:
+113 Tauri commands across 28 modules:
 
 | Module | Commands |
 |--------|----------|
@@ -175,7 +176,7 @@ TheRoost/
 | `saved_filters` | `save_filter`, `get_all_saved_filters`, `delete_saved_filter` |
 | `developer` | `clear_all_data` |
 | `external_scanner` | `scan_external_games` |
-| `cover_art` | `get_cover_art_url`, `fetch_cover_art_batch`, `store_sgdb_api_key`, `get_sgdb_key_status`, `delete_sgdb_api_key`, `get_cover_art_options`, `set_cover_art` |
+| `cover_art` | `get_cover_art_url`, `fetch_cover_art_batch`, `store_sgdb_api_key`, `get_sgdb_key_status`, `delete_sgdb_api_key`, `get_cover_art_options`, `set_cover_art`, `upload_custom_art`, `crop_remote_art`, `remove_custom_art`, `get_game_art_info`, `read_image_base64` |
 | `custom_games` | `add_custom_game`, `remove_custom_game`, `update_custom_game` |
 | `achievements` | `fetch_game_achievements`, `get_all_achievement_stats`, `batch_fetch_achievements`, `clear_achievement_cache` |
 | `friends` | `fetch_friends_list`, `fetch_friend_library` |
@@ -256,7 +257,7 @@ All scanners register games into the unified UUID-based `games` table with their
 
 ### 3.7 SQLite Schema (cache_db.rs)
 
-**Current schema version: v18** — Location: `%APPDATA%/app.theroost/theroost.db`
+**Current schema version: v20** — Location: `%APPDATA%/app.theroost/theroost.db`
 
 20 tables:
 
@@ -264,7 +265,7 @@ All scanners register games into the unified UUID-based `games` table with their
 |-------|---------|-----|
 | `games` | Game registry (UUID identity) | `game_id TEXT` |
 | `game_executables` | Known exe paths per game | `id INTEGER` |
-| `game_images` | Cached cover art (grid, hero, logo) | `(game_id, image_type)` |
+| `game_images` | Cover art (grid, hero, logo) + local_path for custom uploads | `(game_id, image_type)` |
 | `store_metadata` | Game metadata cache (7-day TTL) | `game_id TEXT` |
 | `playtime_snapshots` | Playtime history for trends | `id INTEGER` |
 | `game_sessions` | Play sessions (start/end/duration) | `id INTEGER` |
@@ -284,7 +285,7 @@ All scanners register games into the unified UUID-based `games` table with their
 
 Database features: WAL mode, foreign keys enforced, 7 indexes for query performance.
 
-Migration system checks `user_version` pragma and applies incremental migrations v1→v18.
+Migration system checks `user_version` pragma and applies incremental migrations v1→v20.
 
 ### 3.8 Process Monitor & Session Tracking
 
@@ -303,15 +304,19 @@ Migration system checks `user_version` pragma and applies incremental migrations
 
 ### 3.9 Cover Art System
 
-`cover_art.rs` + `steamgriddb.rs`:
+`cover_art.rs` + `steamgriddb.rs` + `image_processing.rs`:
 
-Resolution order:
-1. Check `game_images` table for cached URL (skip TTL check if `user_selected = true`)
+**Unified resolution** (all games, including Steam):
+1. Check `game_images` table for user-selected art (returns `local:{path}` for custom uploads, or remote URL)
 2. For GOG games: try GOG CDN (`api.gog.com/products/{id}`)
 3. For any game: try SteamGridDB API (search by name → fetch grid/hero/logo)
-4. Fallback to Steam CDN URL (constructed from source_id)
+4. Steam games with no custom art: return `None` (frontend falls back to CDN chains)
 
-Art picker: `get_cover_art_options` returns multiple image options from SteamGridDB; `set_cover_art` stores with `user_selected = true` (immune to TTL expiry).
+**Custom art upload** (`image_processing.rs`): Validates file (png/jpg/webp, max 10 MB) → crops to target dimensions → saves as PNG to `%APPDATA%/app.theroost/art/`. Target sizes: grid 600×900, hero 1920×620, logo 256×256. File naming: `{game_id}_{image_type}.png`.
+
+**Art Management Menu**: Centralized modal with 3 steps (overview → picker → crop). Overview shows all 3 art types with Change/Remove buttons. Picker shows SteamGridDB results + local file upload. Crop uses `react-easy-crop` with locked aspect ratios per type.
+
+**Local art display**: Custom art files are served as base64 data URLs via the `read_image_base64` backend command. When the backend returns a `local:{path}` URL, the frontend calls `readImageBase64()` to load the file as a `data:image/png;base64,...` string. This approach bypasses Tauri's asset protocol (which has scheme inconsistencies on Windows) for maximum reliability.
 
 ### 3.10 Overlay System
 
@@ -408,6 +413,8 @@ Category auto-detection from module target (e.g., `steam_client` → `api`, `ses
 | `uuid` | 1 | UUID v4 generation |
 | `winreg` | 0.52 | Windows Registry |
 | `thiserror` | 2 | Error derive |
+| `image` | 0.25 | Image decoding, crop, resize (PNG/JPEG/WebP) |
+| `base64` | 0.22 | Encode local art files as data URLs |
 | `open` | 5 | Open URLs in browser |
 | `futures` | 0.3 | Async utilities |
 
@@ -507,9 +514,12 @@ main.tsx → ErrorBoundary → App
 - `actionNeedsMainWindow()` determines whether executing an action shows/focuses main window
 - Cross-window relay: `overlay_execute_palette_action(action_id, game_id, show_main)` → Rust emits to main → main executes with real Zustand stores
 
-**GameImage** — Multi-CDN fallback image loader
-- Tries `game_images` table → Steam CDN URLs (header, capsule, hero, library capsule) → placeholder
-- Module-level `Map<string, string>` cache with 1000-entry FIFO eviction
+**GameImage** — Unified multi-source image loader
+- All games: check backend first (`get_cover_art_url`) → custom local art or SteamGridDB URL
+- Steam games without custom art: fall back to CDN chains (header, capsule, hero, library capsule)
+- Non-Steam games without custom art: placeholder
+- Local art (`local:` prefix): loaded as data URL via `readImageBase64()` backend call
+- Module-level `Map<string, string>` cache with 1000-entry FIFO eviction (caches data URLs too — one file read per session per game+type)
 - Skeleton loading with shimmer animation
 
 ### 4.4 Theme & Customization System
@@ -577,7 +587,7 @@ Key type definitions in `src/types/`:
 | `savedFiltersApi` | 3 | Filter preset CRUD |
 | `externalApi` | 1 | Multi-launcher scan |
 | `customGameApi` | 3 | Custom game add/remove/update |
-| `coverArtApi` | 7 | SteamGridDB integration, art picker |
+| `coverArtApi` | 12 | SteamGridDB integration, art picker, custom upload, crop, art management |
 | `achievementsApi` | 4 | Achievement fetch, batch, stats |
 | `friendsApi` | 2 | Friends list + library comparison |
 | `newsApi` | 2 | Game news + followed games |
@@ -597,6 +607,7 @@ Key type definitions in `src/types/`:
 ### 4.7 Image CDN & CSP
 
 CSP allows images from:
+- `https://asset.localhost`, `http://asset.localhost` — Tauri asset protocol (reserved in CSP; local art uses data URLs instead)
 - `steamcdn-a.akamaihd.net`, `cdn.akamai.steamstatic.com`, `cdn.cloudflare.steamstatic.com` — Game artwork
 - `avatars.steamstatic.com` — Player avatars
 - `media.steampowered.com` — Community icons
@@ -719,21 +730,28 @@ Cross-window communication:
 ### 5.5 Cover Art Resolution
 
 ```
-GameImage component (mount)
+GameImage component (mount) — unified for ALL games:
   → invoke("get_cover_art_url", { gameId, imageType: "grid" })
-    → cache_db: game_images lookup
-      → Hit (not expired, or user_selected) → return URL
-      → Miss → try GOG CDN (for GOG games) → try SteamGridDB → try Steam CDN
-    → Cache result in game_images table → return URL
+    → cache_db: game_images lookup (user_selected first)
+      → local_path set → return "local:{path}" → frontend readImageBase64() → data URL
+      → remote URL → return URL
+      → Miss (non-Steam) → try GOG CDN → try SteamGridDB → cache result
+      → Miss (Steam) → return None → frontend falls back to CDN chains
+    → Return URL or None
 
-Art Picker (user changes cover):
-  → invoke("get_cover_art_options", { gameId, imageType, query? })
-    → SteamGridDB: search_game(name) → fetch_grid_options(sgdb_id, limit=20)
-    → Return SgdbImageOption[] (id, url, thumb, width, height)
-  → User selects image:
-    → invoke("set_cover_art", { gameId, imageType, url })
-    → Stores with user_selected = true (immune to TTL refresh)
-    → uiSlice.bumpArtVersion() → GameImage re-renders
+Art Management Menu (user manages art):
+  → invoke("get_game_art_info", { gameId })
+    → Returns GameArtInfo[] for all 3 types (grid, hero, logo)
+  → User picks SteamGridDB image → Crop step:
+    → invoke("crop_remote_art", { gameId, imageType, imageUrl, crop })
+    → Backend downloads → crops → saves to art/ → stores local_path in DB
+  → User uploads local file → Crop step:
+    → invoke("upload_custom_art", { gameId, imageType, filePath, crop })
+    → Backend validates → crops → saves to art/ → stores local_path in DB
+  → User removes custom art:
+    → invoke("remove_custom_art", { gameId, imageType })
+    → Deletes file + DB row → reverts to default resolution
+  → clearAllImageCache(gameId) + bumpArtVersion(gameId) → GameImage re-renders
 ```
 
 ### 5.6 Activity Dashboard
@@ -822,10 +840,10 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | react-icons | 6 icon set libraries |
 | GitHub Actions | CI (lint + test) + Release (build + sign + publish) |
 
-**Test Coverage (579 total)**:
+**Test Coverage (597 total)**:
 
-**Rust (213 tests)**:
-- CacheDb: 95 tests (schema, CRUD for all 20 tables, transactions, migrations v1→v18)
+**Rust (227 tests)**:
+- CacheDb: 101 tests (schema, CRUD for all 20 tables, transactions, migrations v1→v20, custom art)
 - AI pattern matcher: 38 tests (10 extractors, fuzzy matching, confidence scoring)
 - VDF parser: 15 tests (parsing, escapes, real-world formats)
 - Steam API URL parsing: 13 tests (Steam profile/vanity URL extraction)
@@ -837,9 +855,10 @@ cloud_ai_exclude_games, cloud_ai_include_games
 - Game model: 4 tests
 - AI cloud cache: 4 tests
 - Media: 2 tests + 2 model tests + 2 bookmark tests
+- Image processing: 7 tests (validation, crop/save, delete)
 - AI Gemini provider: 1 test
 
-**Frontend (366 tests)**:
+**Frontend (370 tests)**:
 - Command palette: 72 tests (action registry, search, result capping, category prefix matching, hints, AI heuristic)
 - Activity stats: 56 tests (daily playtime, most played, session distribution, day-of-week)
 - Profile stats: 46 tests (genre DNA, playtime distribution, Metacritic scatter, leaderboard)
@@ -860,6 +879,7 @@ cloud_ai_exclude_games, cloud_ai_include_games
 - useSettings hook: 4 tests (auto-load, no re-load, cardDisplay sync, shelves init)
 - Ratings slice: 4 tests (load, save, delete, getRating for unrated)
 - StarRating component: 8 tests (render, read-only, interactive, zero value)
+- Asset URL utility: 4 tests (remote URL passthrough, local: prefix conversion)
 - Notes slice: 2 tests
 
 **Shared test factories** (`src/test/factories.ts`): `makeGame()`, `makeMeta()`, `makeFilters()`, `makeSession()`, `makeShelf()`, `ts()`. Override object pattern for all factories. `makeGame` includes `description: null` by default.
@@ -912,5 +932,7 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | v1.3.0 | Done | Personal ratings & reviews (5-star system, review text, sort/filter, AI awareness) |
 | v1.3.5 | Done | Settings tabbed layout (5 tabs, save bar outside scroll, CSS display toggle) |
 | v1.4.0 | Done | Manual playtime entry (non-Steam games, set/add modes, process monitor auto-increment) |
+| v1.4.1 | Done | Last-played tracking fix for non-Steam games |
+| v1.5.0 | Done | Custom game art upload (local upload + crop, Art Management Menu, unified resolution for all games) |
 
 See `docs/ROADMAP.md` for the full roadmap.

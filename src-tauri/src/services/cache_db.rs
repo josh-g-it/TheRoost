@@ -22,6 +22,9 @@ pub type CacheDbHandle = Arc<Mutex<CacheDb>>;
 /// `(game_id, source, source_id, name, install_path, playtime_minutes)` — overlay game row.
 pub type OverlayGameRow = (String, String, String, String, Option<String>, u32);
 
+/// `(image_type, image_url, local_path, user_selected)` — game image record.
+pub type GameImageRow = (String, String, Option<String>, bool);
+
 /// `(game_id, source_id, name, install_path, description, launch_args)` — manual game row.
 pub type ManualGameRow = (
     String,
@@ -140,6 +143,9 @@ impl CacheDb {
         }
         if current < 19 {
             self.apply_v19()?;
+        }
+        if current < 20 {
+            self.apply_v20()?;
         }
 
         // Repair: restore any entries invalidated by cache invalidation (cached_at = 0).
@@ -634,6 +640,16 @@ impl CacheDb {
 
             INSERT OR REPLACE INTO schema_version (version, applied_at)
                 VALUES (19, datetime('now'));",
+        )?;
+        Ok(())
+    }
+
+    fn apply_v20(&self) -> Result<(), AppError> {
+        self.conn.execute_batch(
+            "ALTER TABLE game_images ADD COLUMN local_path TEXT DEFAULT NULL;
+
+            INSERT OR REPLACE INTO schema_version (version, applied_at)
+                VALUES (20, datetime('now'));",
         )?;
         Ok(())
     }
@@ -1174,6 +1190,101 @@ impl CacheDb {
         let rows = stmt
             .query_map([], |row| {
                 Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Cache a locally-stored custom art image.
+    /// Sets `user_selected = true` and stores the filesystem path in `local_path`.
+    pub fn cache_game_image_local(
+        &self,
+        game_id: &str,
+        image_type: &str,
+        local_path: &str,
+        source: &str,
+        user_selected: bool,
+    ) -> Result<(), AppError> {
+        let now = chrono::Utc::now().timestamp();
+        self.conn.execute(
+            "INSERT OR REPLACE INTO game_images (game_id, image_type, image_url, source, cached_at, user_selected, local_path)
+             VALUES (?1, ?2, '', ?3, ?4, ?5, ?6)",
+            params![
+                game_id,
+                image_type,
+                source,
+                now,
+                user_selected as i32,
+                local_path
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Get the local filesystem path for a game image, if one exists.
+    pub fn get_game_image_local_path(
+        &self,
+        game_id: &str,
+        image_type: &str,
+    ) -> Result<Option<String>, AppError> {
+        let result = self.conn.query_row(
+            "SELECT local_path FROM game_images WHERE game_id = ?1 AND image_type = ?2",
+            params![game_id, image_type],
+            |row| row.get::<_, Option<String>>(0),
+        );
+        match result {
+            Ok(path) => Ok(path),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(AppError::Database(e)),
+        }
+    }
+
+    /// Get a cached image with both URL and local_path.
+    /// Returns `(image_url, local_path)` if found and still fresh (or user-selected).
+    pub fn get_game_image_with_local(
+        &self,
+        game_id: &str,
+        image_type: &str,
+    ) -> Result<Option<(String, Option<String>)>, AppError> {
+        let now = chrono::Utc::now().timestamp();
+        let result = self.conn.query_row(
+            "SELECT image_url, local_path FROM game_images
+             WHERE game_id = ?1 AND image_type = ?2
+               AND (user_selected = 1 OR (?3 - cached_at) < ?4)",
+            params![game_id, image_type, now, METADATA_TTL_SECS],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+        );
+        match result {
+            Ok(pair) => Ok(Some(pair)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(AppError::Database(e)),
+        }
+    }
+
+    /// Delete a game image record entirely (used for "reset to default").
+    pub fn delete_game_image(&self, game_id: &str, image_type: &str) -> Result<(), AppError> {
+        self.conn.execute(
+            "DELETE FROM game_images WHERE game_id = ?1 AND image_type = ?2",
+            params![game_id, image_type],
+        )?;
+        Ok(())
+    }
+
+    /// Get all image records for a game (for the Art Management Menu).
+    /// Returns `(image_type, image_url, local_path, user_selected)`.
+    pub fn get_all_game_images(&self, game_id: &str) -> Result<Vec<GameImageRow>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT image_type, image_url, local_path, user_selected
+             FROM game_images WHERE game_id = ?1",
+        )?;
+        let rows = stmt
+            .query_map(params![game_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, i32>(3)? != 0,
+                ))
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
@@ -2593,7 +2704,7 @@ mod tests {
     }
 
     #[test]
-    fn test_schema_version_is_19() {
+    fn test_schema_version_is_20() {
         let db = test_db();
         let version: u32 = db
             .conn
@@ -2601,7 +2712,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 19);
+        assert_eq!(version, 20);
     }
 
     // ── Store Metadata ──────────────────────────────────────────────
@@ -3410,6 +3521,81 @@ mod tests {
         )
         .unwrap();
         assert!(db.is_user_selected_image("game-1", "grid").unwrap());
+    }
+
+    // ── Custom Art (v1.5.0) Tests ───────────────────────────────────
+
+    #[test]
+    fn test_cache_game_image_local() {
+        let db = test_db();
+        db.cache_game_image_local("g1", "grid", "C:\\art\\g1_grid.png", "custom_upload", true)
+            .unwrap();
+        let path = db.get_game_image_local_path("g1", "grid").unwrap();
+        assert_eq!(path, Some("C:\\art\\g1_grid.png".to_string()));
+        assert!(db.is_user_selected_image("g1", "grid").unwrap());
+    }
+
+    #[test]
+    fn test_get_game_image_with_local_remote() {
+        let db = test_db();
+        // No image → None
+        assert!(db
+            .get_game_image_with_local("g1", "grid")
+            .unwrap()
+            .is_none());
+
+        // Remote image
+        db.cache_game_image("g1", "grid", "https://cdn.com/img.jpg", "sgdb", true)
+            .unwrap();
+        let result = db.get_game_image_with_local("g1", "grid").unwrap().unwrap();
+        assert_eq!(result.0, "https://cdn.com/img.jpg");
+        assert!(result.1.is_none());
+    }
+
+    #[test]
+    fn test_get_game_image_with_local_custom() {
+        let db = test_db();
+        db.cache_game_image_local("g1", "grid", "C:\\art\\g1.png", "custom_upload", true)
+            .unwrap();
+        let result = db.get_game_image_with_local("g1", "grid").unwrap().unwrap();
+        assert_eq!(result.1, Some("C:\\art\\g1.png".to_string()));
+    }
+
+    #[test]
+    fn test_delete_game_image() {
+        let db = test_db();
+        db.cache_game_image("g1", "grid", "https://cdn.com/img.jpg", "sgdb", true)
+            .unwrap();
+        assert!(db.get_game_image("g1", "grid").unwrap().is_some());
+        db.delete_game_image("g1", "grid").unwrap();
+        assert!(db.get_game_image("g1", "grid").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_get_all_game_images() {
+        let db = test_db();
+        db.cache_game_image("g1", "grid", "https://grid.jpg", "sgdb", false)
+            .unwrap();
+        db.cache_game_image("g1", "hero", "https://hero.jpg", "sgdb", true)
+            .unwrap();
+        db.cache_game_image_local("g1", "logo", "C:\\art\\g1_logo.png", "custom_upload", true)
+            .unwrap();
+        let images = db.get_all_game_images("g1").unwrap();
+        assert_eq!(images.len(), 3);
+    }
+
+    #[test]
+    fn test_local_image_replaces_remote() {
+        let db = test_db();
+        // First set a remote image
+        db.cache_game_image("g1", "grid", "https://remote.jpg", "sgdb", false)
+            .unwrap();
+        // Then upload a local one (should replace)
+        db.cache_game_image_local("g1", "grid", "C:\\art\\g1.png", "custom_upload", true)
+            .unwrap();
+        let result = db.get_game_image_with_local("g1", "grid").unwrap().unwrap();
+        assert_eq!(result.1, Some("C:\\art\\g1.png".to_string()));
+        assert!(db.is_user_selected_image("g1", "grid").unwrap());
     }
 
     // ── Custom Game Management Tests ───────────────────────────────

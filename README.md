@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.4.1-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/version-1.5.0-blue" alt="Version" />
   <img src="https://img.shields.io/badge/platform-Windows-0078D6" alt="Platform" />
   <img src="https://img.shields.io/badge/built_with-Tauri_v2-FFC131" alt="Tauri v2" />
   <img src="https://img.shields.io/badge/license-GPL--3.0-green" alt="License" />
@@ -31,7 +31,7 @@ The Roost is a multi-launcher game library manager for Windows. It unifies your 
 - **Two view modes** &mdash; Visual grid (3 sizes) with game artwork or compact sortable list (3 densities)
 - **Rich filtering** &mdash; By genre, Steam tags, features, source launcher, custom tags, favorites, hidden, rated/unrated, and saved filter presets
 - **Custom tags** &mdash; Create colored labels (15 theme-aware colors) to organize games your way
-- **Cover art** &mdash; Automatic art from SteamGridDB and GOG CDN with manual selection picker
+- **Cover art** &mdash; Automatic art from SteamGridDB and GOG CDN, plus custom image upload with crop/reposition for all games (including Steam)
 
 ### Tracking & Statistics
 - **Session tracking** &mdash; Automatic playtime monitoring via OS-level process detection with per-session history
@@ -69,14 +69,14 @@ The Roost is a multi-launcher game library manager for Windows. It unifies your 
 | Layer | Technology |
 |-------|-----------|
 | Framework | [Tauri v2](https://v2.tauri.app/) |
-| Backend | Rust (108 commands across 27 modules, SQLite via rusqlite) |
+| Backend | Rust (113 commands across 28 modules, SQLite via rusqlite) |
 | Frontend | React 18, TypeScript, Vite |
 | State | Zustand (18 slices) |
-| Database | SQLite (bundled, WAL mode, schema v19) |
+| Database | SQLite (bundled, WAL mode, schema v20) |
 | Styling | CSS variables with theme system |
 | Charts | Recharts |
 | Drag & Drop | @dnd-kit |
-| Testing | Vitest (366 tests) + Rust (212 tests) |
+| Testing | Vitest (370 tests) + Rust (227 tests) |
 
 ## Installation
 

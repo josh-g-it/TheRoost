@@ -183,6 +183,20 @@ export interface SgdbImageOption {
   height: number;
 }
 
+export interface CropArea {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface GameArtInfo {
+  imageType: string;
+  url: string | null;
+  localPath: string | null;
+  userSelected: boolean;
+}
+
 export const coverArtApi = {
   getCoverArtUrl: (gameId: string, imageType: string) =>
     invoke<string | null>("get_cover_art_url", { gameId, imageType }),
@@ -190,14 +204,34 @@ export const coverArtApi = {
   storeSgdbKey: (key: string) => invoke("store_sgdb_api_key", { key }),
   getSgdbKeyStatus: () => invoke<boolean>("get_sgdb_key_status"),
   deleteSgdbKey: () => invoke("delete_sgdb_api_key"),
-  getCoverArtOptions: (gameId: string, imageType: string, searchQuery?: string) =>
+  getCoverArtOptions: (
+    gameId: string,
+    imageType: string,
+    searchQuery?: string,
+    page?: number,
+  ) =>
     invoke<SgdbImageOption[]>("get_cover_art_options", {
       gameId,
       imageType,
       searchQuery: searchQuery ?? null,
+      page: page ?? null,
     }),
   setCoverArt: (gameId: string, imageType: string, imageUrl: string) =>
     invoke("set_cover_art", { gameId, imageType, imageUrl }),
+  uploadCustomArt: (
+    gameId: string,
+    imageType: string,
+    filePath: string,
+    crop: CropArea,
+  ) => invoke<string>("upload_custom_art", { gameId, imageType, filePath, crop }),
+  cropRemoteArt: (gameId: string, imageType: string, imageUrl: string, crop: CropArea) =>
+    invoke<string>("crop_remote_art", { gameId, imageType, imageUrl, crop }),
+  removeCustomArt: (gameId: string, imageType: string) =>
+    invoke("remove_custom_art", { gameId, imageType }),
+  getGameArtInfo: (gameId: string) =>
+    invoke<GameArtInfo[]>("get_game_art_info", { gameId }),
+  readImageBase64: (filePath: string) =>
+    invoke<string>("read_image_base64", { filePath }),
 };
 
 export const developerApi = {

@@ -1,4 +1,4 @@
-use crate::services::cache_db::CacheDbHandle;
+use crate::services::cache_db::{CacheDbHandle, GameImageRow};
 use crate::services::credential_store;
 use crate::services::steamgriddb::{fetch_gog_image, SgdbImageOption, SteamGridDbClient};
 use crate::utils::error::{AppError, MutexExt};
@@ -13,17 +13,23 @@ impl CoverArtService {
     }
 
     /// Resolve a cover art image URL for a game.
-    /// Returns None for Steam games (handled by frontend CDN chains).
+    /// Checks for user-selected custom art first (works for ALL games, including Steam).
+    /// Returns `"local:{path}"` for locally-stored art, a URL for remote art, or None.
     pub async fn resolve_image(
         &self,
         game_id: &str,
         image_type: &str,
     ) -> Result<Option<String>, AppError> {
-        // 1. Check DB cache
+        // 1. Check DB cache — prioritize user-selected / locally-stored art
         {
             let db = self.db.lock_or_err("DB")?;
-            if let Some(url) = db.get_game_image(game_id, image_type)? {
-                return Ok(Some(url));
+            if let Some((url, local_path)) = db.get_game_image_with_local(game_id, image_type)? {
+                if let Some(lp) = local_path {
+                    return Ok(Some(format!("local:{}", lp)));
+                }
+                if !url.is_empty() {
+                    return Ok(Some(url));
+                }
             }
         }
 
@@ -36,12 +42,12 @@ impl CoverArtService {
             }
         };
 
-        // 3. Skip Steam games — frontend handles them via CDN chains
+        // 3. Steam games without custom art → return None (frontend handles CDN)
         if source == "steam" {
             return Ok(None);
         }
 
-        // 3b. Don't overwrite user-selected images
+        // 4. Don't overwrite user-selected images during auto-resolve
         {
             let db = self.db.lock_or_err("DB")?;
             if db.is_user_selected_image(game_id, image_type)? {
@@ -49,7 +55,7 @@ impl CoverArtService {
             }
         }
 
-        // 4. For GOG games, try GOG public API first (no key needed)
+        // 5. For GOG games, try GOG public API first (no key needed)
         if source == "gog" {
             if let Ok(Some(url)) = fetch_gog_image(&source_id).await {
                 let db = self.db.lock().map_err(|e| {
@@ -60,14 +66,15 @@ impl CoverArtService {
             }
         }
 
-        // 5. Try SteamGridDB if API key is configured
+        // 6. Try SteamGridDB if API key is configured
         if let Ok(Some(api_key)) = credential_store::load_sgdb_api_key() {
             let client = SteamGridDbClient::new(api_key)?;
             if let Ok(Some(sgdb_id)) = client.search_game(&name).await {
                 let image_url = match image_type {
-                    "hero" => client.fetch_hero_url(sgdb_id).await,
+                    // "grid" displays landscape on cards, use hero images
+                    "grid" | "hero" => client.fetch_hero_url(sgdb_id).await,
                     "logo" => client.fetch_logo_url(sgdb_id).await,
-                    _ => client.fetch_grid_url(sgdb_id).await,
+                    _ => client.fetch_hero_url(sgdb_id).await,
                 };
                 if let Ok(Some(url)) = image_url {
                     let db = self.db.lock().map_err(|e| {
@@ -89,6 +96,7 @@ impl CoverArtService {
         game_id: &str,
         image_type: &str,
         limit: usize,
+        page: u32,
         search_query: Option<&str>,
     ) -> Result<Vec<SgdbImageOption>, AppError> {
         let (_source, _source_id, name) = {
@@ -110,13 +118,16 @@ impl CoverArtService {
         })?;
 
         match image_type {
-            "hero" => client.fetch_hero_options(sgdb_id, limit).await,
-            "logo" => client.fetch_logo_options(sgdb_id, limit).await,
-            _ => client.fetch_grid_options(sgdb_id, limit).await,
+            // "grid" picker: return portrait grid images — user crops to landscape in the UI
+            "grid" => client.fetch_grid_options(sgdb_id, limit, page).await,
+            "hero" => client.fetch_hero_options(sgdb_id, limit, page).await,
+            "logo" => client.fetch_logo_options(sgdb_id, limit, page).await,
+            _ => client.fetch_hero_options(sgdb_id, limit, page).await,
         }
     }
 
-    /// User explicitly selects a cover art image. Stores with user_selected = true.
+    /// User explicitly selects a cover art image from SteamGridDB.
+    /// Stores the remote URL with user_selected = true.
     pub fn set_user_image(
         &self,
         game_id: &str,
@@ -126,6 +137,38 @@ impl CoverArtService {
         let db = self.db.lock_or_err("DB")?;
         db.cache_game_image(game_id, image_type, image_url, "steamgriddb", true)?;
         Ok(())
+    }
+
+    /// Store a locally-cropped custom art image in the database.
+    pub fn set_user_local_image(
+        &self,
+        game_id: &str,
+        image_type: &str,
+        local_path: &str,
+    ) -> Result<(), AppError> {
+        let db = self.db.lock_or_err("DB")?;
+        db.cache_game_image_local(game_id, image_type, local_path, "custom_upload", true)?;
+        Ok(())
+    }
+
+    /// Remove custom art for a game+type. Deletes the DB row.
+    /// Returns the local_path (if any) so the caller can delete the file.
+    pub fn remove_custom_image(
+        &self,
+        game_id: &str,
+        image_type: &str,
+    ) -> Result<Option<String>, AppError> {
+        let db = self.db.lock_or_err("DB")?;
+        let local_path = db.get_game_image_local_path(game_id, image_type)?;
+        db.delete_game_image(game_id, image_type)?;
+        Ok(local_path)
+    }
+
+    /// Get all image records for a game (for the Art Management Menu).
+    /// Returns `(image_type, image_url, local_path, user_selected)`.
+    pub fn get_game_art_info(&self, game_id: &str) -> Result<Vec<GameImageRow>, AppError> {
+        let db = self.db.lock_or_err("DB")?;
+        db.get_all_game_images(game_id)
     }
 
     /// Backfill missing cover art for non-Steam games.

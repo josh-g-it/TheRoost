@@ -42,9 +42,8 @@ export function GameCard({
   const setGameTags = useTagsStore((s) => s.setGameTags);
   const saveRating = useRatingsStore((s) => s.saveRating);
   const deleteRating = useRatingsStore((s) => s.deleteRating);
-  const openArtPicker = useUIStore((s) => s.openArtPicker);
+  const openArtMenu = useUIStore((s) => s.openArtMenu);
   const artVersion = useUIStore((s) => s.artVersion[game.gameId] ?? 0);
-  const isNonSteam = game.source && game.source !== "steam";
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -97,18 +96,16 @@ export function GameCard({
         type="header"
         className="game-card__image"
       />
-      {isNonSteam && (
-        <button
-          className="game-card__edit-art"
-          onClick={(e) => {
-            e.stopPropagation();
-            openArtPicker(game.gameId, "grid");
-          }}
-          aria-label="Change cover art"
-        >
-          <AppIcon name="edit" size={14} />
-        </button>
-      )}
+      <button
+        className="game-card__edit-art"
+        onClick={(e) => {
+          e.stopPropagation();
+          openArtMenu(game.gameId);
+        }}
+        aria-label="Manage game art"
+      >
+        <AppIcon name="edit" size={14} />
+      </button>
       <button
         className={`game-card__favorite ${isFavorite ? "game-card__favorite--active" : ""}`}
         onClick={(e) => {

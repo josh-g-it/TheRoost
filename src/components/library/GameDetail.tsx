@@ -125,8 +125,7 @@ export function GameDetail({ game, onClose }: GameDetailProps) {
   const [playtimeHours, setPlaytimeHours] = useState("");
   const [playtimeMinutes, setPlaytimeMinutes] = useState("");
 
-  const openArtPicker = useUIStore((s) => s.openArtPicker);
-  const artPickerGameId = useUIStore((s) => s.artPickerGameId);
+  const openArtMenu = useUIStore((s) => s.openArtMenu);
   const artVersion = useUIStore((s) => s.artVersion[game.gameId] ?? 0);
 
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -171,16 +170,18 @@ export function GameDetail({ game, onClose }: GameDetailProps) {
     };
   }, [game.gameId, ratings]);
 
-  // Close on Escape (skip if art picker is open — it handles its own Escape)
+  const artMenuGameId = useUIStore((s) => s.artMenuGameId);
+
+  // Close on Escape (skip if art menu is open — it handles its own Escape)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !artPickerGameId) {
+      if (e.key === "Escape" && !artMenuGameId) {
         onClose();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose, artPickerGameId]);
+  }, [onClose, artMenuGameId]);
 
   // Auto-focus close button on mount
   useEffect(() => {
@@ -217,15 +218,13 @@ export function GameDetail({ game, onClose }: GameDetailProps) {
           <div className="game-detail__hero-overlay">
             <h2 className="game-detail__title">{game.name}</h2>
           </div>
-          {isNonSteam && (
-            <button
-              className="game-detail__change-hero"
-              onClick={() => openArtPicker(game.gameId, "hero")}
-              aria-label="Change hero art"
-            >
-              <AppIcon name="edit" size={14} />
-            </button>
-          )}
+          <button
+            className="game-detail__change-hero"
+            onClick={() => openArtMenu(game.gameId)}
+            aria-label="Manage game art"
+          >
+            <AppIcon name="edit" size={14} />
+          </button>
         </div>
 
         <div className="game-detail__body">
@@ -285,16 +284,10 @@ export function GameDetail({ game, onClose }: GameDetailProps) {
                 <AppIcon name={hidden ? "eye-off" : "eye"} size={16} />
                 {hidden ? "Hidden" : "Hide"}
               </Button>
-              {isNonSteam && (
-                <Button
-                  variant="ghost"
-                  size="lg"
-                  onClick={() => openArtPicker(game.gameId, "logo")}
-                >
-                  <AppIcon name="edit" size={16} />
-                  Set Icon Art
-                </Button>
-              )}
+              <Button variant="ghost" size="lg" onClick={() => openArtMenu(game.gameId)}>
+                <AppIcon name="edit" size={16} />
+                Manage Art
+              </Button>
               {game.source === "manual" && (
                 <>
                   <Button

@@ -11,7 +11,8 @@ import type {
 import type { GameSource } from "../types/game";
 import { DEFAULT_CARD_DISPLAY } from "../types";
 
-type ArtPickerType = "grid" | "hero" | "logo";
+export type ArtPickerType = "grid" | "hero" | "logo";
+type ArtMenuStep = "overview" | "picker" | "crop";
 
 interface UIState {
   viewMode: ViewMode;
@@ -46,6 +47,17 @@ interface UIState {
   openArtPicker: (gameId: string, type: ArtPickerType) => void;
   closeArtPicker: () => void;
   bumpArtVersion: (gameId: string) => void;
+  artMenuGameId: string | null;
+  artMenuStep: ArtMenuStep | null;
+  artMenuImageType: ArtPickerType | null;
+  artMenuCropSource: string | null;
+  openArtMenu: (gameId: string) => void;
+  closeArtMenu: () => void;
+  setArtMenuStep: (
+    step: ArtMenuStep,
+    imageType?: ArtPickerType,
+    cropSource?: string,
+  ) => void;
   openCustomGameDialog: () => void;
   openEditCustomGame: (gameId: string) => void;
   closeCustomGameDialog: () => void;
@@ -174,6 +186,34 @@ export const useUIStore = create<UIState>((set) => ({
         ...state.artVersion,
         [gameId]: (state.artVersion[gameId] ?? 0) + 1,
       },
+    })),
+
+  artMenuGameId: null,
+  artMenuStep: null,
+  artMenuImageType: null,
+  artMenuCropSource: null,
+
+  openArtMenu: (gameId) =>
+    set({
+      artMenuGameId: gameId,
+      artMenuStep: "overview",
+      artMenuImageType: null,
+      artMenuCropSource: null,
+    }),
+
+  closeArtMenu: () =>
+    set({
+      artMenuGameId: null,
+      artMenuStep: null,
+      artMenuImageType: null,
+      artMenuCropSource: null,
+    }),
+
+  setArtMenuStep: (step, imageType, cropSource) =>
+    set((state) => ({
+      artMenuStep: step,
+      artMenuImageType: imageType ?? state.artMenuImageType,
+      artMenuCropSource: cropSource ?? state.artMenuCropSource,
     })),
 
   openCustomGameDialog: () =>

@@ -4,8 +4,7 @@ import { Header } from "../layout/Header";
 import { LoadingSpinner } from "../common/LoadingSpinner";
 import { LibraryControls } from "./LibraryControls";
 import { GameDetail } from "./GameDetail";
-import { CoverArtPicker } from "./CoverArtPicker";
-import { clearAllImageCache } from "./GameImage";
+import { ArtManagementMenu } from "./ArtManagementMenu";
 import { Shelf } from "./Shelf";
 import { ShelfEditorDialog } from "./ShelfEditorDialog";
 import { AddCustomGameDialog } from "./AddCustomGameDialog";
@@ -85,10 +84,8 @@ export function LibraryView() {
   const customGameDialogOpen = useUIStore((s) => s.customGameDialogOpen);
   const editingCustomGameId = useUIStore((s) => s.editingCustomGameId);
   const closeCustomGameDialog = useUIStore((s) => s.closeCustomGameDialog);
-  const artPickerGameId = useUIStore((s) => s.artPickerGameId);
-  const artPickerType = useUIStore((s) => s.artPickerType);
-  const closeArtPicker = useUIStore((s) => s.closeArtPicker);
-  const bumpArtVersion = useUIStore((s) => s.bumpArtVersion);
+  const artMenuGameId = useUIStore((s) => s.artMenuGameId);
+  const artMenuStep = useUIStore((s) => s.artMenuStep);
   const favorites = useFavoritesStore((s) => s.favorites);
   const loadFavorites = useFavoritesStore((s) => s.loadFavorites);
   const gameTagMap = useTagsStore((s) => s.gameTagMap);
@@ -392,18 +389,21 @@ export function LibraryView() {
         <GameDetail game={selectedGame} onClose={() => selectGame(null)} />
       )}
 
-      {artPickerGameId && artPickerType && (
-        <CoverArtPicker
-          gameId={artPickerGameId}
-          imageType={artPickerType}
-          onSelected={() => {
-            clearAllImageCache(artPickerGameId);
-            bumpArtVersion(artPickerGameId);
-            closeArtPicker();
-          }}
-          onClose={closeArtPicker}
-        />
-      )}
+      {artMenuGameId &&
+        artMenuStep &&
+        (() => {
+          const artGame = allGames.find((g) => g.gameId === artMenuGameId);
+          if (!artGame) return null;
+          return (
+            <ArtManagementMenu
+              gameId={artMenuGameId}
+              gameName={artGame.name}
+              gameSource={artGame.source}
+              gameSourceId={artGame.sourceId}
+              onClose={() => {}}
+            />
+          );
+        })()}
 
       {editingShelfId && (
         <ShelfEditorDialog

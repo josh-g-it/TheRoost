@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import type { GameSource } from "../../types/game";
 import { coverArtApi } from "../../services/tauri";
+import { logger } from "../../utils/logger";
 import "./GameImage.css";
 
 interface GameImageProps {
@@ -97,98 +98,21 @@ function Placeholder({ name, className }: { name: string; className: string }) {
   );
 }
 
-/** Non-Steam games: resolve cover art via backend API */
-function NonSteamImage({
-  gameId,
-  name,
-  type,
-  className,
-}: {
-  gameId: string;
-  name: string;
-  type: string;
-  className: string;
-}) {
-  const key = cacheKey(gameId, type);
-  const cached = imageCache.get(key);
-
-  const [imageUrl, setImageUrl] = useState<string | null>(cached ?? null);
-  const [loaded, setLoaded] = useState(!!cached);
-  const [failed, setFailed] = useState(noImageSet.has(key));
-
-  useEffect(() => {
-    if (imageUrl || failed) return;
-
-    let cancelled = false;
-    coverArtApi
-      .getCoverArtUrl(gameId, mapImageType(type))
-      .then((url) => {
-        if (cancelled) return;
-        if (url) {
-          setImageUrl(url);
-        } else {
-          noImageSet.add(key);
-          setFailed(true);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          noImageSet.add(key);
-          setFailed(true);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [gameId, type, key, imageUrl, failed]);
-
-  const handleLoad = useCallback(() => {
-    setLoaded(true);
-    if (imageUrl) {
-      setCachedImage(key, imageUrl);
-    }
-  }, [key, imageUrl]);
-
-  const handleError = useCallback(() => {
-    setFailed(true);
-  }, []);
-
-  if (failed || !imageUrl) {
-    return <Placeholder name={name} className={className} />;
-  }
-
-  return (
-    <div className={`game-image ${className}`}>
-      {!loaded && <div className="game-image__skeleton" />}
-      <img
-        src={imageUrl}
-        alt={name}
-        className={`game-image__img ${loaded ? "game-image__img--loaded" : ""}`}
-        loading="lazy"
-        onLoad={handleLoad}
-        onError={handleError}
-      />
-    </div>
-  );
-}
-
 /** Steam games: use CDN fallback chains (existing behavior) */
 function SteamImage({
-  gameId,
   sourceId,
   name,
   type,
   className,
+  cacheKeyStr,
 }: {
-  gameId: string;
   sourceId: string;
   name: string;
   type: string;
   className: string;
+  cacheKeyStr: string;
 }) {
-  const key = cacheKey(gameId, type);
-  const cached = imageCache.get(key);
+  const cached = imageCache.get(cacheKeyStr);
   const [loaded, setLoaded] = useState(!!cached);
   const [fallbackIndex, setFallbackIndex] = useState(cached ? -1 : 0);
   const [exhausted, setExhausted] = useState(false);
@@ -205,9 +129,9 @@ function SteamImage({
   const handleLoad = useCallback(() => {
     setLoaded(true);
     if (url) {
-      setCachedImage(key, url);
+      setCachedImage(cacheKeyStr, url);
     }
-  }, [key, url]);
+  }, [cacheKeyStr, url]);
 
   const handleError = useCallback(() => {
     if (fallbackIndex === -1) {
@@ -243,6 +167,54 @@ function SteamImage({
   );
 }
 
+/** Direct image display for backend-resolved URLs (custom art, SteamGridDB cached, etc.) */
+function DirectImage({
+  url,
+  name,
+  className,
+  cacheKeyStr,
+}: {
+  url: string;
+  name: string;
+  className: string;
+  cacheKeyStr: string;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const handleLoad = useCallback(() => {
+    setLoaded(true);
+    setCachedImage(cacheKeyStr, url);
+  }, [cacheKeyStr, url]);
+
+  if (failed) {
+    return <Placeholder name={name} className={className} />;
+  }
+
+  return (
+    <div className={`game-image ${className}`}>
+      {!loaded && <div className="game-image__skeleton" />}
+      <img
+        src={url}
+        alt={name}
+        className={`game-image__img ${loaded ? "game-image__img--loaded" : ""}`}
+        loading="lazy"
+        onLoad={handleLoad}
+        onError={() => {
+          logger.warn("GameImage", "library", `DirectImage failed to load: ${url}`);
+          setFailed(true);
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * Unified game image component.
+ * ALL games check the backend first for custom/cached art.
+ * Steam games fall back to CDN chains if no custom art is set.
+ * Non-Steam games show a placeholder if no art is found.
+ */
 export function GameImage({
   gameId,
   sourceId,
@@ -252,18 +224,77 @@ export function GameImage({
   className = "",
 }: GameImageProps) {
   const isSteam = !source || source === "steam";
+  const key = cacheKey(gameId, type);
+  const cached = imageCache.get(key);
 
+  const [backendUrl, setBackendUrl] = useState<string | null>(cached ?? null);
+  const [checked, setChecked] = useState(!!cached || noImageSet.has(key));
+
+  useEffect(() => {
+    if (cached || noImageSet.has(key)) return;
+
+    let cancelled = false;
+    coverArtApi
+      .getCoverArtUrl(gameId, mapImageType(type))
+      .then(async (url) => {
+        if (cancelled) return;
+        if (url) {
+          let resolved: string;
+          if (url.startsWith("local:")) {
+            // Load local art as data URL via backend (avoids asset protocol issues)
+            resolved = await coverArtApi.readImageBase64(url.slice(6));
+          } else {
+            resolved = url;
+          }
+          if (cancelled) return;
+          setBackendUrl(resolved);
+          setCachedImage(key, resolved);
+        } else {
+          noImageSet.add(key);
+        }
+        setChecked(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          noImageSet.add(key);
+          setChecked(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [gameId, type, key, cached]);
+
+  // Backend returned a URL (custom art or cached remote art) — use it
+  if (backendUrl) {
+    return (
+      <DirectImage url={backendUrl} name={name} className={className} cacheKeyStr={key} />
+    );
+  }
+
+  // Still checking — show skeleton
+  if (!checked) {
+    return (
+      <div className={`game-image ${className}`}>
+        <div className="game-image__skeleton" />
+      </div>
+    );
+  }
+
+  // Steam games with no custom art: fall back to CDN chains
   if (isSteam) {
     return (
       <SteamImage
-        gameId={gameId}
         sourceId={sourceId}
         name={name}
         type={type}
         className={className}
+        cacheKeyStr={key}
       />
     );
   }
 
-  return <NonSteamImage gameId={gameId} name={name} type={type} className={className} />;
+  // Non-Steam games with no art: placeholder
+  return <Placeholder name={name} className={className} />;
 }

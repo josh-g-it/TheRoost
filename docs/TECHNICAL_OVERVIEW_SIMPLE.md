@@ -1,7 +1,7 @@
 # The Roost — Technical Overview (Simple)
 
 > **Audience**: Non-technical readers, project stakeholders, curious users
-> **Last updated**: 2026-02-24 (v1.4.1 — last-played tracking fix)
+> **Last updated**: 2026-02-25 (v1.5.0 — custom game art upload)
 
 ---
 
@@ -134,12 +134,17 @@ Your API keys are **never** stored in plain text files. They live in **Windows C
 ### Cover Art
 
 The Roost automatically finds cover art for your games:
-1. Checks its local cache first
+1. Checks its local cache first (including any custom art you've uploaded)
 2. For GOG games, tries GOG's image servers
 3. For any game, searches SteamGridDB (a community art database)
 4. Falls back to Steam's CDN
 
-You can also pick a specific image from SteamGridDB's options via the art picker.
+You can customize art for **any game** (including Steam games) via the **Art Management Menu**:
+- **Upload your own images** (PNG, JPG, or WebP, up to 10 MB) from your computer
+- **Pick from SteamGridDB** — browse community-submitted artwork
+- **Crop and reposition** any image before saving, with aspect-ratio-locked editing
+- Manage all three art types (cover, hero banner, and icon) from one place
+- Remove custom art anytime to revert to the default
 
 ---
 
@@ -150,7 +155,7 @@ TheRoost/
 ├── src/                    ← The user interface (what you see)
 │   ├── components/         ← Visual building blocks
 │   │   ├── layout/         ← App shell, icon rail, command center
-│   │   ├── library/        ← Game grid, cards, details, shelves, cover art picker
+│   │   ├── library/        ← Game grid, cards, details, shelves, art management
 │   │   ├── activity/       ← Activity dashboard (8 customizable card types)
 │   │   ├── profile/        ← Player profile (4 interactive charts)
 │   │   ├── sessions/       ← Reusable heatmap & timeline
@@ -197,7 +202,6 @@ TheRoost/
 
 ## What's Coming Next
 
-- **Custom Game Art Upload**: Drag-and-drop local images as cover art.
 - **Manual Shelf Assignment**: Pin specific games to shelves alongside filter-based population.
 - **Achievements Tracker**: Dedicated page with completion progress across your whole library.
 

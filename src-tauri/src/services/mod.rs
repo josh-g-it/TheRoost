@@ -6,6 +6,7 @@ pub mod cover_art;
 pub mod credential_store;
 pub mod friends_service;
 pub mod gpu_monitor;
+pub mod image_processing;
 pub mod launchers;
 pub mod library_sync;
 pub mod log_bridge;
