@@ -39,6 +39,7 @@ pub async fn scan_external_games(db: State<'_, CacheDbHandle>) -> Result<GameLib
         }
 
         let playtime = db_guard.get_manual_playtime(&game_id).unwrap_or(0);
+        let last_played = db_guard.get_last_played(&game_id).unwrap_or(None);
 
         games.push(Game {
             game_id,
@@ -51,7 +52,7 @@ pub async fn scan_external_games(db: State<'_, CacheDbHandle>) -> Result<GameLib
             last_updated: None,
             playtime_forever: playtime,
             playtime_2weeks: None,
-            last_played: None,
+            last_played,
             is_installed: true,
             img_icon_url: None,
             description: None,
@@ -64,6 +65,7 @@ pub async fn scan_external_games(db: State<'_, CacheDbHandle>) -> Result<GameLib
         let manual_count = manual_games.len();
         for (game_id, source_id, name, install_path, description, launch_args) in manual_games {
             let playtime = db_guard.get_manual_playtime(&game_id).unwrap_or(0);
+            let last_played = db_guard.get_last_played(&game_id).unwrap_or(None);
             games.push(Game {
                 game_id,
                 source: GameSource::Manual,
@@ -75,7 +77,7 @@ pub async fn scan_external_games(db: State<'_, CacheDbHandle>) -> Result<GameLib
                 last_updated: None,
                 playtime_forever: playtime,
                 playtime_2weeks: None,
-                last_played: None,
+                last_played,
                 is_installed: true,
                 img_icon_url: None,
                 description,

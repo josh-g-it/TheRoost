@@ -497,6 +497,7 @@ fn scan_once(
             for game_id in &started {
                 match db_guard.start_session(game_id, now) {
                     Ok(session_id) => {
+                        let _ = db_guard.set_last_played(game_id, now as u64);
                         tracing::info!(game_id = %game_id, session_id, "Session started (process detected)");
                         events.push(serde_json::json!({
                             "type": "started",

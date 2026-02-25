@@ -1,7 +1,7 @@
 # The Roost — Technical Overview (Simple)
 
 > **Audience**: Non-technical readers, project stakeholders, curious users
-> **Last updated**: 2026-02-24 (v1.4.0 — manual playtime entry)
+> **Last updated**: 2026-02-24 (v1.4.1 — last-played tracking fix)
 
 ---
 

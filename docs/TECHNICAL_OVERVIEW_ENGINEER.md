@@ -2,7 +2,7 @@
 
 > **Audience**: AI assistants, senior developers, contributors
 > **Last updated**: 2026-02-24
-> **Version**: 1.4.0 (Manual playtime entry)
+> **Version**: 1.4.1 (Last-played tracking fix for non-Steam games)
 
 ---
 

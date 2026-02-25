@@ -855,6 +855,21 @@ Added manual playtime editing for non-Steam games (Manual, Epic, GOG, EA, Ubisof
 
 ---
 
+# Version 1.4.1 — Last-Played Fix (Done)
+
+### v1.4.1 — Last-Played Tracking for Non-Steam Games
+Patch fix: "sort by last played" now works correctly for non-Steam games.
+
+**Root cause**: Process monitor never called `set_last_played()` when sessions started, and the external scanner hardcoded `last_played: None` when building Game objects for non-Steam games.
+
+**Fixes:**
+- Process monitor now calls `set_last_played()` on session start for all games
+- External scanner reads `last_played` from DB for both scanned launcher games and manual games
+- `update_custom_game` command reads `last_played` from DB
+- New `get_last_played()` CacheDb method
+
+---
+
 ---
 
 # Version 2.0 — Planned

@@ -192,6 +192,7 @@ pub async fn update_custom_game(
     let current_launch_args = db_guard.get_launch_args(&game_id)?;
 
     let playtime = db_guard.get_manual_playtime(&game_id).unwrap_or(0);
+    let last_played = db_guard.get_last_played(&game_id).unwrap_or(None);
 
     tracing::info!(game_id = %game_id, "Custom game updated");
 
@@ -206,7 +207,7 @@ pub async fn update_custom_game(
         last_updated: None,
         playtime_forever: playtime,
         playtime_2weeks: None,
-        last_played: None,
+        last_played,
         is_installed: true,
         img_icon_url: None,
         description: current_description,

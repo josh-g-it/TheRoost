@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/tauri-v2.0.0/crates/tauri-config-schema/schema.json",
   "productName": "The Roost",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "identifier": "app.theroost",
   "build": {
     "frontendDist": "../dist",

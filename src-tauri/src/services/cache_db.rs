@@ -869,6 +869,16 @@ impl CacheDb {
         Ok(())
     }
 
+    /// Read the last_played timestamp (Unix seconds) for a game.
+    pub fn get_last_played(&self, game_id: &str) -> Result<Option<u64>, AppError> {
+        let result = self.conn.query_row(
+            "SELECT last_played FROM games WHERE game_id = ?1",
+            params![game_id],
+            |row| row.get::<_, Option<i64>>(0),
+        )?;
+        Ok(result.map(|v| v as u64))
+    }
+
     // ── Game Install Paths & Executables ────────────────────────────
 
     /// Update the install_path for a registered game.

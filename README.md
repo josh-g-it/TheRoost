@@ -9,9 +9,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.1.2-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/version-1.4.1-blue" alt="Version" />
   <img src="https://img.shields.io/badge/platform-Windows-0078D6" alt="Platform" />
   <img src="https://img.shields.io/badge/built_with-Tauri_v2-FFC131" alt="Tauri v2" />
+  <img src="https://img.shields.io/badge/license-GPL--3.0-green" alt="License" />
 </p>
 
 ---
@@ -20,34 +21,68 @@ The Roost is a multi-launcher game library manager for Windows. It unifies your 
 
 ## Features
 
-- **Multi-launcher support** &mdash; Import games from Steam, Epic Games Store, GOG Galaxy, EA App, Ubisoft Connect, and Battle.net
-- **Session tracking** &mdash; Automatic playtime monitoring with per-session history and statistics
-- **System overlay** &mdash; Global hotkey overlay with game notes, system monitor, media controls, and audio mixer
-- **AI command palette** &mdash; Pattern-matched local commands plus optional cloud AI assistant (Gemini Flash) for natural language queries
-- **Customizable shelves** &mdash; Organize your library with drag-and-drop shelves, custom tags, and bookmarks
-- **Activity dashboard** &mdash; Configurable card layout showing recent sessions, playtime stats, achievements, and news
-- **Player profile** &mdash; Statistics and charts powered by Recharts
-- **Cover art** &mdash; Automatic art from SteamGridDB and GOG CDN with manual selection
-- **Theming** &mdash; 12 themes, 6 icon sets, 4 font families, adjustable UI scale
-- **Auto-updates** &mdash; OTA updates delivered through GitHub Releases
-- **Custom games** &mdash; Add non-launcher games with custom executables and launch arguments
+### Multi-Launcher Library
+- **6 launcher integrations** &mdash; Import games from Steam, Epic Games Store, GOG Galaxy, EA App, Ubisoft Connect, and Battle.net
+- **Custom games** &mdash; Add any game manually with its executable path, launch arguments, and description
+- **Per-game launch mode** &mdash; Choose between launching via the native launcher or directly for non-Steam games
+
+### Library Organization
+- **Customizable shelves** &mdash; Organize your library with configurable sections (Recently Played, Favorites, All Games, custom presets) with per-shelf filters and sort
+- **Two view modes** &mdash; Visual grid (3 sizes) with game artwork or compact sortable list (3 densities)
+- **Rich filtering** &mdash; By genre, Steam tags, features, source launcher, custom tags, favorites, hidden, rated/unrated, and saved filter presets
+- **Custom tags** &mdash; Create colored labels (15 theme-aware colors) to organize games your way
+- **Cover art** &mdash; Automatic art from SteamGridDB and GOG CDN with manual selection picker
+
+### Tracking & Statistics
+- **Session tracking** &mdash; Automatic playtime monitoring via OS-level process detection with per-session history
+- **Manual playtime** &mdash; Set or add playtime for non-Steam games; tracked sessions auto-accumulate
+- **Personal ratings** &mdash; 5-star rating system with half-star precision and optional reviews
+- **Activity dashboard** &mdash; Configurable card layout with 8 card types, drill-down charts, drag-and-drop reorder
+- **Player profile** &mdash; Statistics and interactive Recharts charts (genre radar, playtime histogram, Metacritic scatter, leaderboards)
+- **Game notes** &mdash; Per-game notepad and a general scratchpad, browseable from the `/notes` compendium
+
+### System Overlay
+- **Global hotkey HUD** &mdash; Ctrl+Space (configurable) opens a system-wide overlay, even while minimized to tray
+- **5 floating panels** &mdash; Command center, game notes, system monitor (CPU/RAM/GPU sparklines), media controls, audio mixer
+- **Draggable & lockable** &mdash; Each panel is freely positionable with collision detection and position persistence
+
+### AI Command Palette
+- **Pattern matcher** &mdash; Instant local AI resolves natural language queries ("installed RPGs sorted by playtime") into library actions
+- **Cloud AI** &mdash; Optional Gemini Flash integration for recommendations and conversational queries
+- **40+ searchable actions** &mdash; Navigation, themes, fonts, icon sets, view modes, sort, filter, settings shortcuts
+- **Category prefixes** &mdash; Type "theme", "sort", "filter", or "go to" for focused results
+
+### Customization
+- **12 themes** &mdash; From light to dark, with cyber-neon, sakura, arctic frost, and more
+- **6 icon sets** &mdash; Remix, Lucide, Heroicons, Ionicons, Font Awesome, Game Icons
+- **4 font families** &mdash; System, Inter, Space Grotesk, Exo 2, JetBrains Mono
+- **4 UI scales** &mdash; Minimal, Comfortable, Expanded, Large
+
+### Infrastructure
+- **Auto-updates** &mdash; OTA updates via GitHub Releases with in-app notification banner
+- **System tray** &mdash; Minimize to tray with active session display and recently played quick-launch
+- **Launch on startup** &mdash; Optional auto-start with Windows
+- **Per-route error boundaries** &mdash; A crash in one page doesn't take down the whole app
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Framework | [Tauri v2](https://v2.tauri.app/) |
-| Backend | Rust (commands, services, SQLite via rusqlite) |
+| Backend | Rust (108 commands across 27 modules, SQLite via rusqlite) |
 | Frontend | React 18, TypeScript, Vite |
-| State | Zustand |
-| Database | SQLite (bundled, WAL mode) |
+| State | Zustand (18 slices) |
+| Database | SQLite (bundled, WAL mode, schema v19) |
 | Styling | CSS variables with theme system |
+| Charts | Recharts |
+| Drag & Drop | @dnd-kit |
+| Testing | Vitest (366 tests) + Rust (212 tests) |
 
 ## Installation
 
-Download the latest installer from [Releases](https://github.com/josh-g-it/TheRoost/releases). Run `TheRoost.exe` to install.
+Download the latest installer from [Releases](https://github.com/josh-g-it/TheRoost/releases). Run the installer to set up The Roost.
 
-Existing installations (v1.1.0+) can update in-app via **Settings > Application > Check for Updates**.
+Existing installations can update in-app via **Settings > General > Check for Updates**.
 
 ## Development
 
@@ -75,6 +110,11 @@ npx vitest run
 
 # Rust tests
 cd src-tauri && cargo test
+
+# Linting
+npx eslint .
+cargo clippy -- -D warnings
+cargo fmt --check
 ```
 
 ## License
