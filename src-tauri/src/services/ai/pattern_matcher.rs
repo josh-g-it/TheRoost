@@ -25,6 +25,7 @@ impl PatternMatcher {
         extract_theme_options(&tokens, ctx, &mut actions, &mut consumed);
         extract_game_actions(&tokens, ctx, &mut actions, &mut consumed);
         extract_quick_filters(&tokens, &mut actions, &mut consumed);
+        extract_rating_filters(&tokens, &mut actions, &mut consumed);
         extract_source(&tokens, ctx, &mut actions, &mut consumed);
         extract_genre_tag_category(&tokens, ctx, &mut actions, &mut consumed);
 
@@ -250,6 +251,72 @@ fn extract_quick_filters(tokens: &[&str], actions: &mut Vec<IntentAction>, consu
     for (i, token) in tokens.iter().enumerate() {
         if fillers.contains(token) {
             consumed[i] = true;
+        }
+    }
+}
+
+/// "rated", "unrated", "highest rated", "top rated", "best rated"
+fn extract_rating_filters(
+    tokens: &[&str],
+    actions: &mut Vec<IntentAction>,
+    consumed: &mut [bool],
+) {
+    let joined = tokens.join(" ");
+
+    // "highest rated", "best rated", "top rated" → sort by personalRating + filter rated
+    let top_triggers = [
+        "highest rated",
+        "best rated",
+        "top rated",
+        "highest rating",
+        "best rating",
+    ];
+    for trigger in &top_triggers {
+        if joined.contains(trigger) {
+            actions.push(IntentAction {
+                action_id: "sort:personalRating".to_string(),
+                game_id: None,
+                description: "Sort by personal rating".to_string(),
+            });
+            actions.push(IntentAction {
+                action_id: "filter:rated".to_string(),
+                game_id: None,
+                description: "Filter: rated games".to_string(),
+            });
+            for (i, _) in tokens.iter().enumerate() {
+                consumed[i] = true;
+            }
+            return;
+        }
+    }
+
+    // Single-word filters
+    for (i, token) in tokens.iter().enumerate() {
+        if consumed[i] {
+            continue;
+        }
+        match *token {
+            "unrated" => {
+                if !actions.iter().any(|a| a.action_id == "filter:unrated") {
+                    actions.push(IntentAction {
+                        action_id: "filter:unrated".to_string(),
+                        game_id: None,
+                        description: "Filter: unrated games".to_string(),
+                    });
+                }
+                consumed[i] = true;
+            }
+            "rated" => {
+                if !actions.iter().any(|a| a.action_id == "filter:rated") {
+                    actions.push(IntentAction {
+                        action_id: "filter:rated".to_string(),
+                        game_id: None,
+                        description: "Filter: rated games".to_string(),
+                    });
+                }
+                consumed[i] = true;
+            }
+            _ => {}
         }
     }
 }
@@ -788,7 +855,11 @@ mod tests {
                 ("lastPlayed", &["last played", "recent", "recently"]),
                 ("recentlyAdded", &["recently added", "newest", "new"]),
                 ("size", &["size", "disk", "storage"]),
-                ("metacritic", &["metacritic", "rating", "score", "review"]),
+                ("metacritic", &["metacritic", "metacritic score", "critic score"]),
+                (
+                    "personalRating",
+                    &["my rating", "personal rating", "stars", "rating", "score"],
+                ),
                 ("source", &["source", "launcher", "platform"]),
             ],
             sources: vec![
@@ -859,7 +930,7 @@ mod tests {
     #[test]
     fn test_sort_by_metacritic() {
         let ctx = test_context();
-        let result = PatternMatcher::resolve("order by rating", &ctx).unwrap();
+        let result = PatternMatcher::resolve("order by metacritic", &ctx).unwrap();
         assert_eq!(result.actions[0].action_id, "sort:metacritic");
     }
 
@@ -1126,5 +1197,48 @@ mod tests {
             .collect();
         assert!(ids.contains(&"filter:source:epic"));
         assert!(ids.contains(&"genre-filter:4"));
+    }
+
+    #[test]
+    fn test_rating_filter_rated() {
+        let ctx = test_context();
+        let result = PatternMatcher::resolve("show rated games", &ctx).unwrap();
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "filter:rated"));
+    }
+
+    #[test]
+    fn test_rating_filter_unrated() {
+        let ctx = test_context();
+        let result = PatternMatcher::resolve("show unrated games", &ctx).unwrap();
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "filter:unrated"));
+    }
+
+    #[test]
+    fn test_rating_highest_rated() {
+        let ctx = test_context();
+        let result = PatternMatcher::resolve("highest rated", &ctx).unwrap();
+        let ids: Vec<&str> = result
+            .actions
+            .iter()
+            .map(|a| a.action_id.as_str())
+            .collect();
+        assert!(ids.contains(&"sort:personalRating"));
+        assert!(ids.contains(&"filter:rated"));
+    }
+
+    #[test]
+    fn test_rating_sort_by_rating() {
+        let ctx = test_context();
+        let result = PatternMatcher::resolve("sort by my rating", &ctx).unwrap();
+        assert!(result
+            .actions
+            .iter()
+            .any(|a| a.action_id == "sort:personalRating"));
     }
 }

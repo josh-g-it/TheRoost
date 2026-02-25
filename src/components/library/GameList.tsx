@@ -3,6 +3,7 @@ import { useMetadataStore } from "../../store/metadataSlice";
 import { useTagsStore } from "../../store/tagsSlice";
 import { useFavoritesStore } from "../../store/favoritesSlice";
 import { useHiddenGamesStore } from "../../store/hiddenGamesSlice";
+import { useRatingsStore } from "../../store/ratingsSlice";
 import { useUIStore } from "../../store/uiSlice";
 import type { Game, SortBy } from "../../types";
 import "./GameList.css";
@@ -20,6 +21,7 @@ export function GameList({ games, onSelectGame }: GameListProps) {
   const favorites = useFavoritesStore((s) => s.favorites);
   const toggleHidden = useHiddenGamesStore((s) => s.toggleHidden);
   const hiddenGames = useHiddenGamesStore((s) => s.hiddenGames);
+  const ratings = useRatingsStore((s) => s.ratings);
   const cardDisplay = useUIStore((s) => s.cardDisplay);
   const { sortBy, setSorting } = useUIStore();
 
@@ -71,6 +73,12 @@ export function GameList({ games, onSelectGame }: GameListProps) {
         >
           Size
         </span>
+        <span
+          className={`game-list__col game-list__col--right game-list__col--sortable ${sortBy === "personalRating" ? "game-list__col--sorted" : ""}`}
+          onClick={() => handleHeaderClick("personalRating")}
+        >
+          My Rating
+        </span>
       </div>
       {games.map((game) => (
         <GameListItem
@@ -84,6 +92,7 @@ export function GameList({ games, onSelectGame }: GameListProps) {
           userTags={getGameTags(game.gameId)}
           isHidden={hiddenGames.has(game.gameId)}
           onToggleHidden={() => toggleHidden(game.gameId)}
+          ratingValue={ratings.get(game.gameId)?.rating}
         />
       ))}
     </div>

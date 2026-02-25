@@ -25,6 +25,8 @@ import { useTagsStore } from "../../store/tagsSlice";
 import { useFavoritesStore } from "../../store/favoritesSlice";
 import { useHiddenGamesStore } from "../../store/hiddenGamesSlice";
 import { useUIStore } from "../../store/uiSlice";
+import { useRatingsStore } from "../../store/ratingsSlice";
+import { StarRating } from "../common/StarRating";
 import type { Game } from "../../types";
 import type { ScreenshotInfo } from "../../types/metadata";
 import "./GameDetail.css";
@@ -110,6 +112,15 @@ export function GameDetail({ game, onClose }: GameDetailProps) {
   const [showNotes, setShowNotes] = useState(false);
   const noteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const ratings = useRatingsStore((s) => s.ratings);
+  const saveRating = useRatingsStore((s) => s.saveRating);
+  const deleteRating = useRatingsStore((s) => s.deleteRating);
+  const currentRating = ratings.get(game.gameId);
+
+  const [showReview, setShowReview] = useState(false);
+  const [reviewContent, setReviewContent] = useState("");
+  const reviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const openArtPicker = useUIStore((s) => s.openArtPicker);
   const artPickerGameId = useUIStore((s) => s.artPickerGameId);
   const artVersion = useUIStore((s) => s.artVersion[game.gameId] ?? 0);
@@ -145,6 +156,16 @@ export function GameDetail({ game, onClose }: GameDetailProps) {
       if (noteTimerRef.current) clearTimeout(noteTimerRef.current);
     };
   }, [game.gameId]);
+
+  // Sync review content when game changes
+  useEffect(() => {
+    const r = ratings.get(game.gameId);
+    setReviewContent(r?.review ?? "");
+    if (r?.review && r.review.length > 0) setShowReview(true);
+    return () => {
+      if (reviewTimerRef.current) clearTimeout(reviewTimerRef.current);
+    };
+  }, [game.gameId, ratings]);
 
   // Close on Escape (skip if art picker is open — it handles its own Escape)
   useEffect(() => {
@@ -316,6 +337,32 @@ export function GameDetail({ game, onClose }: GameDetailProps) {
             </div>
 
             <div className="game-detail__sidebar-section">
+              <h4 className="game-detail__section-title">My Rating</h4>
+              <div className="game-detail__rating-row">
+                <StarRating
+                  value={currentRating?.rating ?? 0}
+                  onChange={(val) =>
+                    saveRating(game.gameId, val, currentRating?.review ?? null)
+                  }
+                  size={20}
+                />
+                {currentRating && (
+                  <span className="game-detail__rating-label">
+                    {(currentRating.rating / 2).toFixed(1)}
+                  </span>
+                )}
+              </div>
+              {currentRating && (
+                <button
+                  className="game-detail__rating-clear"
+                  onClick={() => deleteRating(game.gameId)}
+                >
+                  Clear rating
+                </button>
+              )}
+            </div>
+
+            <div className="game-detail__sidebar-section">
               <h4 className="game-detail__section-title">Quick Stats</h4>
               <div className="game-detail__stat-list">
                 <div className="game-detail__stat">
@@ -474,6 +521,42 @@ export function GameDetail({ game, onClose }: GameDetailProps) {
                     onAddTag={(tagId) => setGameTags(game.gameId, [...gameTagIds, tagId])}
                   />
                 </>
+              )}
+            </div>
+
+            <div className="game-detail__sidebar-section">
+              <button
+                className="game-detail__section-toggle"
+                onClick={() => setShowReview(!showReview)}
+              >
+                <h4 className="game-detail__section-title">
+                  <AppIcon name="edit" size={14} />
+                  Review
+                  {reviewContent.length > 0 && (
+                    <span className="game-detail__note-indicator" />
+                  )}
+                </h4>
+                <AppIcon name={showReview ? "chevron-up" : "chevron-down"} size={14} />
+              </button>
+              {showReview && (
+                <textarea
+                  className="game-detail__note-textarea"
+                  value={reviewContent}
+                  onChange={(e) => {
+                    const text = e.target.value;
+                    setReviewContent(text);
+                    if (reviewTimerRef.current) clearTimeout(reviewTimerRef.current);
+                    reviewTimerRef.current = setTimeout(() => {
+                      const rating = currentRating?.rating ?? 0;
+                      if (rating > 0) {
+                        saveRating(game.gameId, rating, text || null);
+                      }
+                    }, 500);
+                  }}
+                  placeholder="Write your review of this game..."
+                  rows={4}
+                  spellCheck={false}
+                />
               )}
             </div>
 

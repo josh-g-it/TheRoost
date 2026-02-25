@@ -2,7 +2,7 @@
 
 > **Audience**: AI assistants, senior developers, contributors
 > **Last updated**: 2026-02-24
-> **Version**: 1.2.0 (Route error boundaries)
+> **Version**: 1.3.5 (Settings tabbed layout)
 
 ---
 
@@ -15,9 +15,9 @@
 | Package | `the-roost` (npm + cargo) |
 | Tauri ID | `app.theroost` |
 | Framework | Tauri v2 (Rust) + React 18 + TypeScript + Vite |
-| State | Zustand (17 slices) |
+| State | Zustand (18 slices) |
 | Routing | React Router v6 data router (`createBrowserRouter`) |
-| Database | SQLite via rusqlite (bundled), WAL mode, schema v17 |
+| Database | SQLite via rusqlite (bundled), WAL mode, schema v18 |
 | Platform | Windows 11 (registry, credential manager, WASAPI, SMTC, NVML, PDH) |
 | Launch | `npm run tauri dev` |
 
@@ -47,7 +47,7 @@ TheRoost/
 │   ├── components/
 │   │   ├── common/               # AppIcon, Button, Input, LoadingSpinner, ErrorBoundary,
 │   │   │                         #   RouteErrorFallback, GenreTag, StatCard, UserTag,
-│   │   │                         #   DrillDownOverlay, EmojiPicker
+│   │   │                         #   DrillDownOverlay, EmojiPicker, StarRating
 │   │   ├── layout/               # AppLayout, IconRail, Header, CommandCenter,
 │   │   │                         #   CommandSlot, CommandPaletteResults, UpdateBanner,
 │   │   │                         #   ThemePickerPopover, QuickStatsPopover,
@@ -91,7 +91,7 @@ TheRoost/
 │   │   ├── useTrayListener.ts    # Tray event listener (navigate on tray clicks)
 │   │   └── useDebugListener.ts   # Tauri event listener for Rust logs
 │   │
-│   ├── store/                    # 17 Zustand slices (see §4.2)
+│   ├── store/                    # 18 Zustand slices (see §4.2)
 │   ├── services/
 │   │   └── tauri.ts              # invoke() wrappers — 20 API namespaces (see §4.6)
 │   │
@@ -111,23 +111,23 @@ TheRoost/
 │   │
 │   └── src/
 │       ├── main.rs               # Entry → lib::run()
-│       ├── lib.rs                # Tauri setup, tracing init, 104 commands, background services
+│       ├── lib.rs                # Tauri setup, tracing init, 108 commands, background services
 │       │
-│       ├── commands/             # 27 command modules, 104 total commands (see §3.1)
+│       ├── commands/             # 28 command modules, 108 total commands (see §3.1)
 │       │   ├── steam_scanner.rs, steam_api.rs, settings.rs, game_launcher.rs
 │       │   ├── metadata.rs, sessions.rs, tags.rs, favorites.rs
 │       │   ├── hidden_games.rs, saved_filters.rs, developer.rs
 │       │   ├── external_scanner.rs, cover_art.rs, custom_games.rs
 │       │   ├── achievements.rs, friends.rs, news.rs
-│       │   ├── overlay.rs, notes.rs, system_monitor.rs
+│       │   ├── overlay.rs, notes.rs, ratings.rs, system_monitor.rs
 │       │   ├── media_controls.rs, media_bookmarks.rs, audio.rs
 │       │   ├── ai.rs, updater.rs, autostart.rs
 │       │   └── mod.rs
 │       │
-│       ├── models/               # 19 model files, 48+ structs (see §3.3)
+│       ├── models/               # 20 model files, 50+ structs (see §3.3)
 │       │   ├── game.rs, settings.rs, metadata.rs, session.rs, tag.rs
 │       │   ├── saved_filter.rs, steam_api.rs, store_api.rs, log_event.rs
-│       │   ├── achievement.rs, friend.rs, news.rs, note.rs
+│       │   ├── achievement.rs, friend.rs, news.rs, note.rs, rating.rs
 │       │   ├── media_session.rs, media_bookmark.rs, audio.rs, system_metrics.rs
 │       │   └── mod.rs
 │       │
@@ -159,7 +159,7 @@ TheRoost/
 
 ### 3.1 Command Registry (lib.rs)
 
-104 Tauri commands across 27 modules:
+108 Tauri commands across 28 modules:
 
 | Module | Commands |
 |--------|----------|
@@ -182,6 +182,7 @@ TheRoost/
 | `news` | `fetch_game_news`, `fetch_followed_games` |
 | `overlay` | `toggle_overlay`, `hide_overlay`, `show_main_and_navigate`, `overlay_select_game`, `update_overlay_shortcut`, `get_overlay_library`, `overlay_apply_tag_filter`, `notify_settings_changed`, `overlay_execute_palette_action` |
 | `notes` | `get_game_note`, `save_game_note`, `delete_game_note`, `get_all_notes_with_content` |
+| `ratings` | `get_game_rating`, `save_game_rating`, `delete_game_rating`, `get_all_ratings` |
 | `system_monitor` | `get_system_metrics`, `kill_game_process` |
 | `media_controls` | `get_media_session`, `media_toggle_play_pause`, `media_skip_next`, `media_skip_previous` |
 | `media_bookmarks` | `get_media_bookmarks`, `add_media_bookmark`, `update_media_bookmark`, `delete_media_bookmark`, `reorder_media_bookmarks`, `open_media_bookmark` |
@@ -255,9 +256,9 @@ All scanners register games into the unified UUID-based `games` table with their
 
 ### 3.7 SQLite Schema (cache_db.rs)
 
-**Current schema version: v17** — Location: `%APPDATA%/app.theroost/theroost.db`
+**Current schema version: v18** — Location: `%APPDATA%/app.theroost/theroost.db`
 
-19 tables:
+20 tables:
 
 | Table | Purpose | PK |
 |-------|---------|-----|
@@ -279,10 +280,11 @@ All scanners register games into the unified UUID-based `games` table with their
 | `media_bookmarks` | User media bookmarks | `id TEXT` |
 | `audio_device_aliases` | Custom audio device names | `device_id TEXT` |
 | `audio_session_prefs` | Per-exe audio visibility prefs | `exe_name TEXT` |
+| `game_ratings` | Personal ratings + reviews | `game_id TEXT` |
 
 Database features: WAL mode, foreign keys enforced, 7 indexes for query performance.
 
-Migration system checks `user_version` pragma and applies incremental migrations v1→v17.
+Migration system checks `user_version` pragma and applies incremental migrations v1→v18.
 
 ### 3.8 Process Monitor & Session Tracking
 
@@ -444,7 +446,7 @@ main.tsx → ErrorBoundary → App
 
 ### 4.2 State Management (Zustand)
 
-17 independent stores:
+18 independent stores:
 
 | Slice | Key State | Purpose |
 |-------|-----------|---------|
@@ -463,6 +465,7 @@ main.tsx → ErrorBoundary → App
 | `newsSlice` | `cache: Map<gameId, NewsItem[]>`, `followedGameIds` | News cache |
 | `friendsSlice` | `friends[]`, `friendLibraries: Map` | Friends + library comparison |
 | `notesSlice` | `notes[]` | Game notes CRUD |
+| `ratingsSlice` | `ratings: Map<gameId, GameRating>` | Personal ratings + reviews |
 | `activityLayoutSlice` | `cards: ActivityCardConfig[]`, `isEditMode` | Customizable activity page layout |
 | `backgroundTasksSlice` | `activeTasks`, `progress: Map` | Background task progress tracking |
 | `debugSlice` | `events[]` (2000 max circular buffer) | Log event capture |
@@ -483,7 +486,7 @@ main.tsx → ErrorBoundary → App
 - Layout persisted in `AppSettings.activityLayout`
 
 **GameDetail** — Full game detail modal
-- Two-column layout: sidebar (play button, stats, Metacritic, developer, genres) + main (description, screenshots, achievements, notes, sessions)
+- Two-column layout: sidebar (play button, stats, personal rating + review, Metacritic, developer, genres) + main (description, screenshots, achievements, notes, sessions)
 - Achievement section with progress bar and unlocked/locked lists
 - Quick Notes section for per-game notepad
 - News section with recent articles
@@ -546,6 +549,7 @@ Key type definitions in `src/types/`:
 | `friend.ts` | `FriendInfo`, `FriendGame`, `FriendLibrary` |
 | `news.ts` | `GameNewsItem` |
 | `note.ts` | `GameNote`, `GameNoteWithName`, `GENERAL_NOTES_ID` |
+| `rating.ts` | `GameRating` |
 | `systemMetrics.ts` | `SystemSample`, `ProcessMetrics`, `SystemMetricsSnapshot` |
 | `mediaSession.ts` | `MediaPlaybackStatus`, `MediaControlsMode`, `MediaSessionSnapshot` |
 | `audio.ts` | `AudioSession`, `AudioDevice`, `AudioSnapshot` |
@@ -558,7 +562,7 @@ Key type definitions in `src/types/`:
 
 ### 4.6 Frontend API Layer (services/tauri.ts)
 
-25 API namespaces wrapping `invoke()` calls:
+26 API namespaces wrapping `invoke()` calls:
 
 | Namespace | Methods | Purpose |
 |-----------|---------|---------|
@@ -579,6 +583,7 @@ Key type definitions in `src/types/`:
 | `newsApi` | 2 | Game news + followed games |
 | `overlayApi` | 5 | Toggle, hide, navigate, shortcut, execute palette action |
 | `notesApi` | 4 | Note CRUD |
+| `ratingsApi` | 4 | Rating + review CRUD |
 | `systemMonitorApi` | 2 | System metrics, process kill |
 | `mediaControlsApi` | 4 | SMTC transport controls |
 | `mediaBookmarksApi` | 6 | Bookmark CRUD + reorder + open |
@@ -612,7 +617,7 @@ CSP allows images from:
 | Prefix | Actions matched |
 |--------|----------------|
 | `theme` | `theme:*`, `font:*`, `icons:*`, `scale:*` (24 total) |
-| `sort` | `sort:*` (7 actions) |
+| `sort` | `sort:*` (8 actions) |
 | `filter` | `filter:*`, `action:hidden-games`, `action:reset-filters` + dynamic metadata |
 | `go to` / `navigate` | `nav:*` (6 nav actions) |
 
@@ -817,11 +822,11 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | react-icons | 6 icon set libraries |
 | GitHub Actions | CI (lint + test) + Release (build + sign + publish) |
 
-**Test Coverage (559 total)**:
+**Test Coverage (579 total)**:
 
-**Rust (205 tests)**:
-- CacheDb: 90 tests (schema, CRUD for all 19 tables, transactions, migrations v1→v17)
-- AI pattern matcher: 34 tests (9 extractors, fuzzy matching, confidence scoring)
+**Rust (213 tests)**:
+- CacheDb: 95 tests (schema, CRUD for all 20 tables, transactions, migrations v1→v18)
+- AI pattern matcher: 38 tests (10 extractors, fuzzy matching, confidence scoring)
 - VDF parser: 15 tests (parsing, escapes, real-world formats)
 - Steam API URL parsing: 13 tests (Steam profile/vanity URL extraction)
 - Process monitor: 12 tests (exe matching, metrics, state)
@@ -834,8 +839,8 @@ cloud_ai_exclude_games, cloud_ai_include_games
 - Media: 2 tests + 2 model tests + 2 bookmark tests
 - AI Gemini provider: 1 test
 
-**Frontend (354 tests)**:
-- Command palette: 71 tests (action registry, search, result capping, category prefix matching, hints, AI heuristic)
+**Frontend (366 tests)**:
+- Command palette: 72 tests (action registry, search, result capping, category prefix matching, hints, AI heuristic)
 - Activity stats: 56 tests (daily playtime, most played, session distribution, day-of-week)
 - Profile stats: 46 tests (genre DNA, playtime distribution, Metacritic scatter, leaderboard)
 - Shelf filtering: 21 tests (presets, filters, search, hidden games, genre grouping)
@@ -853,6 +858,8 @@ cloud_ai_exclude_games, cloud_ai_include_games
 - Settings slice: 7 tests (load/save success/error, icon set migration)
 - useSteamLibrary hook: 6 tests (full/local mode, refresh function)
 - useSettings hook: 4 tests (auto-load, no re-load, cardDisplay sync, shelves init)
+- Ratings slice: 4 tests (load, save, delete, getRating for unrated)
+- StarRating component: 8 tests (render, read-only, interactive, zero value)
 - Notes slice: 2 tests
 
 **Shared test factories** (`src/test/factories.ts`): `makeGame()`, `makeMeta()`, `makeFilters()`, `makeSession()`, `makeShelf()`, `ts()`. Override object pattern for all factories. `makeGame` includes `description: null` by default.
@@ -902,5 +909,7 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | 12c | Done | Cloud AI integration (Gemini 3 Flash, "Ask Assistant", context builder) |
 | R1+R3 | Done | Build pipeline, NSIS installer, auto-updates (OTA), autostart |
 | v1.2.0 | Done | Route error boundaries (per-route `errorElement`, `RouteErrorFallback`) |
+| v1.3.0 | Done | Personal ratings & reviews (5-star system, review text, sort/filter, AI awareness) |
+| v1.3.5 | Done | Settings tabbed layout (5 tabs, save bar outside scroll, CSS display toggle) |
 
 See `docs/ROADMAP.md` for the full roadmap.

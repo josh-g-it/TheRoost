@@ -77,6 +77,15 @@
   font-weight: var(--font-weight-medium);
 }
 
+.game-card__rating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-size-xs);
+  color: var(--color-accent-warning, #f5a623);
+  font-weight: var(--font-weight-semibold);
+}
+
 .game-card__edit-art {
   position: absolute;
   top: var(--space-sm);
@@ -228,4 +237,12 @@
   height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+.game-card__context-rating {
+  padding: var(--space-xs) var(--space-sm);
+}
+
+.game-card__context-item--danger {
+  color: var(--color-danger, #e74c3c);
 }

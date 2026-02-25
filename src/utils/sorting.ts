@@ -1,10 +1,11 @@
-import type { Game, SortBy, SortOrder, StoreMetadata } from "../types";
+import type { Game, GameRating, SortBy, SortOrder, StoreMetadata } from "../types";
 
 export function sortGames(
   games: Game[],
   sortBy: SortBy,
   order: SortOrder,
   metadataCache?: Map<string, StoreMetadata>,
+  ratingsCache?: Map<string, GameRating>,
 ): Game[] {
   const sorted = [...games].sort((a, b) => {
     switch (sortBy) {
@@ -22,6 +23,11 @@ export function sortGames(
         const scoreA = metadataCache?.get(a.gameId)?.metacriticScore ?? -1;
         const scoreB = metadataCache?.get(b.gameId)?.metacriticScore ?? -1;
         return scoreA - scoreB;
+      }
+      case "personalRating": {
+        const ratingA = ratingsCache?.get(a.gameId)?.rating ?? -1;
+        const ratingB = ratingsCache?.get(b.gameId)?.rating ?? -1;
+        return ratingA - ratingB;
       }
       case "source":
         return a.source.localeCompare(b.source);

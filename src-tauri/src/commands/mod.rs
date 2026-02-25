@@ -16,6 +16,7 @@ pub mod metadata;
 pub mod news;
 pub mod notes;
 pub mod overlay;
+pub mod ratings;
 pub mod saved_filters;
 pub mod sessions;
 pub mod settings;

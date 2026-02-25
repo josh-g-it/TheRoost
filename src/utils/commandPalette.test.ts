@@ -106,6 +106,7 @@ const defaultSettings: AppSettings = {
     showPlaytime: true,
     showInstalledBadge: true,
     showTags: true,
+    showRatingBadge: false,
     gridSize: "medium",
     listDensity: "default",
     listColumns: [],
@@ -649,10 +650,10 @@ describe("category prefix matching", () => {
     expect(result.games).toHaveLength(0);
   });
 
-  it("'sort' shows all 7 sort actions", () => {
+  it("'sort' shows all 8 sort actions", () => {
     const result = searchPalette("sort", actions, testGames, emptyCache);
     expect(result.actions.every((a) => a.id.startsWith("sort:"))).toBe(true);
-    expect(result.actions).toHaveLength(7);
+    expect(result.actions).toHaveLength(8);
     expect(result.games).toHaveLength(0);
   });
 

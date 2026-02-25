@@ -36,6 +36,8 @@ interface UIState {
   setFilterBySteamTagNames: (names: string[]) => void;
   setFilterByCategoryIds: (ids: number[]) => void;
   setFilterBySource: (sources: GameSource[]) => void;
+  setFilterByRated: (filterByRated: "all" | "rated" | "unrated") => void;
+  setFilterByMinRating: (filterByMinRating: number) => void;
   selectGame: (id: string | null) => void;
   setCardDisplay: (options: CardDisplayOptions) => void;
   setGridSize: (size: GridSize) => void;
@@ -63,6 +65,8 @@ export const useUIStore = create<UIState>((set) => ({
     filterBySteamTagNames: [],
     filterByCategoryIds: [],
     filterBySource: [],
+    filterByRated: "all",
+    filterByMinRating: 0,
   },
   selectedGameId: null,
   cardDisplay: { ...DEFAULT_CARD_DISPLAY },
@@ -124,6 +128,16 @@ export const useUIStore = create<UIState>((set) => ({
   setFilterBySource: (filterBySource) =>
     set((state) => ({
       filters: { ...state.filters, filterBySource },
+    })),
+
+  setFilterByRated: (filterByRated) =>
+    set((state) => ({
+      filters: { ...state.filters, filterByRated },
+    })),
+
+  setFilterByMinRating: (filterByMinRating) =>
+    set((state) => ({
+      filters: { ...state.filters, filterByMinRating },
     })),
 
   selectGame: (selectedGameId) => set({ selectedGameId }),

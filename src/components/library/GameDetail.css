@@ -399,6 +399,33 @@
   border-color: var(--color-accent-primary);
 }
 
+.game-detail__rating-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.game-detail__rating-label {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-accent-warning);
+}
+
+.game-detail__rating-clear {
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  padding: 0;
+  margin-top: var(--space-xs);
+  text-decoration: underline;
+}
+
+.game-detail__rating-clear:hover {
+  color: var(--color-text-secondary);
+}
+
 .game-detail__note-indicator {
   display: inline-block;
   width: 6px;

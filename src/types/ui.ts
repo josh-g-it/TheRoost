@@ -10,7 +10,8 @@ export type SortBy =
   | "recentlyAdded"
   | "size"
   | "metacritic"
-  | "source";
+  | "source"
+  | "personalRating";
 export type SortOrder = "asc" | "desc";
 
 // ── Grid Sizing ─────────────────────────────────────────────────
@@ -34,7 +35,8 @@ export type ListColumnId =
   | "playtime"
   | "lastPlayed"
   | "size"
-  | "metacritic";
+  | "metacritic"
+  | "personalRating";
 
 export interface ListColumnConfig {
   id: ListColumnId;
@@ -54,6 +56,13 @@ export const DEFAULT_LIST_COLUMNS: ListColumnConfig[] = [
   { id: "lastPlayed", label: "Last Played", visible: true, width: 120, sortable: true },
   { id: "size", label: "Size", visible: true, width: 80, sortable: true },
   { id: "metacritic", label: "Metacritic", visible: false, width: 90, sortable: true },
+  {
+    id: "personalRating",
+    label: "My Rating",
+    visible: false,
+    width: 100,
+    sortable: true,
+  },
 ];
 
 // ── Filters ─────────────────────────────────────────────────────
@@ -67,6 +76,8 @@ export interface LibraryFilters {
   filterBySteamTagNames: string[];
   filterByCategoryIds: number[];
   filterBySource: GameSource[];
+  filterByRated: "all" | "rated" | "unrated";
+  filterByMinRating: number;
 }
 
 // ── Saved Filters ───────────────────────────────────────────────
@@ -84,6 +95,7 @@ export interface CardDisplayOptions {
   showPlaytime: boolean;
   showInstalledBadge: boolean;
   showTags: boolean;
+  showRatingBadge: boolean;
   gridSize: GridSize;
   listDensity: ListDensity;
   listColumns: ListColumnConfig[];
@@ -94,6 +106,7 @@ export const DEFAULT_CARD_DISPLAY: CardDisplayOptions = {
   showPlaytime: true,
   showInstalledBadge: true,
   showTags: true,
+  showRatingBadge: false,
   gridSize: "medium",
   listDensity: "default",
   listColumns: DEFAULT_LIST_COLUMNS,

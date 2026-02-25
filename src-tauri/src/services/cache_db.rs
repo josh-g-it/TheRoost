@@ -11,6 +11,7 @@ use crate::models::metadata::{
 };
 use crate::models::news::GameNewsItem;
 use crate::models::note::{GameNote, GameNoteWithName};
+use crate::models::rating::{GameRating, GameRatingWithName};
 use crate::models::saved_filter::SavedFilterRow;
 use crate::models::session::{GameSession, PlaytimeSnapshot};
 use crate::models::tag::Tag;
@@ -133,6 +134,9 @@ impl CacheDb {
         }
         if current < 17 {
             self.apply_v17()?;
+        }
+        if current < 18 {
+            self.apply_v18()?;
         }
 
         // Repair: restore any entries invalidated by cache invalidation (cached_at = 0).
@@ -606,6 +610,21 @@ impl CacheDb {
         Ok(())
     }
 
+    fn apply_v18(&self) -> Result<(), AppError> {
+        self.conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS game_ratings (
+                game_id TEXT PRIMARY KEY,
+                rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 10),
+                review TEXT,
+                updated_at INTEGER NOT NULL
+            );
+
+            INSERT OR REPLACE INTO schema_version (version, applied_at)
+                VALUES (18, datetime('now'));",
+        )?;
+        Ok(())
+    }
+
     // ── Audio Device Aliases ─────────────────────────────────────────
 
     /// Get all audio device aliases as (device_id, custom_name) pairs.
@@ -979,6 +998,7 @@ impl CacheDb {
             "game_images",
             "game_tags",
             "game_notes",
+            "game_ratings",
             "game_achievements",
             "game_achievement_freshness",
             "game_news",
@@ -1998,6 +2018,99 @@ impl CacheDb {
         Ok(notes)
     }
 
+    // ── Game Ratings ─────────────────────────────────────────────────
+
+    pub fn get_game_rating(&self, game_id: &str) -> Result<Option<GameRating>, AppError> {
+        let result = self.conn.query_row(
+            "SELECT game_id, rating, review, updated_at FROM game_ratings WHERE game_id = ?1",
+            params![game_id],
+            |row| {
+                Ok(GameRating {
+                    game_id: row.get(0)?,
+                    rating: row.get(1)?,
+                    review: row.get(2)?,
+                    updated_at: row.get(3)?,
+                })
+            },
+        );
+        match result {
+            Ok(r) => Ok(Some(r)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(AppError::Database(e)),
+        }
+    }
+
+    pub fn save_game_rating(
+        &self,
+        game_id: &str,
+        rating: u8,
+        review: Option<&str>,
+    ) -> Result<GameRating, AppError> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        self.conn.execute(
+            "INSERT INTO game_ratings (game_id, rating, review, updated_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(game_id) DO UPDATE SET rating = ?2, review = ?3, updated_at = ?4",
+            params![game_id, rating, review, now],
+        )?;
+        Ok(GameRating {
+            game_id: game_id.to_string(),
+            rating,
+            review: review.map(|s| s.to_string()),
+            updated_at: now,
+        })
+    }
+
+    pub fn delete_game_rating(&self, game_id: &str) -> Result<(), AppError> {
+        self.conn.execute(
+            "DELETE FROM game_ratings WHERE game_id = ?1",
+            params![game_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_all_ratings(&self) -> Result<Vec<GameRating>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT game_id, rating, review, updated_at FROM game_ratings
+             ORDER BY updated_at DESC",
+        )?;
+        let ratings = stmt
+            .query_map([], |row| {
+                Ok(GameRating {
+                    game_id: row.get(0)?,
+                    rating: row.get(1)?,
+                    review: row.get(2)?,
+                    updated_at: row.get(3)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ratings)
+    }
+
+    pub fn get_all_ratings_with_names(&self) -> Result<Vec<GameRatingWithName>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT r.game_id, r.rating, r.review, r.updated_at, g.name
+             FROM game_ratings r
+             LEFT JOIN games g ON g.game_id = r.game_id
+             ORDER BY r.rating DESC, r.updated_at DESC",
+        )?;
+        let ratings = stmt
+            .query_map([], |row| {
+                Ok(GameRatingWithName {
+                    game_id: row.get(0)?,
+                    rating: row.get(1)?,
+                    review: row.get(2)?,
+                    updated_at: row.get(3)?,
+                    game_name: row.get(4)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ratings)
+    }
+
     // ── Media Bookmarks ───────────────────────────────────────────────
 
     pub fn get_media_bookmarks(&self) -> Result<Vec<MediaBookmark>, AppError> {
@@ -2431,6 +2544,7 @@ mod tests {
             "hidden_games",
             "saved_filters",
             "game_notes",
+            "game_ratings",
         ];
         for table in &expected {
             assert!(
@@ -2443,7 +2557,7 @@ mod tests {
     }
 
     #[test]
-    fn test_schema_version_is_17() {
+    fn test_schema_version_is_18() {
         let db = test_db();
         let version: u32 = db
             .conn
@@ -2451,7 +2565,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 17);
+        assert_eq!(version, 18);
     }
 
     // ── Store Metadata ──────────────────────────────────────────────
@@ -3628,6 +3742,73 @@ mod tests {
         let notes = db.get_all_notes_with_content().unwrap();
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].content, "Hello");
+    }
+
+    // ── Game Ratings ──────────────────────────────────────────────
+
+    #[test]
+    fn test_game_rating_crud() {
+        let db = test_db();
+        let game_id = db.register_game("steam", "440", "TF2").unwrap();
+
+        // Initially empty
+        assert!(db.get_game_rating(&game_id).unwrap().is_none());
+
+        // Save rating without review
+        let saved = db.save_game_rating(&game_id, 8, None).unwrap();
+        assert_eq!(saved.rating, 8);
+        assert!(saved.review.is_none());
+
+        // Get
+        let fetched = db.get_game_rating(&game_id).unwrap().unwrap();
+        assert_eq!(fetched.rating, 8);
+        assert_eq!(fetched.game_id, game_id);
+
+        // Update with review
+        let updated = db
+            .save_game_rating(&game_id, 9, Some("Great game!"))
+            .unwrap();
+        assert_eq!(updated.rating, 9);
+        assert_eq!(updated.review.as_deref(), Some("Great game!"));
+
+        // Verify single row (upsert, not duplicate)
+        let all = db.get_all_ratings().unwrap();
+        assert_eq!(all.len(), 1);
+
+        // Delete
+        db.delete_game_rating(&game_id).unwrap();
+        assert!(db.get_game_rating(&game_id).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_get_all_ratings_with_names() {
+        let db = test_db();
+        let gid_a = db.register_game("steam", "100", "Game A").unwrap();
+        db.save_game_rating(&gid_a, 10, Some("Perfect")).unwrap();
+
+        let gid_b = db.register_game("steam", "200", "Game B").unwrap();
+        db.save_game_rating(&gid_b, 6, None).unwrap();
+
+        let with_names = db.get_all_ratings_with_names().unwrap();
+        assert_eq!(with_names.len(), 2);
+        // Sorted by rating desc — 10 first
+        assert_eq!(with_names[0].rating, 10);
+        assert_eq!(with_names[0].game_name, Some("Game A".to_string()));
+        assert_eq!(with_names[1].rating, 6);
+        assert_eq!(with_names[1].game_name, Some("Game B".to_string()));
+    }
+
+    #[test]
+    fn test_rating_deleted_with_game() {
+        let db = test_db();
+        let game_id = db
+            .register_game("steam", "999", "Deletable")
+            .unwrap();
+        db.save_game_rating(&game_id, 7, Some("Decent")).unwrap();
+        assert!(db.get_game_rating(&game_id).unwrap().is_some());
+
+        db.delete_game(&game_id).unwrap();
+        assert!(db.get_game_rating(&game_id).unwrap().is_none());
     }
 
     // ── Media Bookmarks ──────────────────────────────────────────────

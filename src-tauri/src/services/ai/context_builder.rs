@@ -12,8 +12,8 @@ Your job is to help the user manage their game library by returning structured a
 
 Available action types:
 - Navigation: nav:library, nav:activity, nav:profile, nav:notes, nav:settings
-- Sort: sort:name, sort:playtime, sort:lastPlayed, sort:metacritic, sort:size, sort:recentlyAdded, sort:source
-- Quick filters: filter:installed, filter:favorites, filter:hidden
+- Sort: sort:name, sort:playtime, sort:lastPlayed, sort:metacritic, sort:personalRating, sort:size, sort:recentlyAdded, sort:source
+- Quick filters: filter:installed, filter:favorites, filter:hidden, filter:rated, filter:unrated
 - Source filters: filter:source:steam, filter:source:epic, filter:source:gog, filter:source:ea_app, filter:source:ubisoft, filter:source:battlenet, filter:source:manual
 - Genre filters: genre-filter:{id} (use the genre name-to-ID mapping provided)
 - Tag filters: tag-filter:{exactTagName} (use exact tag names as shown per-game)
@@ -36,8 +36,8 @@ Only use action IDs from the types listed above. Use exact tag names and genre I
 }
 
 /// Format a single game line for AI context.
-/// Includes playtime and last-played date when available:
-/// "Name (42h, last played Jan 2026) - Genre1, Genre2 - Tag1, Tag2"
+/// Includes playtime, last-played date, and user rating when available:
+/// "Name (42h, last played Jan 2026, rated 4.5/5) - Genre1, Genre2 - Tag1, Tag2"
 /// Limits tags to top 3 to keep context concise.
 fn format_game_line(
     name: &str,
@@ -45,6 +45,7 @@ fn format_game_line(
     tags_json: &Option<String>,
     hours: f64,
     last_played: Option<i64>,
+    user_rating: Option<u8>,
 ) -> String {
     let genres = genres_json
         .as_deref()
@@ -69,16 +70,27 @@ fn format_game_line(
         })
         .unwrap_or_default();
 
-    // Name with optional playtime and last-played date
+    // Name with optional playtime, last-played date, and user rating
     let lp_str = last_played.filter(|&ts| ts > 0).and_then(|ts| {
         chrono::DateTime::from_timestamp(ts, 0).map(|dt| dt.format("%b %Y").to_string())
     });
+    let rating_str = user_rating.map(|r| format!("rated {:.1}/5", f64::from(r) / 2.0));
 
-    let label = match (hours >= 1.0, lp_str) {
-        (true, Some(lp)) => format!("{name} ({hours:.0}h, last played {lp})"),
-        (true, None) => format!("{name} ({hours:.0}h)"),
-        (false, Some(lp)) => format!("{name} (last played {lp})"),
-        (false, None) => name.to_string(),
+    let mut parts = Vec::new();
+    if hours >= 1.0 {
+        parts.push(format!("{hours:.0}h"));
+    }
+    if let Some(lp) = lp_str {
+        parts.push(format!("last played {lp}"));
+    }
+    if let Some(r) = rating_str {
+        parts.push(r);
+    }
+
+    let label = if parts.is_empty() {
+        name.to_string()
+    } else {
+        format!("{name} ({})", parts.join(", "))
     };
 
     if !genres.is_empty() && !tags.is_empty() {
@@ -132,13 +144,18 @@ pub fn build_library_summary(db: &CacheDb) -> Result<String, AppError> {
         parts.push(format!("Favorites: {}", names.join(", ")));
     }
 
-    // All games with genres, tags, and playtime
+    // All games with genres, tags, playtime, and user ratings
     let all_games = db.get_games_with_genre_tags()?;
+    let ratings_map: std::collections::HashMap<String, u8> = db
+        .get_all_ratings()?
+        .into_iter()
+        .map(|r| (r.game_id.clone(), r.rating))
+        .collect();
     if !all_games.is_empty() {
         let lines: Vec<String> = all_games
             .iter()
-            .map(|(_, name, genres, tags, hours, lp)| {
-                format_game_line(name, genres, tags, *hours, *lp)
+            .map(|(id, name, genres, tags, hours, lp)| {
+                format_game_line(name, genres, tags, *hours, *lp, ratings_map.get(id).copied())
             })
             .collect();
         parts.push(format!("All games:\n{}", lines.join("\n")));
@@ -212,8 +229,13 @@ pub fn build_filtered_library_summary(
         parts.push(format!("Favorites: {}", names.join(", ")));
     }
 
-    // Filtered games with genres, tags, and playtime
+    // Filtered games with genres, tags, playtime, and user ratings
     let all_games = db.get_games_with_genre_tags()?;
+    let ratings_map: std::collections::HashMap<String, u8> = db
+        .get_all_ratings()?
+        .into_iter()
+        .map(|r| (r.game_id.clone(), r.rating))
+        .collect();
 
     // Determine which IDs are in scope
     let scope_ids: HashSet<String> = match scope {
@@ -238,8 +260,8 @@ pub fn build_filtered_library_summary(
     if !filtered.is_empty() {
         let lines: Vec<String> = filtered
             .iter()
-            .map(|(_, name, genres, tags, hours, lp)| {
-                format_game_line(name, genres, tags, *hours, *lp)
+            .map(|(id, name, genres, tags, hours, lp)| {
+                format_game_line(name, genres, tags, *hours, *lp, ratings_map.get(id).copied())
             })
             .collect();
         parts.push(format!(

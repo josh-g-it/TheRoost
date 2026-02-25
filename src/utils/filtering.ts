@@ -1,4 +1,4 @@
-import type { Game, LibraryFilters, StoreMetadata } from "../types";
+import type { Game, GameRating, LibraryFilters, StoreMetadata } from "../types";
 import type { GameSource } from "../types/game";
 
 export function filterGames(
@@ -8,6 +8,7 @@ export function filterGames(
   gameTagMap?: Map<string, number[]>,
   hiddenGames?: Set<string>,
   metadataCache?: Map<string, StoreMetadata>,
+  ratingsCache?: Map<string, GameRating>,
 ): Game[] {
   return games.filter((game) => {
     // Hidden games logic: if showHiddenOnly, show ONLY hidden games
@@ -75,6 +76,18 @@ export function filterGames(
       if (!filters.filterBySource.includes(game.source)) {
         return false;
       }
+    }
+
+    // Rating filtering
+    if (filters.filterByRated === "rated") {
+      if (!ratingsCache?.has(game.gameId)) return false;
+    } else if (filters.filterByRated === "unrated") {
+      if (ratingsCache?.has(game.gameId)) return false;
+    }
+
+    if (filters.filterByMinRating > 0) {
+      const rating = ratingsCache?.get(game.gameId)?.rating ?? 0;
+      if (rating < filters.filterByMinRating) return false;
     }
 
     return true;

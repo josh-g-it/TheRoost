@@ -1,6 +1,6 @@
 [package]
 name = "the-roost"
-version = "1.2.0"
+version = "1.3.5"
 description = "Where your games come home to roost"
 authors = ["josh-g-it"]
 edition = "2021"

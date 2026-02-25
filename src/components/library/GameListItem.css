@@ -1,6 +1,6 @@
 .game-list-item {
   display: grid;
-  grid-template-columns: 24px 80px 1fr 100px 120px 80px;
+  grid-template-columns: 24px 80px 1fr 100px 120px 80px 100px;
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
@@ -66,7 +66,8 @@
 
 .game-list-item__playtime,
 .game-list-item__last-played,
-.game-list-item__size {
+.game-list-item__size,
+.game-list-item__rating {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
   text-align: right;

@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use commands::{
     achievements, ai, audio, autostart, cover_art, custom_games, developer, external_scanner,
     favorites, friends, game_launcher, hidden_games, media_bookmarks, media_controls, metadata,
-    news, notes, overlay, saved_filters, sessions, settings, steam_api, steam_scanner,
+    news, notes, overlay, ratings, saved_filters, sessions, settings, steam_api, steam_scanner,
     system_monitor, tags, updater,
 };
 use models::ai::CloudProvider;
@@ -109,6 +109,10 @@ pub fn run() {
             notes::save_game_note,
             notes::delete_game_note,
             notes::get_all_notes_with_content,
+            ratings::get_game_rating,
+            ratings::save_game_rating,
+            ratings::delete_game_rating,
+            ratings::get_all_ratings,
             system_monitor::get_system_metrics,
             system_monitor::kill_game_process,
             media_controls::get_media_session,

@@ -21,6 +21,7 @@ import type {
   GameNewsItem,
   GameNote,
   GameNoteWithName,
+  GameRating,
   SystemMetricsSnapshot,
   MediaSessionSnapshot,
   MediaBookmark,
@@ -255,6 +256,15 @@ export const notesApi = {
     invoke<GameNote>("save_game_note", { gameId, content }),
   deleteGameNote: (gameId: string) => invoke<void>("delete_game_note", { gameId }),
   getAllNotesWithContent: () => invoke<GameNoteWithName[]>("get_all_notes_with_content"),
+};
+
+export const ratingsApi = {
+  getGameRating: (gameId: string) =>
+    invoke<GameRating | null>("get_game_rating", { gameId }),
+  saveGameRating: (gameId: string, rating: number, review: string | null) =>
+    invoke<GameRating>("save_game_rating", { gameId, rating, review }),
+  deleteGameRating: (gameId: string) => invoke<void>("delete_game_rating", { gameId }),
+  getAllRatings: () => invoke<GameRating[]>("get_all_ratings"),
 };
 
 export const systemMonitorApi = {

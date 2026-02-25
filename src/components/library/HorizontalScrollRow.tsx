@@ -5,6 +5,7 @@ import { useMetadataStore } from "../../store/metadataSlice";
 import { useTagsStore } from "../../store/tagsSlice";
 import { useFavoritesStore } from "../../store/favoritesSlice";
 import { useHiddenGamesStore } from "../../store/hiddenGamesSlice";
+import { useRatingsStore } from "../../store/ratingsSlice";
 import { useUIStore } from "../../store/uiSlice";
 import { GRID_SIZE_CONFIG } from "../../types";
 import type { Game } from "../../types";
@@ -32,6 +33,7 @@ export function HorizontalScrollRow({
   const favorites = useFavoritesStore((s) => s.favorites);
   const toggleHidden = useHiddenGamesStore((s) => s.toggleHidden);
   const hiddenGames = useHiddenGamesStore((s) => s.hiddenGames);
+  const ratings = useRatingsStore((s) => s.ratings);
   const cardDisplay = useUIStore((s) => s.cardDisplay);
 
   const cardWidth = GRID_SIZE_CONFIG[cardDisplay.gridSize].minWidth;
@@ -118,6 +120,7 @@ export function HorizontalScrollRow({
               userTags={getGameTags(game.gameId)}
               isHidden={hiddenGames.has(game.gameId)}
               onToggleHidden={() => toggleHidden(game.gameId)}
+              ratingValue={ratings.get(game.gameId)?.rating}
             />
           </div>
         ))}

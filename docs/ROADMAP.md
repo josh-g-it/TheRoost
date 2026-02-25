@@ -771,48 +771,84 @@ Per-route error handling so a crash in one page doesn't take down the whole app.
 
 ---
 
+# Version 1.3.0 — Personal Ratings & Reviews (Done)
+
+### v1.3.0 — Personal Ratings & Reviews
+5-star rating system with half-star precision, optional personal reviews, full library integration, and AI awareness.
+
+**Rating System:**
+- 5-star with half-star precision (stored as 1-10 integer in SQLite `game_ratings` table, schema v18)
+- Interactive `StarRating` component with CSS `clip-path` half-star rendering
+- Rate from GameDetail sidebar (after action buttons) with clickable stars + "Clear rating" button
+- Quick-rate from game card right-click context menu with inline `StarRating`
+- Visual rating badge on game cards (toggleable via Card Display settings): star icon + numeric display (e.g., "4.5")
+- Sort library by "My Rating" (unrated games sort to bottom)
+- Filter: "Rated" / "Unrated" dropdown in library controls
+- List view: "My Rating" column with read-only star display
+
+**Personal Reviews:**
+- Per-game review text (separate from notes — notes are for personal reference, reviews are evaluative)
+- Collapsible review section in GameDetail sidebar with auto-save textarea (500ms debounce)
+- Review stored alongside rating in single `game_ratings` table
+
+**AI Integration:**
+- Pattern matcher: `extract_rating_filters()` extractor — "highest rated", "top rated", "rated", "unrated"
+- Context builder: user ratings included in game lines (e.g., "Game Name (42h, rated 4.5/5)")
+- Orchestrator: `personalRating` sort field with aliases ("my rating", "personal rating", "stars")
+
+**Command Palette:**
+- `sort:personalRating` — "Sort by My Rating"
+- `filter:rated` / `filter:unrated` — filter by rating status
+- `action:reset-filters` updated to clear rating filters
+
+**Backend:**
+- `game_ratings` table: `game_id TEXT PK, rating INTEGER CHECK(1-10), review TEXT, updated_at INTEGER`
+- CacheDb CRUD: `get_game_rating`, `save_game_rating` (upsert), `delete_game_rating`, `get_all_ratings`, `get_all_ratings_with_names`
+- 4 Tauri commands in `commands/ratings.rs`
+- Delete cascade: ratings removed with game in `delete_game()` transaction
+
+**Frontend:**
+- `ratingsSlice` Zustand store with `Map<string, GameRating>` for O(1) lookups
+- `StarRating` component (interactive + read-only modes)
+- Extended `LibraryFilters` with `filterByRated` and `filterByMinRating`
+- Extended `CardDisplayOptions` with `showRatingBadge`
+
+- 213 Rust tests + 366 frontend tests passing (579 total)
+
+---
+
+# Version 1.3.5 — Settings Tabbed Layout (Done)
+
+### v1.3.5 — Settings Tabbed Layout
+Refactored the Settings page from a single scrollable column (14 sections) into a 5-tab layout for quick access.
+
+**Tab Grouping:**
+- **General**: Application (version/updates), System Tray, Startup
+- **Connections**: Steam Connection, Cover Art (SteamGridDB), Cloud AI
+- **Appearance**: Theme Builder, Card Display
+- **Navigation**: Overlay shortcut, sidebar mode, media controls, Media Bookmarks
+- **Advanced**: Tags, Developer Settings
+
+**Implementation:**
+- Tab panels use CSS `display: none` / `display: flex` (not conditional rendering) to preserve sub-component state (TagManager, BookmarkManager, ThemeBuilder internal `useState` and mount-time fetches)
+- Save bar moved outside scroll area — always visible regardless of scroll position
+- Tab bar between save bar and scrollable content with accent-colored active indicator
+- `useBlocker` unsaved-changes modal still works across all tabs
+- Theme/scale-aware styling via CSS variables
+
+---
+
+---
+
 # Version 2.0 — Planned
 
-Each feature below will be released as an incremental minor version (v1.3.0, v1.4.0, etc.). Phases can be tackled in any order. Once all features are shipped, the app version elevates to 2.0.0.
+Each feature below ships as an incremental minor version (v1.4.0, v1.5.0, etc.). Ordered by development efficiency: quick wins extending existing systems first, then new pages surfacing existing data, then infrastructure, then major new integrations. Once all features are shipped, the app elevates to 2.0.0.
 
 ---
 
-### Phase 13: Advanced AI
-Evolve the two-tier AI system into a full conversational assistant with multi-provider support.
+### v1.4.0 — Manual Playtime Entry
+Edit total playtime for any game — essential for games from non-tracked launchers or retroactive corrections.
 
-**Conversational Assistant:**
-- Chat-style UI panel (overlay floating panel or dedicated `/assistant` route)
-- Conversation history with multi-turn context carry-over
-- Richer responses: game comparisons, personalized recommendations with reasoning
-- Action suggestions inline with conversation (e.g., "Want me to filter your library to these?")
-- Conversation persistence (SQLite-backed chat history)
-
-**Multi-Provider Support:**
-- Claude (Anthropic) integration as an alternative cloud provider
-- OpenAI (GPT) integration as an alternative cloud provider
-- Provider-agnostic abstraction layer in Rust (`AiProvider` trait)
-- Per-provider API key management in Windows Credential Manager
-- User selects preferred provider in Settings (or lets the app choose based on availability)
-- Unified prompt/context format that works across all providers
-
-**Enhanced Pattern Matcher:**
-- Learning from user corrections (e.g., "no, I meant X" adjusts future matching)
-- Compound query support (multiple intents in a single sentence)
-- Context-aware suggestions based on current library state and recent activity
-
----
-
-### Phase 14: Game Data & Personalization
-Per-game data features that give users more control over their library metadata.
-
-**Custom Game Art Upload:**
-- Drag-and-drop or file picker for local image files (PNG, JPG, WebP)
-- Apply as cover, hero banner, or icon art
-- Stored locally (app data directory) with database reference
-- Works alongside SteamGridDB — user uploads take priority
-- Image validation (dimensions, file size limits, format check)
-
-**Manual Playtime Entry:**
 - Edit total playtime for any game via GameDetail sidebar
 - Playtime adjustment dialog with hours/minutes input
 - Additive or absolute mode (add X hours vs. set to X hours)
@@ -821,29 +857,20 @@ Per-game data features that give users more control over their library metadata.
 
 ---
 
-### Phase 15: Storage & Installation Management
-Disk-aware features — see what's using space and manage installs without leaving The Roost.
+### v1.5.0 — Custom Game Art Upload
+Drag-and-drop local images as cover art — works alongside SteamGridDB with user uploads taking priority.
 
-**Storage Overview:**
-- Per-drive storage breakdown (used/free, game count per drive)
-- Per-game install size tracking (read from disk or launcher metadata)
-- Sort/filter library by install size
-- Visual storage map (treemap or bar chart by drive)
-- Identify largest installs, suggest cleanup candidates
-- Uninstall games (delegate to launcher or native uninstaller)
-
-**Steam Game Installation:**
-- Browse uninstalled Steam library games (owned but not on disk)
-- Select target drive/Steam library folder for installation
-- Installation progress tracking via Steam client IPC or polling
-- Manage Steam library folders (view/add/remove install locations)
+- Drag-and-drop or file picker for local image files (PNG, JPG, WebP)
+- Apply as cover, hero banner, or icon art
+- Stored locally (app data directory) with database reference
+- Works alongside SteamGridDB — user uploads take priority
+- Image validation (dimensions, file size limits, format check)
 
 ---
 
-### Phase 16: Shelves & Organization
-Enhance the existing shelf system with manual game assignment, plus library backup/restore.
+### v1.6.0 — Manual Shelf Assignment
+Pin specific games to shelves — hybrid mode alongside existing filter-based population.
 
-**Manual Shelf Assignment:**
 - Manually add/remove specific games to any shelf (alongside existing filter-based population)
 - Right-click context menu on game cards: "Add to Shelf >" submenu listing available shelves
 - GameDetail sidebar: shelf membership section showing which shelves a game belongs to
@@ -851,66 +878,9 @@ Enhance the existing shelf system with manual game assignment, plus library back
 - Shelves become hybrid: filter rules populate automatically + manual pins override/supplement
 - A game can be manually pinned to multiple shelves
 
-**Import/Export:**
-- Full backup: library data, settings, notes, shelves, layouts, bookmarks
-- Export formats: JSON (human-readable) and compressed binary
-- Selective import: choose which data categories to restore
-- Migration support: detect and handle schema version differences
-- Potential: import from other launchers' export formats (Playnite, etc.)
-
 ---
 
-### Phase 17: Big Picture Mode
-Full-screen, controller-friendly UI for couch gaming — navigate your entire library with a gamepad.
-
-**Controller Input:**
-- Gamepad API integration (Web Gamepad API or Tauri native plugin)
-- D-pad navigation with focus management across all interactive elements
-- A = select/launch, B = back/close, X = context action, Y = search/command palette
-- Analog stick for smooth scrolling through game grids
-- Trigger buttons for page-level navigation (LB/RB = prev/next shelf or section)
-- Configurable button mapping
-
-**Big Picture Layout:**
-- Dedicated full-screen window mode (separate from normal windowed UI)
-- Large card art, simplified navigation, reduced text density
-- Horizontal scrolling game rows (Netflix-style) grouped by shelf/collection
-- Game detail page optimized for distance viewing (large text, high-contrast)
-- Simplified settings accessible via controller
-- On-screen keyboard for search input
-
-**Overlay Integration:**
-- Controller-aware overlay variant (navigate HUD panels with gamepad)
-- Quick-launch wheel: radial menu of recent/favorite games
-- Controller vibration feedback on game launch
-
----
-
-### Phase 18: Friends Integration
-Pull in friend data from external launchers — see who's online and what they're playing, without The Roost becoming a social platform itself.
-
-**Steam Friends:**
-- Fetch friends list via Steam Web API (`GetFriendList`, `GetPlayerSummaries`)
-- Display friends with avatar, display name, and online status (Online, Offline, Away, Busy, Snooze)
-- Currently playing: show game name + duration for friends in-game
-- Friend profile view: public game library, top played games, recent activity (from Steam data)
-- Auto-refresh on configurable interval (e.g., every 60s)
-
-**Multi-Launcher Friends (stretch):**
-- GOG Galaxy friends (if API access available)
-- Epic friends (if API access available)
-- Launcher-agnostic friend model in DB: `friends` table with `source`, `source_id`, `display_name`, `avatar_url`
-
-**Friends UI:**
-- Friends list panel: sortable by status (online first), searchable by name
-- Compact sidebar or dedicated `/friends` route
-- "Now Playing" badges on friends currently in-game
-- Click friend → view their profile summary
-- Overlay integration: friends panel as a FloatingPanel HUD option
-
----
-
-### Phase 19: Achievements Tracker
+### v1.7.0 — Achievements Tracker
 Dedicated achievements page — track completion progress across your entire library at a glance.
 
 **Achievements Page (`/achievements`):**
@@ -948,30 +918,36 @@ Dedicated achievements page — track completion progress across your entire lib
 
 ---
 
-### Phase 20: Personal Ratings & Reviews
-Rate your games, write short reviews, and feed preference data into the AI assistant.
+### v1.8.0 — Game News Feed
+Curated news from your library — only the games you care about.
 
-**Rating System:**
-- 1–10 scale (or 5-star with half-stars) per game
-- Quick-rate from game card (hover action or right-click)
-- Rate from GameDetail sidebar (prominent placement near play button)
-- Sort library by personal rating
-- Filter: "rated/unrated", "rated above X"
-- Visual rating badge on game cards (optional via card display settings)
+**News Sources & Filtering:**
+- Pull from already-cached Steam news data (`cache_game_news`)
+- Default scope: favorited games + last 10–15 most recently played games
+- Configurable in Settings: choose scope (favorites only, recent only, custom list, all installed)
+- Per-game opt-out: "Mute news for this game" from GameDetail or news feed
+- Deduplicate: strip duplicates across sources (same headline/URL)
 
-**Personal Reviews:**
-- Short-form review text per game (separate from notes — notes are for personal reference, reviews are evaluative)
-- Review displayed in GameDetail alongside rating
-- Optional "recommended" / "not recommended" binary alongside numeric score
+**News Feed UI (`/news` route or Activity card):**
+- Chronological feed of news items with game cover art, game name, headline, publish date
+- Click to expand: full article body (rendered from Steam's BBCode/HTML) or "Read more" external link
+- Filter bar: by game, by date range, unread only
+- Mark as read/unread (tracked in SQLite)
+- Unread count badge on icon rail entry
 
-**AI Integration:**
-- Include ratings in cloud AI context builder (game name + rating + review snippet)
-- AI can reference user preferences: "You rated similar games highly" or "You tend to enjoy X genre"
-- Pattern matcher: "show my highest rated games", "games I rated above 8"
+**Activity Integration:**
+- "Latest News" activity card type (optional, added to card layout)
+- Shows top 3–5 recent headlines with game icons
+- Click through to full news feed
+
+**Notifications:**
+- Optional: toast notification when new news arrives for a favorited game
+- Tray menu: "X new articles" indicator
+- Overlay: news ticker or compact headlines panel (stretch)
 
 ---
 
-### Phase 21: Gaming Recap & Insights
+### v1.9.0 — Gaming Recap & Insights
 Auto-generated monthly and yearly reviews — your personal gaming wrapped.
 
 **Monthly Recap (auto-generated on 1st of each month):**
@@ -1008,32 +984,115 @@ Auto-generated monthly and yearly reviews — your personal gaming wrapped.
 
 ---
 
-### Phase 22: Game News Feed
-Curated news from your library — only the games you care about.
+### v1.10.0 — Import/Export
+Library backup and restore — data safety before bigger changes.
 
-**News Sources & Filtering:**
-- Pull from already-cached Steam news data (`cache_game_news`)
-- Default scope: favorited games + last 10–15 most recently played games
-- Configurable in Settings: choose scope (favorites only, recent only, custom list, all installed)
-- Per-game opt-out: "Mute news for this game" from GameDetail or news feed
-- Deduplicate: strip duplicates across sources (same headline/URL)
+- Full backup: library data, settings, notes, shelves, layouts, bookmarks
+- Export formats: JSON (human-readable) and compressed binary
+- Selective import: choose which data categories to restore
+- Migration support: detect and handle schema version differences
+- Potential: import from other launchers' export formats (Playnite, etc.)
 
-**News Feed UI (`/news` route or Activity card):**
-- Chronological feed of news items with game cover art, game name, headline, publish date
-- Click to expand: full article body (rendered from Steam's BBCode/HTML) or "Read more" external link
-- Filter bar: by game, by date range, unread only
-- Mark as read/unread (tracked in SQLite)
-- Unread count badge on icon rail entry
+---
 
-**Activity Integration:**
-- "Latest News" activity card type (optional, added to card layout)
-- Shows top 3–5 recent headlines with game icons
-- Click through to full news feed
+### v1.11.0 — Storage Overview
+Disk-aware features — see what's using space and manage installs without leaving The Roost.
 
-**Notifications:**
-- Optional: toast notification when new news arrives for a favorited game
-- Tray menu: "X new articles" indicator
-- Overlay: news ticker or compact headlines panel (stretch)
+- Per-drive storage breakdown (used/free, game count per drive)
+- Per-game install size tracking (read from disk or launcher metadata)
+- Sort/filter library by install size
+- Visual storage map (treemap or bar chart by drive)
+- Identify largest installs, suggest cleanup candidates
+- Uninstall games (delegate to launcher or native uninstaller)
+
+---
+
+### v1.12.0 — Enhanced Pattern Matcher
+Evolve the local AI pattern matcher with learning, compound queries, and context awareness.
+
+- Learning from user corrections (e.g., "no, I meant X" adjusts future matching)
+- Compound query support (multiple intents in a single sentence)
+- Context-aware suggestions based on current library state and recent activity
+
+---
+
+### v1.13.0 — Conversational AI Assistant
+Full conversational assistant with multi-provider support — evolve the cloud AI into a chat experience.
+
+**Conversational Assistant:**
+- Chat-style UI panel (overlay floating panel or dedicated `/assistant` route)
+- Conversation history with multi-turn context carry-over
+- Richer responses: game comparisons, personalized recommendations with reasoning
+- Action suggestions inline with conversation (e.g., "Want me to filter your library to these?")
+- Conversation persistence (SQLite-backed chat history)
+
+**Multi-Provider Support:**
+- Claude (Anthropic) integration as an alternative cloud provider
+- OpenAI (GPT) integration as an alternative cloud provider
+- Provider-agnostic abstraction layer in Rust (`AiProvider` trait)
+- Per-provider API key management in Windows Credential Manager
+- User selects preferred provider in Settings (or lets the app choose based on availability)
+- Unified prompt/context format that works across all providers
+
+---
+
+### v1.14.0 — Friends Integration
+Pull in friend data from external launchers — see who's online and what they're playing.
+
+**Steam Friends:**
+- Fetch friends list via Steam Web API (`GetFriendList`, `GetPlayerSummaries`)
+- Display friends with avatar, display name, and online status (Online, Offline, Away, Busy, Snooze)
+- Currently playing: show game name + duration for friends in-game
+- Friend profile view: public game library, top played games, recent activity (from Steam data)
+- Auto-refresh on configurable interval (e.g., every 60s)
+
+**Multi-Launcher Friends (stretch):**
+- GOG Galaxy friends (if API access available)
+- Epic friends (if API access available)
+- Launcher-agnostic friend model in DB: `friends` table with `source`, `source_id`, `display_name`, `avatar_url`
+
+**Friends UI:**
+- Friends list panel: sortable by status (online first), searchable by name
+- Compact sidebar or dedicated `/friends` route
+- "Now Playing" badges on friends currently in-game
+- Click friend → view their profile summary
+- Overlay integration: friends panel as a FloatingPanel HUD option
+
+---
+
+### v1.15.0 — Steam Game Installation
+Install Steam games from within The Roost — browse uninstalled library and manage Steam library folders.
+
+- Browse uninstalled Steam library games (owned but not on disk)
+- Select target drive/Steam library folder for installation
+- Installation progress tracking via Steam client IPC or polling
+- Manage Steam library folders (view/add/remove install locations)
+
+---
+
+### v1.16.0 — Big Picture Mode
+Full-screen, controller-friendly UI for couch gaming — navigate your entire library with a gamepad.
+
+**Controller Input:**
+- Gamepad API integration (Web Gamepad API or Tauri native plugin)
+- D-pad navigation with focus management across all interactive elements
+- A = select/launch, B = back/close, X = context action, Y = search/command palette
+- Analog stick for smooth scrolling through game grids
+- Trigger buttons for page-level navigation (LB/RB = prev/next shelf or section)
+- Configurable button mapping
+
+**Big Picture Layout:**
+- Dedicated full-screen window mode (separate from normal windowed UI)
+- Large card art, simplified navigation, reduced text density
+- Horizontal scrolling game rows (Netflix-style) grouped by shelf/collection
+- Game detail page optimized for distance viewing (large text, high-contrast)
+- Simplified settings accessible via controller
+- On-screen keyboard for search input
+
+**Overlay Integration:**
+- Controller-aware overlay variant (navigate HUD panels with gamepad)
+- Quick-launch wheel: radial menu of recent/favorite games
+- Controller vibration feedback on game launch
 
 ---
 

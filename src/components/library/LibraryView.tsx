@@ -22,6 +22,7 @@ import { useSettingsStore } from "../../store/settingsSlice";
 import { useShelvesStore, getShelvesForPersistence } from "../../store/shelvesSlice";
 import { useAchievementsStore } from "../../store/achievementsSlice";
 import { useBackgroundTasksStore } from "../../store/backgroundTasksSlice";
+import { useRatingsStore } from "../../store/ratingsSlice";
 import { processShelfGames } from "../../utils/shelfFiltering";
 import { filterGames } from "../../utils/filtering";
 import { sortGames } from "../../utils/sorting";
@@ -104,15 +105,25 @@ export function LibraryView() {
   const updateShelf = useShelvesStore((s) => s.updateShelf);
   const settings = useSettingsStore((s) => s.settings);
   const saveSettings = useSettingsStore((s) => s.saveSettings);
+  const ratings = useRatingsStore((s) => s.ratings);
+  const loadAllRatings = useRatingsStore((s) => s.loadAllRatings);
 
-  // Load tags, favorites, hidden games, saved filters on mount
+  // Load tags, favorites, hidden games, saved filters, ratings on mount
   useEffect(() => {
     loadTags();
     loadAllGameTags();
     loadFavorites();
     loadHiddenGames();
     loadSavedFilters();
-  }, [loadTags, loadAllGameTags, loadFavorites, loadHiddenGames, loadSavedFilters]);
+    loadAllRatings();
+  }, [
+    loadTags,
+    loadAllGameTags,
+    loadFavorites,
+    loadHiddenGames,
+    loadSavedFilters,
+    loadAllRatings,
+  ]);
 
   const allGames = useMemo(() => library?.games ?? [], [library?.games]);
 
@@ -147,8 +158,9 @@ export function LibraryView() {
       gameTagMap,
       hiddenGames,
       cache,
+      ratings,
     );
-    return sortGames(filtered, sortBy, sortOrder, cache);
+    return sortGames(filtered, sortBy, sortOrder, cache, ratings);
   }, [
     viewMode,
     allGames,
@@ -157,6 +169,7 @@ export function LibraryView() {
     gameTagMap,
     hiddenGames,
     cache,
+    ratings,
     sortBy,
     sortOrder,
   ]);

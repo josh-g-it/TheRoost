@@ -9,6 +9,7 @@ pub mod media_session;
 pub mod metadata;
 pub mod news;
 pub mod note;
+pub mod rating;
 pub mod saved_filter;
 pub mod session;
 pub mod settings;

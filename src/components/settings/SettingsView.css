@@ -16,11 +16,20 @@
   gap: var(--space-lg);
 }
 
-/* Sticky save bar */
+/* Bar area: save bar + tabs, always visible above scroll */
+.settings-view__bar {
+  flex-shrink: 0;
+  padding: var(--space-sm) var(--space-lg) 0;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
 .settings-view__save-bar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
   display: flex;
   align-items: center;
   gap: var(--space-md);
@@ -34,6 +43,47 @@
   font-size: var(--font-size-sm);
   color: var(--color-accent-warning);
   font-style: italic;
+}
+
+/* Tab bar */
+.settings-view__tabs {
+  display: flex;
+  gap: var(--space-xs);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.settings-view__tab {
+  padding: var(--space-sm) var(--space-md);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.settings-view__tab:hover {
+  color: var(--color-text-secondary);
+}
+
+.settings-view__tab--active {
+  color: var(--color-accent-primary);
+  border-bottom-color: var(--color-accent-primary);
+}
+
+/* Tab panels */
+.settings-view__tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.settings-view__tab-panel--active {
+  display: flex;
 }
 
 /* Sections */

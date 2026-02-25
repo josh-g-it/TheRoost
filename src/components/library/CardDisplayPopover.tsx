@@ -40,7 +40,12 @@ export function CardDisplayPopover() {
   };
 
   const toggle = (
-    key: "showGenreTags" | "showPlaytime" | "showInstalledBadge" | "showTags",
+    key:
+      | "showGenreTags"
+      | "showPlaytime"
+      | "showInstalledBadge"
+      | "showTags"
+      | "showRatingBadge",
   ) => {
     const updated = { ...cardDisplay, [key]: !cardDisplay[key] };
     setCardDisplay(updated);
@@ -102,6 +107,14 @@ export function CardDisplayPopover() {
               onChange={() => toggle("showTags")}
             />
             <span>Custom tags</span>
+          </label>
+          <label className="card-display-popover__option">
+            <input
+              type="checkbox"
+              checked={cardDisplay.showRatingBadge}
+              onChange={() => toggle("showRatingBadge")}
+            />
+            <span>My Rating</span>
           </label>
 
           {viewMode === "grid" && (

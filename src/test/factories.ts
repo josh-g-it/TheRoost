@@ -62,6 +62,8 @@ export function makeFilters(overrides: Partial<LibraryFilters> = {}): LibraryFil
     filterBySteamTagNames: [],
     filterByCategoryIds: [],
     filterBySource: [],
+    filterByRated: "all",
+    filterByMinRating: 0,
     ...overrides,
   };
 }

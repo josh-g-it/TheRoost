@@ -1,0 +1,27 @@
+.star-rating {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.star-rating--interactive .star-rating__star {
+  cursor: pointer;
+}
+
+.star-rating__star {
+  position: relative;
+  display: inline-flex;
+  color: var(--color-text-tertiary);
+}
+
+.star-rating__fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  color: var(--color-accent-warning, #f5a623);
+}
+
+.star-rating__fill--half {
+  clip-path: inset(0 50% 0 0);
+}

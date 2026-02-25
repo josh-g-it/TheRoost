@@ -201,6 +201,22 @@ const STATIC_DESCRIPTORS: ActionDescriptor[] = [
     icon: "eye",
     category: "action",
   },
+  {
+    id: "filter:rated",
+    label: "Show Rated Games Only",
+    description: "Show only games you have rated",
+    keywords: ["filter", "rated", "stars", "reviewed"],
+    icon: "star-filled",
+    category: "action",
+  },
+  {
+    id: "filter:unrated",
+    label: "Show Unrated Games",
+    description: "Show only games you have not rated yet",
+    keywords: ["filter", "unrated", "no rating", "not rated"],
+    icon: "star-outline",
+    category: "action",
+  },
 
   // Quick actions
   {
@@ -407,10 +423,19 @@ const SORT_DESCRIPTORS: (ActionDescriptor & { sortBy: string })[] = [
     id: "sort:metacritic",
     label: "Sort by Metacritic",
     description: "Sort the library by Metacritic score",
-    keywords: ["sort", "order", "rating", "score", "review"],
+    keywords: ["sort", "order", "metacritic", "critic"],
     icon: "sort-asc",
     category: "action",
     sortBy: "metacritic",
+  },
+  {
+    id: "sort:personalRating",
+    label: "Sort by My Rating",
+    description: "Sort the library by your personal star rating",
+    keywords: ["sort", "order", "rating", "stars", "my rating"],
+    icon: "star-filled",
+    category: "action",
+    sortBy: "personalRating",
   },
   {
     id: "sort:source",
@@ -569,6 +594,20 @@ const EXECUTORS: Record<string, ActionExecutor> = {
     ctx.navigate("/library");
     ctx.closeCommandCenter();
   },
+  "filter:rated": (ctx) => {
+    const ui = useUIStore.getState();
+    ui.setFilterByRated(ui.filters.filterByRated === "rated" ? "all" : "rated");
+    ui.setViewMode("list");
+    ctx.navigate("/library");
+    ctx.closeCommandCenter();
+  },
+  "filter:unrated": (ctx) => {
+    const ui = useUIStore.getState();
+    ui.setFilterByRated(ui.filters.filterByRated === "unrated" ? "all" : "unrated");
+    ui.setViewMode("list");
+    ctx.navigate("/library");
+    ctx.closeCommandCenter();
+  },
 
   // Quick actions
   "action:refresh": (ctx) => {
@@ -600,6 +639,8 @@ const EXECUTORS: Record<string, ActionExecutor> = {
     ui.setFilterBySteamTagNames([]);
     ui.setFilterByCategoryIds([]);
     ui.setFilterBySource([]);
+    ui.setFilterByRated("all");
+    ui.setFilterByMinRating(0);
     ctx.navigate("/library");
     ctx.closeCommandCenter();
   },
@@ -724,7 +765,9 @@ function resolveExecutor(actionId: string): ActionExecutor | null {
   if (actionId.startsWith("sort:")) {
     const sortBy = actionId.slice(5);
     return (ctx) => {
-      useUIStore.getState().setSorting(sortBy as SortBy);
+      const ui = useUIStore.getState();
+      ui.setSorting(sortBy as SortBy);
+      ui.setViewMode("list");
       ctx.navigate("/library");
       ctx.closeCommandCenter();
     };

@@ -86,6 +86,7 @@ export type { FriendInfo, FriendGame, FriendLibrary } from "./friend";
 export type { GameNewsItem } from "./news";
 export type { GameNote, GameNoteWithName } from "./note";
 export { GENERAL_NOTES_ID } from "./note";
+export type { GameRating } from "./rating";
 export type {
   SystemSample,
   ProcessMetrics,

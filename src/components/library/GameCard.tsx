@@ -4,7 +4,9 @@ import { GameImage } from "./GameImage";
 import { GenreTag } from "../common/GenreTag";
 import { UserTag } from "../common/UserTag";
 import { AppIcon } from "../common/AppIcon";
+import { StarRating } from "../common/StarRating";
 import { useTagsStore } from "../../store/tagsSlice";
+import { useRatingsStore } from "../../store/ratingsSlice";
 import { useUIStore } from "../../store/uiSlice";
 import { formatPlaytime } from "../../utils/formatters";
 import type { Game, GenreInfo, Tag, CardDisplayOptions } from "../../types";
@@ -20,6 +22,7 @@ interface GameCardProps {
   userTags?: Tag[];
   isHidden: boolean;
   onToggleHidden: () => void;
+  ratingValue?: number;
 }
 
 export function GameCard({
@@ -32,10 +35,13 @@ export function GameCard({
   userTags,
   isHidden,
   onToggleHidden,
+  ratingValue,
 }: GameCardProps) {
   const allTags = useTagsStore((s) => s.tags);
   const getGameTagIds = useTagsStore((s) => s.getGameTagIds);
   const setGameTags = useTagsStore((s) => s.setGameTags);
+  const saveRating = useRatingsStore((s) => s.saveRating);
+  const deleteRating = useRatingsStore((s) => s.deleteRating);
   const openArtPicker = useUIStore((s) => s.openArtPicker);
   const artVersion = useUIStore((s) => s.artVersion[game.gameId] ?? 0);
   const isNonSteam = game.source && game.source !== "steam";
@@ -139,6 +145,12 @@ export function GameCard({
           {cardDisplay.showInstalledBadge && game.isInstalled && (
             <span className="game-card__installed">Installed</span>
           )}
+          {cardDisplay.showRatingBadge && ratingValue != null && ratingValue > 0 && (
+            <span className="game-card__rating-badge">
+              <AppIcon name="star-filled" size={10} />
+              {(ratingValue / 2).toFixed(1)}
+            </span>
+          )}
         </div>
       </div>
 
@@ -163,6 +175,29 @@ export function GameCard({
             >
               {isHidden ? "Unhide game" : "Hide game"}
             </button>
+            <div className="game-card__context-separator" />
+            <div className="game-card__context-label">Rate</div>
+            <div className="game-card__context-rating">
+              <StarRating
+                value={ratingValue ?? 0}
+                onChange={(v) => {
+                  saveRating(game.gameId, v, null);
+                  setContextMenu(null);
+                }}
+                size={16}
+              />
+              {ratingValue != null && ratingValue > 0 && (
+                <button
+                  className="game-card__context-item game-card__context-item--danger"
+                  onClick={() => {
+                    deleteRating(game.gameId);
+                    setContextMenu(null);
+                  }}
+                >
+                  Clear rating
+                </button>
+              )}
+            </div>
             {allTags.length > 0 && (
               <>
                 <div className="game-card__context-separator" />

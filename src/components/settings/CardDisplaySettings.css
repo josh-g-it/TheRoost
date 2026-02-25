@@ -99,3 +99,11 @@
   font-size: var(--font-size-xs);
   color: var(--color-accent-success);
 }
+
+.card-display-settings__preview-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-size-xs);
+  color: var(--color-accent-warning, #f5a623);
+}

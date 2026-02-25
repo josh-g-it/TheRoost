@@ -1,4 +1,5 @@
 import { useUIStore } from "../../store/uiSlice";
+import { AppIcon } from "../common/AppIcon";
 import { GenreTag } from "../common/GenreTag";
 import { UserTag } from "../common/UserTag";
 import "./CardDisplaySettings.css";
@@ -46,6 +47,14 @@ export function CardDisplaySettings() {
           />
           <span>Custom tags</span>
         </label>
+        <label className="card-display-settings__option">
+          <input
+            type="checkbox"
+            checked={cardDisplay.showRatingBadge}
+            onChange={() => toggle("showRatingBadge")}
+          />
+          <span>My Rating</span>
+        </label>
       </div>
 
       <div className="card-display-settings__preview">
@@ -75,6 +84,12 @@ export function CardDisplaySettings() {
               {cardDisplay.showInstalledBadge && (
                 <span className="card-display-settings__preview-installed">
                   Installed
+                </span>
+              )}
+              {cardDisplay.showRatingBadge && (
+                <span className="card-display-settings__preview-rating">
+                  <AppIcon name="star-filled" size={10} />
+                  4.5
                 </span>
               )}
             </div>

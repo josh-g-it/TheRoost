@@ -4,6 +4,7 @@ import { GameImage } from "./GameImage";
 import { GenreTag } from "../common/GenreTag";
 import { UserTag } from "../common/UserTag";
 import { AppIcon } from "../common/AppIcon";
+import { StarRating } from "../common/StarRating";
 import { useTagsStore } from "../../store/tagsSlice";
 import { formatPlaytime, formatBytes, formatLastPlayed } from "../../utils/formatters";
 import type { Game, GenreInfo, Tag, CardDisplayOptions } from "../../types";
@@ -19,6 +20,7 @@ interface GameListItemProps {
   userTags?: Tag[];
   isHidden: boolean;
   onToggleHidden: () => void;
+  ratingValue?: number;
 }
 
 export function GameListItem({
@@ -31,6 +33,7 @@ export function GameListItem({
   userTags,
   isHidden,
   onToggleHidden,
+  ratingValue,
 }: GameListItemProps) {
   const allTags = useTagsStore((s) => s.tags);
   const getGameTagIds = useTagsStore((s) => s.getGameTagIds);
@@ -125,6 +128,9 @@ export function GameListItem({
       </span>
       <span className="game-list-item__size">
         {game.sizeOnDisk ? formatBytes(game.sizeOnDisk) : "\u2014"}
+      </span>
+      <span className="game-list-item__rating">
+        {ratingValue ? <StarRating value={ratingValue} size={12} /> : "\u2014"}
       </span>
 
       {contextMenu &&

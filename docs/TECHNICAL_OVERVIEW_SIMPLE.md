@@ -1,7 +1,7 @@
 # The Roost — Technical Overview (Simple)
 
 > **Audience**: Non-technical readers, project stakeholders, curious users
-> **Last updated**: 2026-02-24 (v1.2.0 — route error boundaries)
+> **Last updated**: 2026-02-24 (v1.3.5 — settings tabbed layout)
 
 ---
 
@@ -35,14 +35,14 @@ When you open The Roost, the frontend asks the backend for your games, settings,
 - **Multi-launcher support**: Automatically detects games from Steam, Epic, GOG, EA App, Ubisoft, and Battle.net. Plus add any game manually with its executable path.
 - **Two view modes**: Visual grid with game artwork (3 sizes) or compact sortable list (3 densities)
 - **Shelves**: Organize your library into configurable sections ("Recently Played", "Favorites", "All Games", custom). Each shelf has its own filter/sort, and can be collapsed (Netflix-style scroll), extended (two rows), or expanded (full grid). Drag and drop to reorder.
-- **Rich filtering**: By name, genre, Steam community tags, game features, source launcher, custom tags, favorites, hidden status. Save complex filter combos as presets. "Reset All Filters" command available in the palette.
+- **Rich filtering**: By name, genre, Steam community tags, game features, source launcher, custom tags, favorites, hidden status, rated/unrated. Save complex filter combos as presets. "Reset All Filters" command available in the palette.
 - **Custom tags**: Create colored labels to organize games your way. 15 theme-aware colors that look right in any theme.
 - **Favorites & hidden games**: Star games or hide them from view. Instant response with background sync.
 - **Cover art**: Automatically fetched from SteamGridDB and GOG. Pick from multiple options via the art picker, or let the app choose.
 
 ### Game Details
 Click any game to see:
-- Play button, total playtime, stats, Metacritic score, developer/publisher
+- Play button, total playtime, stats, **personal star rating + review**, Metacritic score, developer/publisher
 - Genre tags, Steam community tags, feature badges, your custom tags
 - **Achievements**: Progress bar, unlocked/locked lists with global completion percentages
 - **Quick Notes**: A per-game notepad for tracking your thoughts, strategies, progress
@@ -83,6 +83,7 @@ Each panel is a floating window you can drag, resize, lock in place, or hide. Po
 - Active sessions tracked automatically via process monitoring
 
 ### Settings
+Organized into 5 tabs for quick access: General, Connections, Appearance, Navigation, and Advanced.
 - Steam API key and account setup
 - SteamGridDB API key for cover art
 - **Theme Builder**: Mix and match 9 color palettes, 5 fonts, 6 icon styles, 4 UI scales — with instant preview
@@ -160,13 +161,13 @@ TheRoost/
 │   │   ├── setup/          ← First-time setup wizard
 │   │   └── debug/          ← Developer debug panel
 │   ├── hooks/              ← Reusable behaviors
-│   ├── store/              ← App state (17 independent stores)
+│   ├── store/              ← App state (18 independent stores)
 │   └── utils/              ← Helper functions (formatting, filtering, stats)
 │
 └── src-tauri/              ← The engine (behind the scenes)
     └── src/
-        ├── commands/       ← 104 things the frontend can ask the backend to do
-        ├── models/         ← Data shapes (48+ structs)
+        ├── commands/       ← 108 things the frontend can ask the backend to do
+        ├── models/         ← Data shapes (50+ structs)
         ├── services/       ← Core logic (39 modules: APIs, database, monitoring,
         │                      audio, media, overlay, AI, launcher scanners)
         └── utils/          ← Error handling
@@ -182,7 +183,7 @@ TheRoost/
 | **Rust** for the backend | Fast, safe, great for system access (processes, audio, GPU) |
 | **React** for the UI | Popular, well-supported, great component model |
 | **Zustand** for state | Simple, lightweight, no boilerplate |
-| **SQLite** for local data | Fast, reliable local database (19 tables) — no server needed |
+| **SQLite** for local data | Fast, reliable local database (20 tables) — no server needed |
 | **Windows Credential Manager** | Industry-standard secure storage for API keys |
 | **Recharts** for charts | React-native charting for activity & profile dashboards |
 | **@dnd-kit** for drag-and-drop | Accessible, performant drag-and-drop for activity cards |
@@ -196,10 +197,10 @@ TheRoost/
 
 ## What's Coming Next
 
-- **Big Picture Mode**: Full-screen, controller-friendly interface for couch gaming.
-- **Advanced AI**: Multi-turn chat, multi-provider support (Claude, OpenAI, Gemini).
+- **Manual Playtime Entry**: Edit total playtime for any game — essential for non-tracked launchers.
+- **Custom Game Art Upload**: Drag-and-drop local images as cover art.
+- **Manual Shelf Assignment**: Pin specific games to shelves alongside filter-based population.
 - **Achievements Tracker**: Dedicated page with completion progress across your whole library.
-- **Personal Ratings & Reviews**: Rate games, write reviews, feed preferences into AI.
 
 ---
 

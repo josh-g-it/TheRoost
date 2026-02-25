@@ -29,6 +29,7 @@ const SORT_OPTIONS: { value: SortBy; label: string }[] = [
   { value: "recentlyAdded", label: "Recently Added" },
   { value: "size", label: "Size" },
   { value: "metacritic", label: "Metacritic" },
+  { value: "personalRating", label: "My Rating" },
   { value: "source", label: "Launcher" },
 ];
 
@@ -55,6 +56,7 @@ export function LibraryControls({
     setFilterBySteamTagNames,
     setFilterByCategoryIds,
     setFilterBySource,
+    setFilterByRated,
   } = useUIStore();
 
   const tags = useTagsStore((s) => s.tags);
@@ -119,6 +121,7 @@ export function LibraryControls({
     setFilterBySteamTagNames(f.filterBySteamTagNames ?? []);
     setFilterByCategoryIds(f.filterByCategoryIds ?? []);
     setFilterBySource(f.filterBySource ?? []);
+    setFilterByRated(f.filterByRated ?? "all");
     if (filter.sortBy) {
       setSorting(filter.sortBy, filter.sortOrder);
     }
@@ -154,6 +157,7 @@ export function LibraryControls({
     filters.filterBySteamTagNames.length > 0 ||
     filters.filterByCategoryIds.length > 0 ||
     (filters.filterBySource ?? []).length > 0 ||
+    filters.filterByRated !== "all" ||
     filters.searchQuery.length > 0;
 
   const handleSaveFilter = async () => {
@@ -315,6 +319,19 @@ export function LibraryControls({
             <CategoryFilterPopover />
 
             <SourceFilterPopover />
+
+            <select
+              className="library-controls__sort"
+              value={filters.filterByRated}
+              onChange={(e) =>
+                setFilterByRated(e.target.value as "all" | "rated" | "unrated")
+              }
+              aria-label="Filter by rating"
+            >
+              <option value="all">All games</option>
+              <option value="rated">Rated</option>
+              <option value="unrated">Unrated</option>
+            </select>
 
             {savedFilters.length > 0 && (
               <div className="library-controls__saved-filters" ref={savedFiltersRef}>

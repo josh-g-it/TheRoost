@@ -6,7 +6,7 @@
 
 .game-list__header {
   display: grid;
-  grid-template-columns: 24px 80px 1fr 100px 120px 80px;
+  grid-template-columns: 24px 80px 1fr 100px 120px 80px 100px;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
   font-size: var(--font-size-xs);
@@ -47,13 +47,13 @@
 
 /* Compact density */
 .game-list--compact .game-list__header {
-  grid-template-columns: 24px 60px 1fr 100px 120px 80px;
+  grid-template-columns: 24px 60px 1fr 100px 120px 80px 100px;
   padding: 2px var(--space-md);
   gap: var(--space-sm);
 }
 
 .game-list--compact .game-list-item {
-  grid-template-columns: 24px 60px 1fr 100px 120px 80px;
+  grid-template-columns: 24px 60px 1fr 100px 120px 80px 100px;
   padding: 2px var(--space-md);
   gap: var(--space-sm);
 }
