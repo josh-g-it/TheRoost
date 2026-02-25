@@ -92,6 +92,7 @@ export function makeShelf(overrides: Partial<ShelfConfig> = {}): ShelfConfig {
     displayMode: "expanded",
     groupByGenre: false,
     maxVisibleGames: null,
+    pinnedGameIds: [],
     ...overrides,
   };
 }

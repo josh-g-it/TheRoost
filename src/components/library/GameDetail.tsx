@@ -26,6 +26,7 @@ import { useFavoritesStore } from "../../store/favoritesSlice";
 import { useHiddenGamesStore } from "../../store/hiddenGamesSlice";
 import { useUIStore } from "../../store/uiSlice";
 import { useRatingsStore } from "../../store/ratingsSlice";
+import { useShelvesStore } from "../../store/shelvesSlice";
 import { StarRating } from "../common/StarRating";
 import type { Game } from "../../types";
 import type { ScreenshotInfo } from "../../types/metadata";
@@ -34,6 +35,7 @@ import "./GameDetail.css";
 interface GameDetailProps {
   game: Game;
   onClose: () => void;
+  onPersistShelves: () => void;
 }
 
 function MetacriticBadge({ score, url }: { score: number; url?: string | null }) {
@@ -162,7 +164,7 @@ function ScreenshotGallery({ screenshots }: { screenshots: ScreenshotInfo[] }) {
   );
 }
 
-export function GameDetail({ game, onClose }: GameDetailProps) {
+export function GameDetail({ game, onClose, onPersistShelves }: GameDetailProps) {
   const navigate = useNavigate();
   const { launch, launching } = useGameLaunch();
   const metadata = useMetadataStore((s) => s.getMetadata(game.gameId));
@@ -176,6 +178,9 @@ export function GameDetail({ game, onClose }: GameDetailProps) {
   const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
   const hiddenGames = useHiddenGamesStore((s) => s.hiddenGames);
   const toggleHidden = useHiddenGamesStore((s) => s.toggleHidden);
+  const shelves = useShelvesStore((s) => s.shelves);
+  const pinGameToShelf = useShelvesStore((s) => s.pinGameToShelf);
+  const unpinGameFromShelf = useShelvesStore((s) => s.unpinGameFromShelf);
 
   const gameTagIds = getGameTagIds(game.gameId);
   const gameTags = allTags.filter((t) => gameTagIds.includes(t.id));
@@ -698,6 +703,32 @@ export function GameDetail({ game, onClose }: GameDetailProps) {
                 </>
               )}
             </div>
+
+            {shelves.length > 0 && (
+              <div className="game-detail__sidebar-section">
+                <h4 className="game-detail__section-title">Shelves</h4>
+                <div className="game-detail__shelf-pins">
+                  {shelves.map((shelf) => {
+                    const isPinned = shelf.pinnedGameIds.includes(game.gameId);
+                    return (
+                      <button
+                        key={shelf.id}
+                        className={`game-detail__shelf-chip ${isPinned ? "game-detail__shelf-chip--active" : ""}`}
+                        onClick={() => {
+                          if (isPinned) unpinGameFromShelf(shelf.id, game.gameId);
+                          else pinGameToShelf(shelf.id, game.gameId);
+                          onPersistShelves();
+                        }}
+                        aria-pressed={isPinned}
+                      >
+                        <AppIcon name={isPinned ? "pin" : "plus"} size={12} />
+                        {shelf.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="game-detail__sidebar-section">
               <button

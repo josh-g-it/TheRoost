@@ -169,4 +169,71 @@ describe("shelvesSlice", () => {
       expect(useShelvesStore.getState().editingShelfId).toBeNull();
     });
   });
+
+  // ── initShelves pinnedGameIds backfill ─────────────────────
+
+  describe("initShelves — pinnedGameIds backfill", () => {
+    it("backfills pinnedGameIds to [] when missing", () => {
+      const shelf = makeShelf({ id: "s1" });
+      const oldShelf = { ...shelf } as Record<string, unknown>;
+      delete oldShelf.pinnedGameIds;
+      useShelvesStore.getState().initShelves([oldShelf as never]);
+      expect(useShelvesStore.getState().shelves[0].pinnedGameIds).toEqual([]);
+    });
+
+    it("preserves existing pinnedGameIds", () => {
+      useShelvesStore
+        .getState()
+        .initShelves([makeShelf({ id: "s1", pinnedGameIds: ["g1", "g2"] })]);
+      expect(useShelvesStore.getState().shelves[0].pinnedGameIds).toEqual(["g1", "g2"]);
+    });
+  });
+
+  // ── pinGameToShelf ─────────────────────────────────────────
+
+  describe("pinGameToShelf", () => {
+    it("adds a gameId to the shelf's pinnedGameIds", () => {
+      useShelvesStore
+        .getState()
+        .initShelves([makeShelf({ id: "s1", pinnedGameIds: [] })]);
+      useShelvesStore.getState().pinGameToShelf("s1", "game-123");
+      expect(useShelvesStore.getState().shelves[0].pinnedGameIds).toContain("game-123");
+    });
+
+    it("does not duplicate if already pinned", () => {
+      useShelvesStore
+        .getState()
+        .initShelves([makeShelf({ id: "s1", pinnedGameIds: ["game-123"] })]);
+      useShelvesStore.getState().pinGameToShelf("s1", "game-123");
+      expect(useShelvesStore.getState().shelves[0].pinnedGameIds).toHaveLength(1);
+    });
+
+    it("only updates the targeted shelf", () => {
+      useShelvesStore
+        .getState()
+        .initShelves([makeShelf({ id: "s1" }), makeShelf({ id: "s2" })]);
+      useShelvesStore.getState().pinGameToShelf("s1", "game-123");
+      expect(useShelvesStore.getState().shelves[1].pinnedGameIds).toEqual([]);
+    });
+  });
+
+  // ── unpinGameFromShelf ─────────────────────────────────────
+
+  describe("unpinGameFromShelf", () => {
+    it("removes a gameId from pinnedGameIds", () => {
+      useShelvesStore
+        .getState()
+        .initShelves([makeShelf({ id: "s1", pinnedGameIds: ["game-123", "game-456"] })]);
+      useShelvesStore.getState().unpinGameFromShelf("s1", "game-123");
+      expect(useShelvesStore.getState().shelves[0].pinnedGameIds).toEqual(["game-456"]);
+    });
+
+    it("is a no-op if the game is not pinned", () => {
+      useShelvesStore
+        .getState()
+        .initShelves([makeShelf({ id: "s1", pinnedGameIds: ["game-456"] })]);
+      useShelvesStore.getState().unpinGameFromShelf("s1", "game-123");
+      expect(useShelvesStore.getState().shelves[0].pinnedGameIds).toEqual(["game-456"]);
+    });
+  });
 });

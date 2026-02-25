@@ -340,6 +340,84 @@ describe("processShelfGames", () => {
     });
   });
 
+  describe("pinnedGameIds", () => {
+    it("pinned games appear even if they don't match the preset filter", () => {
+      // "installed" preset excludes g2 (not installed), but g2 is pinned
+      const shelf = makeShelf({ preset: "installed", pinnedGameIds: ["g2"] });
+      const result = processShelfGames(
+        games,
+        shelf,
+        "",
+        favorites,
+        emptyTagMap,
+        hiddenGames,
+        emptyMetadata,
+      );
+      expect(result.map((g) => g.gameId)).toContain("g2");
+    });
+
+    it("pinned games are excluded if they are hidden", () => {
+      const hidden = new Set(["g2"]);
+      const shelf = makeShelf({ preset: "all", pinnedGameIds: ["g2"] });
+      const result = processShelfGames(
+        games,
+        shelf,
+        "",
+        favorites,
+        emptyTagMap,
+        hidden,
+        emptyMetadata,
+      );
+      expect(result.map((g) => g.gameId)).not.toContain("g2");
+    });
+
+    it("pinned games are filtered by global search", () => {
+      // g2 is "Dota 2", searching "portal" should exclude it
+      const shelf = makeShelf({ preset: "installed", pinnedGameIds: ["g2"] });
+      const result = processShelfGames(
+        games,
+        shelf,
+        "portal",
+        favorites,
+        emptyTagMap,
+        hiddenGames,
+        emptyMetadata,
+      );
+      expect(result.map((g) => g.gameId)).not.toContain("g2");
+      expect(result.map((g) => g.gameId)).toContain("g1");
+    });
+
+    it("pinned games are not duplicated if they already match filters", () => {
+      // g1 is installed AND pinned — should appear exactly once
+      const shelf = makeShelf({ preset: "installed", pinnedGameIds: ["g1"] });
+      const result = processShelfGames(
+        games,
+        shelf,
+        "",
+        favorites,
+        emptyTagMap,
+        hiddenGames,
+        emptyMetadata,
+      );
+      const g1Count = result.filter((g) => g.gameId === "g1").length;
+      expect(g1Count).toBe(1);
+    });
+
+    it("dead pin IDs (game not in library) are silently ignored", () => {
+      const shelf = makeShelf({ preset: "all", pinnedGameIds: ["nonexistent-id"] });
+      const result = processShelfGames(
+        games,
+        shelf,
+        "",
+        favorites,
+        emptyTagMap,
+        hiddenGames,
+        emptyMetadata,
+      );
+      expect(result).toHaveLength(4);
+    });
+  });
+
   describe("sorting", () => {
     it("sorts results by configured sort", () => {
       const shelf = makeShelf({ sortBy: "name", sortOrder: "asc" });

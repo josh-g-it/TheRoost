@@ -386,7 +386,11 @@ export function LibraryView() {
       </div>
 
       {selectedGame && (
-        <GameDetail game={selectedGame} onClose={() => selectGame(null)} />
+        <GameDetail
+          game={selectedGame}
+          onClose={() => selectGame(null)}
+          onPersistShelves={persistShelves}
+        />
       )}
 
       {artMenuGameId &&

@@ -1,7 +1,7 @@
 # The Roost — Technical Overview (Simple)
 
 > **Audience**: Non-technical readers, project stakeholders, curious users
-> **Last updated**: 2026-02-25 (v1.5.0 — custom game art upload)
+> **Last updated**: 2026-02-25 (v1.6.0 — manual shelf assignment)
 
 ---
 
@@ -34,7 +34,7 @@ When you open The Roost, the frontend asks the backend for your games, settings,
 ### Game Library
 - **Multi-launcher support**: Automatically detects games from Steam, Epic, GOG, EA App, Ubisoft, and Battle.net. Plus add any game manually with its executable path.
 - **Two view modes**: Visual grid with game artwork (3 sizes) or compact sortable list (3 densities)
-- **Shelves**: Organize your library into configurable sections ("Recently Played", "Favorites", "All Games", custom). Each shelf has its own filter/sort, and can be collapsed (Netflix-style scroll), extended (two rows), or expanded (full grid). Drag and drop to reorder.
+- **Shelves**: Organize your library into configurable sections ("Recently Played", "Favorites", "All Games", custom). Each shelf has its own filter/sort, and can be collapsed (Netflix-style scroll), extended (two rows), or expanded (full grid). Drag and drop to reorder. **Pin games manually** to any shelf — pinned games always appear on that shelf regardless of its filter rules. Right-click a game card or use the GameDetail sidebar to manage shelf pins.
 - **Rich filtering**: By name, genre, Steam community tags, game features, source launcher, custom tags, favorites, hidden status, rated/unrated. Save complex filter combos as presets. "Reset All Filters" command available in the palette.
 - **Custom tags**: Create colored labels to organize games your way. 15 theme-aware colors that look right in any theme.
 - **Favorites & hidden games**: Star games or hide them from view. Instant response with background sync.
@@ -43,6 +43,7 @@ When you open The Roost, the frontend asks the backend for your games, settings,
 ### Game Details
 Click any game to see:
 - Play button, total playtime (**editable for non-Steam games**), stats, **personal star rating + review**, Metacritic score, developer/publisher
+- **Shelf pins**: Toggleable chips for each shelf — click to pin or unpin the game
 - Genre tags, Steam community tags, feature badges, your custom tags
 - **Achievements**: Progress bar, unlocked/locked lists with global completion percentages
 - **Quick Notes**: A per-game notepad for tracking your thoughts, strategies, progress
@@ -202,8 +203,8 @@ TheRoost/
 
 ## What's Coming Next
 
-- **Manual Shelf Assignment**: Pin specific games to shelves alongside filter-based population.
 - **Achievements Tracker**: Dedicated page with completion progress across your whole library.
+- **Game News Feed**: Aggregated news from across your library.
 
 ---
 
@@ -227,7 +228,7 @@ TheRoost/
 | **WASAPI** | Windows Audio Session API — allows per-application volume control. |
 | **NVML** | NVIDIA Management Library — for monitoring NVIDIA GPU stats. |
 | **PDH** | Performance Data Helper — Windows API for system performance metrics. |
-| **Shelf** | A configurable section of the library showing a filtered subset of games. |
+| **Shelf** | A configurable section of the library showing a filtered subset of games, optionally supplemented with manually pinned games. |
 | **FloatingPanel** | A draggable, resizable window in the overlay HUD. |
 | **Overlay** | A transparent window that appears on top of your game, providing quick access to notes, media controls, system stats, and audio mixing. |
 | **CSP** | Content Security Policy — security rules controlling which external resources the app can load. |

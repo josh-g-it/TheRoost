@@ -95,9 +95,20 @@ export function processShelfGames(
   hiddenGames: Set<string>,
   metadataCache: Map<string, StoreMetadata>,
 ): Game[] {
-  let games = allGames.filter((g) => !hiddenGames.has(g.gameId));
-  games = applyPresetFilter(games, shelf.preset, favorites);
+  const visibleGames = allGames.filter((g) => !hiddenGames.has(g.gameId));
+  let games = applyPresetFilter(visibleGames, shelf.preset, favorites);
   games = applyShelfFilters(games, shelf.filters, favorites, gameTagMap, metadataCache);
+
+  // Hybrid pin union: merge manually pinned games (even if they don't match filters)
+  const pinnedIds = shelf.pinnedGameIds ?? [];
+  if (pinnedIds.length > 0) {
+    const filteredIds = new Set(games.map((g) => g.gameId));
+    const pinnedGames = visibleGames.filter(
+      (g) => pinnedIds.includes(g.gameId) && !filteredIds.has(g.gameId),
+    );
+    games = [...games, ...pinnedGames];
+  }
+
   games = applyGlobalSearch(games, globalSearchQuery);
   games = sortGames(games, shelf.sortBy, shelf.sortOrder, metadataCache);
 

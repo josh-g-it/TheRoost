@@ -15,12 +15,14 @@ interface HorizontalScrollRowProps {
   games: Game[];
   rows: 1 | 2;
   onSelectGame: (gameId: string) => void;
+  onPersistShelves: () => void;
 }
 
 export function HorizontalScrollRow({
   games,
   rows,
   onSelectGame,
+  onPersistShelves,
 }: HorizontalScrollRowProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -121,6 +123,7 @@ export function HorizontalScrollRow({
               isHidden={hiddenGames.has(game.gameId)}
               onToggleHidden={() => toggleHidden(game.gameId)}
               ratingValue={ratings.get(game.gameId)?.rating}
+              onPersistShelves={onPersistShelves}
             />
           </div>
         ))}

@@ -2,7 +2,7 @@
 
 > **Audience**: AI assistants, senior developers, contributors
 > **Last updated**: 2026-02-25
-> **Version**: 1.5.0 (Custom game art upload, crop/reposition, centralized Art Management Menu)
+> **Version**: 1.6.0 (Manual shelf assignment — hybrid shelves with pinned games)
 
 ---
 
@@ -466,7 +466,7 @@ main.tsx → ErrorBoundary → App
 | `favoritesSlice` | `favorites: Set<gameId>` | Optimistic toggle w/ rollback |
 | `hiddenGamesSlice` | `hiddenGames: Set<gameId>` | Optimistic toggle w/ rollback |
 | `savedFiltersSlice` | `savedFilters[]` | Filter preset CRUD |
-| `shelvesSlice` | `shelves[]`, `editingShelfId` | Shelf CRUD + reorder |
+| `shelvesSlice` | `shelves[]`, `editingShelfId` | Shelf CRUD + reorder + pin/unpin games |
 | `metadataSlice` | `cache: Map` | Store metadata cache |
 | `achievementsSlice` | `cache: Map<gameId, Summary>`, `profileStats` | Achievement cache + batch fetch |
 | `newsSlice` | `cache: Map<gameId, NewsItem[]>`, `followedGameIds` | News cache |
@@ -481,9 +481,11 @@ main.tsx → ErrorBoundary → App
 
 **LibraryView** — Shelf-based library orchestrator
 - Renders vertical stack of `Shelf` components, each with pre-processed games via `processShelfGames`
+- Shelves are hybrid: filter rules populate automatically, manual pins supplement (see §4.9)
 - Triggers batch metadata fetch pipeline on load (SteamSpy-first, then Store API backfill)
 - Module-level `batchFetchStarted` flag with try/catch reset on failure
 - Loads tags, favorites, hidden games, saved filters on mount
+- Passes `persistShelves` callback through Shelf → GameGrid/HorizontalScrollRow → GameCard/GameDetail for pin actions
 
 **ActivityView** — Customizable card dashboard (Phase 10)
 - Drag-and-drop layout via `@dnd-kit/core` + `@dnd-kit/sortable`
@@ -493,7 +495,8 @@ main.tsx → ErrorBoundary → App
 - Layout persisted in `AppSettings.activityLayout`
 
 **GameDetail** — Full game detail modal
-- Two-column layout: sidebar (play button, stats, personal rating + review, Metacritic, developer, genres) + main (description, screenshots, achievements, notes, sessions)
+- Two-column layout: sidebar (play button, stats, personal rating + review, Metacritic, developer, genres, shelves) + main (description, screenshots, achievements, notes, sessions)
+- **Shelves section**: Toggleable chips for each shelf — click to pin/unpin the game from that shelf
 - Achievement section with progress bar and unlocked/locked lists
 - Quick Notes section for per-game notepad
 - News section with recent articles
@@ -551,7 +554,7 @@ Key type definitions in `src/types/`:
 | `game.ts` | `GameSource` (7 variants), `Game`, `GameLibrary`, `LaunchMode`, `PlayerSummary`, `GAME_SOURCE_LABELS` |
 | `settings.ts` | `AppSettings`, `OverlayPanelId` (5 panels), `OverlayPanelPosition` |
 | `ui.ts` | `ViewMode`, `SortBy`, `SortOrder`, `LibraryFilters`, `CardDisplayOptions`, `GridSize`, `ListDensity`, `SlotActionId`, `PaletteAction`, `PaletteResults`, `PaletteHint` |
-| `shelf.ts` | `ShelfConfig`, `ShelfPreset`, `ShelfDisplayMode`, `ShelfFilters` |
+| `shelf.ts` | `ShelfConfig` (incl. `pinnedGameIds`), `ShelfPreset`, `ShelfDisplayMode`, `ShelfFilters` |
 | `activityLayout.ts` | `ActivityCardType` (8 types), `CardWidth`, `ActivityCardConfig` |
 | `metadata.ts` | `StoreMetadata`, `GenreInfo`, `CategoryInfo`, `SteamTagInfo` |
 | `session.ts` | `GameSession`, `PlaytimeSnapshot` |
@@ -635,6 +638,43 @@ CSP allows images from:
 **Hints dropdown** (`PALETTE_HINTS`): 6 entries (Navigate, Filter, Sort, Theme, Favorite, Notes) with `autofill` text for click-to-fill.
 
 **Cross-window execution**: Overlay sends `overlay_execute_palette_action(action_id, game_id, show_main)` → Rust emits `execute-palette-action` to main window → `useTrayListener` receives event, builds `PaletteContext`, calls `executeActionById()`.
+
+### 4.9 Hybrid Shelf System (Manual Shelf Assignment — v1.6.0)
+
+Shelves are now **hybrid**: each shelf combines automatic filter-based population with manually pinned games.
+
+**Data model** (`src/types/shelf.ts`):
+- `ShelfConfig` extended with `pinnedGameIds: string[]` — array of game UUIDs manually pinned to the shelf
+- Settings migration in `shelvesSlice.ts`: old settings without `pinnedGameIds` backfill to `[]` on load
+
+**Filtering pipeline** (`src/utils/shelfFiltering.ts` — `processShelfGames()`):
+```
+Input: allGames, shelf, globalSearch, metadata, tags, favorites, hidden, ratings
+
+Step 1: Apply shelf preset/filter rules → filterResult[]
+Step 2: Union with pinnedGameIds → hybrid set (pinned games always included regardless of shelf filters)
+Step 3: Remove hidden games (pinned or not — hidden always wins)
+Step 4: Apply global search filter (pinned games still subject to global search)
+Step 5: Apply sort order
+
+Output: Game[] for rendering
+```
+
+The key insight: pinned games bypass shelf-level filters (step 2 union) but are still subject to hidden-game exclusion (step 3) and global search (step 4). This ensures pinned games always appear on their shelf under normal browsing, but respect the user's intent when hiding games or searching.
+
+**Pin/unpin actions** (`src/store/shelvesSlice.ts`):
+- `pinGameToShelf(shelfId, gameId)` — adds gameId to shelf's `pinnedGameIds` (no-op if already present)
+- `unpinGameFromShelf(shelfId, gameId)` — removes gameId from shelf's `pinnedGameIds`
+- Both actions persist shelves to settings immediately
+
+**UI entry points**:
+- **GameCard context menu** (`GameCard.tsx`): Right-click shows a "Shelves" section with checkbox per shelf. Checked = pinned. Toggle pins/unpins.
+- **GameDetail sidebar** (`GameDetail.tsx`): "Shelves" section with toggleable chip per shelf. Active chip = pinned. Click to toggle.
+- **ShelfEditorDialog** (`ShelfEditorDialog.tsx`): "Manually Pinned" section showing all pinned games with remove buttons for managing pins in bulk.
+
+**Prop threading**: `LibraryView` passes `persistShelves` callback down through `Shelf` → `GameGrid`/`HorizontalScrollRow` → `GameCard`/`GameDetail` so pin actions can trigger settings persistence.
+
+**No backend changes**: All pin data lives in `settings.json` within the `shelves` array. No Rust changes, no DB migration, no new Tauri commands.
 
 ---
 
@@ -840,7 +880,7 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | react-icons | 6 icon set libraries |
 | GitHub Actions | CI (lint + test) + Release (build + sign + publish) |
 
-**Test Coverage (597 total)**:
+**Test Coverage (609 total)**:
 
 **Rust (227 tests)**:
 - CacheDb: 101 tests (schema, CRUD for all 20 tables, transactions, migrations v1→v20, custom art)
@@ -858,15 +898,15 @@ cloud_ai_exclude_games, cloud_ai_include_games
 - Image processing: 7 tests (validation, crop/save, delete)
 - AI Gemini provider: 1 test
 
-**Frontend (370 tests)**:
+**Frontend (382 tests)**:
 - Command palette: 72 tests (action registry, search, result capping, category prefix matching, hints, AI heuristic)
 - Activity stats: 56 tests (daily playtime, most played, session distribution, day-of-week)
 - Profile stats: 46 tests (genre DNA, playtime distribution, Metacritic scatter, leaderboard)
-- Shelf filtering: 21 tests (presets, filters, search, hidden games, genre grouping)
+- Shelf filtering: 26 tests (presets, filters, search, hidden games, genre grouping, hybrid pin union)
 - Library slice: 19 tests (mergeGames dedup/sort, refreshLibrary, scanLocalOnly, addGame, removeGame)
 - Metadata slice: 17 tests (fetch cached/uncached, dedup guard, batch, refreshAll, error fallback)
 - Formatters: 17 tests (playtime, bytes, source names, formatLastPlayed)
-- Shelves slice: 16 tests (init, add, update, remove, reorder, displayMode, groupByGenre)
+- Shelves slice: 23 tests (init, add, update, remove, reorder, displayMode, groupByGenre, pinGameToShelf, unpinGameFromShelf, settings backfill)
 - Filtering: 16 tests (all filter types, edge cases)
 - Sorting: 14 tests (all sort modes, null handling, immutability)
 - Streaks: 11 tests (calculatePlayStreak, computePlaytimeInRange, edge cases)
@@ -882,7 +922,7 @@ cloud_ai_exclude_games, cloud_ai_include_games
 - Asset URL utility: 4 tests (remote URL passthrough, local: prefix conversion)
 - Notes slice: 2 tests
 
-**Shared test factories** (`src/test/factories.ts`): `makeGame()`, `makeMeta()`, `makeFilters()`, `makeSession()`, `makeShelf()`, `ts()`. Override object pattern for all factories. `makeGame` includes `description: null` by default.
+**Shared test factories** (`src/test/factories.ts`): `makeGame()`, `makeMeta()`, `makeFilters()`, `makeSession()`, `makeShelf()`, `ts()`. Override object pattern for all factories. `makeGame` includes `description: null` by default. `makeShelf` includes `pinnedGameIds: []` by default.
 
 **Coverage**: V8 provider configured in `vite.config.ts` — run `npx vitest run --coverage` to generate text + lcov reports.
 
@@ -934,5 +974,6 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | v1.4.0 | Done | Manual playtime entry (non-Steam games, set/add modes, process monitor auto-increment) |
 | v1.4.1 | Done | Last-played tracking fix for non-Steam games |
 | v1.5.0 | Done | Custom game art upload (local upload + crop, Art Management Menu, unified resolution for all games) |
+| v1.6.0 | Done | Manual shelf assignment (hybrid shelves: filter rules + manual pins, context menu & GameDetail chips, ShelfEditor pin management) |
 
 See `docs/ROADMAP.md` for the full roadmap.

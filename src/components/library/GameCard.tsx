@@ -8,6 +8,7 @@ import { StarRating } from "../common/StarRating";
 import { useTagsStore } from "../../store/tagsSlice";
 import { useRatingsStore } from "../../store/ratingsSlice";
 import { useUIStore } from "../../store/uiSlice";
+import { useShelvesStore } from "../../store/shelvesSlice";
 import { formatPlaytime } from "../../utils/formatters";
 import type { Game, GenreInfo, Tag, CardDisplayOptions } from "../../types";
 import "./GameCard.css";
@@ -23,6 +24,7 @@ interface GameCardProps {
   isHidden: boolean;
   onToggleHidden: () => void;
   ratingValue?: number;
+  onPersistShelves: () => void;
 }
 
 export function GameCard({
@@ -36,6 +38,7 @@ export function GameCard({
   isHidden,
   onToggleHidden,
   ratingValue,
+  onPersistShelves,
 }: GameCardProps) {
   const allTags = useTagsStore((s) => s.tags);
   const getGameTagIds = useTagsStore((s) => s.getGameTagIds);
@@ -44,6 +47,9 @@ export function GameCard({
   const deleteRating = useRatingsStore((s) => s.deleteRating);
   const openArtMenu = useUIStore((s) => s.openArtMenu);
   const artVersion = useUIStore((s) => s.artVersion[game.gameId] ?? 0);
+  const shelves = useShelvesStore((s) => s.shelves);
+  const pinGameToShelf = useShelvesStore((s) => s.pinGameToShelf);
+  const unpinGameFromShelf = useShelvesStore((s) => s.unpinGameFromShelf);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -213,6 +219,29 @@ export function GameCard({
                         style={{ backgroundColor: `var(--tag-color-${tag.colorIndex})` }}
                       />
                       {tag.name}
+                    </label>
+                  );
+                })}
+              </>
+            )}
+            {shelves.length > 0 && (
+              <>
+                <div className="game-card__context-separator" />
+                <div className="game-card__context-label">Shelves</div>
+                {shelves.map((shelf) => {
+                  const isPinned = shelf.pinnedGameIds.includes(game.gameId);
+                  return (
+                    <label key={shelf.id} className="game-card__context-tag">
+                      <input
+                        type="checkbox"
+                        checked={isPinned}
+                        onChange={() => {
+                          if (isPinned) unpinGameFromShelf(shelf.id, game.gameId);
+                          else pinGameToShelf(shelf.id, game.gameId);
+                          onPersistShelves();
+                        }}
+                      />
+                      {shelf.name}
                     </label>
                   );
                 })}

@@ -15,6 +15,8 @@ interface ShelvesState {
   setDisplayMode: (id: string, mode: ShelfDisplayMode) => void;
   toggleGroupByGenre: (id: string) => void;
   setEditingShelf: (id: string | null) => void;
+  pinGameToShelf: (shelfId: string, gameId: string) => void;
+  unpinGameFromShelf: (shelfId: string, gameId: string) => void;
 }
 
 export const useShelvesStore = create<ShelvesState>((set, get) => ({
@@ -24,10 +26,11 @@ export const useShelvesStore = create<ShelvesState>((set, get) => ({
   initShelves: (fromSettings) => {
     const raw =
       fromSettings && fromSettings.length > 0 ? fromSettings : [...DEFAULT_SHELVES];
-    // Backfill maxVisibleGames for shelves saved before this field existed
+    // Backfill fields for shelves saved before they existed
     const shelves = raw.map((s) => ({
       ...s,
       maxVisibleGames: s.maxVisibleGames !== undefined ? s.maxVisibleGames : null,
+      pinnedGameIds: s.pinnedGameIds ?? [],
     }));
     logger.info("ShelvesStore", "shelf", "Shelves initialized", {
       count: shelves.length,
@@ -87,6 +90,26 @@ export const useShelvesStore = create<ShelvesState>((set, get) => ({
   },
 
   setEditingShelf: (id) => set({ editingShelfId: id }),
+
+  pinGameToShelf: (shelfId, gameId) => {
+    set({
+      shelves: get().shelves.map((s) =>
+        s.id === shelfId && !s.pinnedGameIds.includes(gameId)
+          ? { ...s, pinnedGameIds: [...s.pinnedGameIds, gameId] }
+          : s,
+      ),
+    });
+  },
+
+  unpinGameFromShelf: (shelfId, gameId) => {
+    set({
+      shelves: get().shelves.map((s) =>
+        s.id === shelfId
+          ? { ...s, pinnedGameIds: s.pinnedGameIds.filter((id) => id !== gameId) }
+          : s,
+      ),
+    });
+  },
 }));
 
 /** Helper to get shelves array for persistence */

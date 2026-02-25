@@ -174,12 +174,28 @@ function ShelfContent({
   // Grid view
   if (viewMode === "grid") {
     if (displayMode === "collapsed") {
-      return <HorizontalScrollRow games={games} rows={1} onSelectGame={onSelectGame} />;
+      return (
+        <HorizontalScrollRow
+          games={games}
+          rows={1}
+          onSelectGame={onSelectGame}
+          onPersistShelves={onPersist}
+        />
+      );
     }
     if (displayMode === "extended") {
-      return <HorizontalScrollRow games={games} rows={2} onSelectGame={onSelectGame} />;
+      return (
+        <HorizontalScrollRow
+          games={games}
+          rows={2}
+          onSelectGame={onSelectGame}
+          onPersistShelves={onPersist}
+        />
+      );
     }
-    return <GameGrid games={games} onSelectGame={onSelectGame} />;
+    return (
+      <GameGrid games={games} onSelectGame={onSelectGame} onPersistShelves={onPersist} />
+    );
   }
 
   // List view

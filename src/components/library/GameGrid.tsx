@@ -12,9 +12,10 @@ import "./GameGrid.css";
 interface GameGridProps {
   games: Game[];
   onSelectGame: (gameId: string) => void;
+  onPersistShelves: () => void;
 }
 
-export function GameGrid({ games, onSelectGame }: GameGridProps) {
+export function GameGrid({ games, onSelectGame, onPersistShelves }: GameGridProps) {
   const getMetadata = useMetadataStore((s) => s.getMetadata);
   const tags = useTagsStore((s) => s.tags);
   const getGameTagIds = useTagsStore((s) => s.getGameTagIds);
@@ -58,6 +59,7 @@ export function GameGrid({ games, onSelectGame }: GameGridProps) {
           isHidden={hiddenGames.has(game.gameId)}
           onToggleHidden={() => toggleHidden(game.gameId)}
           ratingValue={ratings.get(game.gameId)?.rating}
+          onPersistShelves={onPersistShelves}
         />
       ))}
     </div>

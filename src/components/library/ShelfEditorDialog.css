@@ -263,6 +263,16 @@
   font-weight: var(--font-weight-medium);
 }
 
+.shelf-editor__chip-x {
+  margin-left: 2px;
+  font-size: var(--font-size-sm);
+  opacity: 0.6;
+}
+
+.shelf-editor__chip:hover .shelf-editor__chip-x {
+  opacity: 1;
+}
+
 /* ── Display modes ────────────────────────────────────────────── */
 
 .shelf-editor__display-modes {

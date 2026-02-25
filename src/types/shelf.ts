@@ -33,6 +33,8 @@ export interface ShelfConfig {
   groupByGenre: boolean;
   /** Max games to show on this shelf. null = unlimited. */
   maxVisibleGames: number | null;
+  /** Game IDs manually pinned to this shelf. Always shown regardless of filters. */
+  pinnedGameIds: string[];
 }
 
 // ── Defaults ────────────────────────────────────────────────────
@@ -98,6 +100,7 @@ export const DEFAULT_SHELVES: ShelfConfig[] = [
     displayMode: "collapsed",
     groupByGenre: false,
     maxVisibleGames: 25,
+    pinnedGameIds: [],
   },
   {
     id: "default-all-games",
@@ -109,5 +112,6 @@ export const DEFAULT_SHELVES: ShelfConfig[] = [
     displayMode: "expanded",
     groupByGenre: false,
     maxVisibleGames: null,
+    pinnedGameIds: [],
   },
 ];

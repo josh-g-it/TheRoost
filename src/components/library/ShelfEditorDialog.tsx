@@ -165,6 +165,18 @@ export function ShelfEditorDialog({
   const [maxVisibleGames, setMaxVisibleGames] = useState<number | null>(
     existingShelf?.maxVisibleGames ?? null,
   );
+  const [pinnedGameIds, setPinnedGameIds] = useState<string[]>(() => {
+    const ids = existingShelf?.pinnedGameIds ?? [];
+    const knownIds = new Set(library?.games.map((g) => g.gameId) ?? []);
+    return ids.filter((id) => knownIds.has(id));
+  });
+
+  const gameNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const g of library?.games ?? []) map.set(g.gameId, g.name);
+    return map;
+  }, [library]);
+
   const [filters, setFilters] = useState<ShelfFilters>(() => {
     const raw: Partial<ShelfFilters> = existingShelf?.filters ?? {};
     return {
@@ -296,6 +308,7 @@ export function ShelfEditorDialog({
       displayMode,
       groupByGenre,
       maxVisibleGames,
+      pinnedGameIds,
     };
     logger.info("ShelfEditorDialog", "shelf", isNew ? "Shelf created" : "Shelf updated", {
       id: shelf.id,
@@ -314,6 +327,7 @@ export function ShelfEditorDialog({
     displayMode,
     groupByGenre,
     maxVisibleGames,
+    pinnedGameIds,
     onSave,
   ]);
 
@@ -510,6 +524,27 @@ export function ShelfEditorDialog({
                   onClick={() => handleSourceToggle(source)}
                 >
                   {GAME_SOURCE_LABELS[source]}
+                </button>
+              ))}
+            </ChipSection>
+          )}
+
+          {/* Manually pinned games */}
+          {pinnedGameIds.length > 0 && (
+            <ChipSection
+              label="Manually Pinned"
+              selectedCount={pinnedGameIds.length}
+              defaultOpen
+            >
+              {pinnedGameIds.map((id) => (
+                <button
+                  key={id}
+                  className="shelf-editor__chip shelf-editor__chip--active"
+                  onClick={() => setPinnedGameIds((prev) => prev.filter((p) => p !== id))}
+                  title={`Remove ${gameNameMap.get(id) ?? id}`}
+                >
+                  {gameNameMap.get(id) ?? id}
+                  <span className="shelf-editor__chip-x">&times;</span>
                 </button>
               ))}
             </ChipSection>
