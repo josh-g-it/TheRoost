@@ -2169,7 +2169,8 @@ impl CacheDb {
              LEFT JOIN games g ON g.game_id = n.game_id
              ORDER BY
                CASE WHEN n.game_id = '__general__' THEN 0 ELSE 1 END,
-               n.updated_at DESC",
+               n.updated_at DESC,
+               n.game_id ASC",
         )?;
         let notes = stmt
             .query_map([], |row| {
@@ -3943,10 +3944,11 @@ mod tests {
         assert!(notes[0].game_name.is_none());
         assert_eq!(notes[0].content, "General content");
 
-        // Game note second (most recent updated_at among non-general)
-        assert_eq!(notes[1].game_id, game_id);
-        assert_eq!(notes[1].game_name, Some("Test Game".to_string()));
-        assert_eq!(notes[1].content, "Game note content");
+        // The registered game note should exist somewhere in the remaining notes
+        // (order among same-timestamp notes is by game_id ASC)
+        let game_note = notes.iter().find(|n| n.game_id == game_id).unwrap();
+        assert_eq!(game_note.game_name, Some("Test Game".to_string()));
+        assert_eq!(game_note.content, "Game note content");
     }
 
     #[test]
