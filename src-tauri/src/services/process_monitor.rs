@@ -378,6 +378,8 @@ fn cleanup_stale_sessions(
                     tracing::warn!(session_id = session.id, error = %e, "Failed to close stale session");
                     continue;
                 }
+                // Auto-accumulate playtime for non-Steam games (SQL guard filters Steam)
+                let _ = db_guard.add_manual_playtime(&session.game_id, duration);
                 tracing::info!(
                     game_id = %session.game_id,
                     session_id = session.id,
@@ -516,6 +518,8 @@ fn scan_once(
                             tracing::warn!(game_id = %game_id, error = %e, "Failed to close session");
                             continue;
                         }
+                        // Auto-accumulate playtime for non-Steam games (SQL guard filters Steam)
+                        let _ = db_guard.add_manual_playtime(game_id, duration);
                         tracing::info!(
                             game_id = %game_id,
                             session_id = session.id,

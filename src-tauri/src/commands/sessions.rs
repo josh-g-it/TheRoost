@@ -30,3 +30,23 @@ pub async fn get_active_sessions(
     let db = db.lock_or_err("DB")?;
     db.get_all_active_sessions()
 }
+
+#[tauri::command]
+pub async fn set_manual_playtime(
+    game_id: String,
+    minutes: u32,
+    db: State<'_, CacheDbHandle>,
+) -> Result<(), AppError> {
+    let db = db.lock_or_err("DB")?;
+    db.set_manual_playtime(&game_id, minutes)
+}
+
+#[tauri::command]
+pub async fn add_manual_playtime(
+    game_id: String,
+    minutes: u32,
+    db: State<'_, CacheDbHandle>,
+) -> Result<(), AppError> {
+    let db = db.lock_or_err("DB")?;
+    db.add_manual_playtime(&game_id, minutes)
+}

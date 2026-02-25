@@ -138,6 +138,9 @@ impl CacheDb {
         if current < 18 {
             self.apply_v18()?;
         }
+        if current < 19 {
+            self.apply_v19()?;
+        }
 
         // Repair: restore any entries invalidated by cache invalidation (cached_at = 0).
         // This is a fast no-op if no rows match.
@@ -625,6 +628,48 @@ impl CacheDb {
         Ok(())
     }
 
+    fn apply_v19(&self) -> Result<(), AppError> {
+        self.conn.execute_batch(
+            "ALTER TABLE games ADD COLUMN manual_playtime_minutes INTEGER DEFAULT 0;
+
+            INSERT OR REPLACE INTO schema_version (version, applied_at)
+                VALUES (19, datetime('now'));",
+        )?;
+        Ok(())
+    }
+
+    // ── Manual Playtime ─────────────────────────────────────────────
+
+    /// Get the manual playtime for a game (in minutes).
+    pub fn get_manual_playtime(&self, game_id: &str) -> Result<u32, AppError> {
+        let minutes: u32 = self.conn.query_row(
+            "SELECT COALESCE(manual_playtime_minutes, 0) FROM games WHERE game_id = ?1",
+            params![game_id],
+            |row| row.get(0),
+        )?;
+        Ok(minutes)
+    }
+
+    /// Set the manual playtime for a non-Steam game (in minutes).
+    /// No-op for Steam games (SQL guard).
+    pub fn set_manual_playtime(&self, game_id: &str, minutes: u32) -> Result<(), AppError> {
+        self.conn.execute(
+            "UPDATE games SET manual_playtime_minutes = ?1 WHERE game_id = ?2 AND source != 'steam'",
+            params![minutes, game_id],
+        )?;
+        Ok(())
+    }
+
+    /// Add minutes to the manual playtime for a non-Steam game.
+    /// No-op for Steam games (SQL guard).
+    pub fn add_manual_playtime(&self, game_id: &str, minutes: u32) -> Result<(), AppError> {
+        self.conn.execute(
+            "UPDATE games SET manual_playtime_minutes = COALESCE(manual_playtime_minutes, 0) + ?1 WHERE game_id = ?2 AND source != 'steam'",
+            params![minutes, game_id],
+        )?;
+        Ok(())
+    }
+
     // ── Audio Device Aliases ─────────────────────────────────────────
 
     /// Get all audio device aliases as (device_id, custom_name) pairs.
@@ -852,7 +897,7 @@ impl CacheDb {
         let mut stmt = self.conn.prepare(
             "SELECT g.game_id, g.source, g.source_id, COALESCE(g.name, ''),
                     g.install_path,
-                    COALESCE(ps.playtime, 0)
+                    COALESCE(ps.playtime, 0) + COALESCE(g.manual_playtime_minutes, 0)
              FROM games g
              LEFT JOIN (
                 SELECT game_id, MAX(playtime_minutes) as playtime
@@ -2212,7 +2257,7 @@ impl CacheDb {
             "SELECT g.game_id, g.name, sm.genres, sm.steam_tags,
                     CASE WHEN g.source = 'steam'
                          THEN COALESCE(ps.playtime_minutes, 0) / 60.0
-                         ELSE 0.0
+                         ELSE COALESCE(g.manual_playtime_minutes, 0) / 60.0
                     END as hours,
                     MAX(g.last_played, sess.last_session) as last_played_ts
              FROM games g
@@ -2306,21 +2351,23 @@ impl CacheDb {
     }
 
     /// Get the top N games by total playtime: `(game_id, name, hours)`.
-    /// Uses the latest playtime snapshot per game.
+    /// Combines Steam playtime snapshots with manual playtime for non-Steam games.
     pub fn get_top_games_by_playtime(
         &self,
         limit: usize,
     ) -> Result<Vec<(String, String, f64)>, AppError> {
         let mut stmt = self.conn.prepare(
-            "SELECT g.game_id, g.name, ps.playtime_minutes / 60.0 as hours
-             FROM (
+            "SELECT g.game_id, g.name,
+                    (COALESCE(ps.playtime_minutes, 0) + COALESCE(g.manual_playtime_minutes, 0)) / 60.0 as hours
+             FROM games g
+             LEFT JOIN (
                  SELECT game_id, MAX(playtime_minutes) as playtime_minutes
                  FROM playtime_snapshots
                  GROUP BY game_id
-             ) ps
-             JOIN games g ON ps.game_id = g.game_id
-             WHERE g.name IS NOT NULL AND ps.playtime_minutes > 0
-             ORDER BY ps.playtime_minutes DESC
+             ) ps ON g.game_id = ps.game_id
+             WHERE g.name IS NOT NULL
+               AND (COALESCE(ps.playtime_minutes, 0) + COALESCE(g.manual_playtime_minutes, 0)) > 0
+             ORDER BY hours DESC
              LIMIT ?1",
         )?;
         let rows = stmt
@@ -2536,7 +2583,7 @@ mod tests {
     }
 
     #[test]
-    fn test_schema_version_is_18() {
+    fn test_schema_version_is_19() {
         let db = test_db();
         let version: u32 = db
             .conn
@@ -2544,7 +2591,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 18);
+        assert_eq!(version, 19);
     }
 
     // ── Store Metadata ──────────────────────────────────────────────

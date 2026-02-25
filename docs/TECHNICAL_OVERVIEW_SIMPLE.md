@@ -1,7 +1,7 @@
 # The Roost — Technical Overview (Simple)
 
 > **Audience**: Non-technical readers, project stakeholders, curious users
-> **Last updated**: 2026-02-24 (v1.3.5 — settings tabbed layout)
+> **Last updated**: 2026-02-24 (v1.4.0 — manual playtime entry)
 
 ---
 
@@ -42,7 +42,7 @@ When you open The Roost, the frontend asks the backend for your games, settings,
 
 ### Game Details
 Click any game to see:
-- Play button, total playtime, stats, **personal star rating + review**, Metacritic score, developer/publisher
+- Play button, total playtime (**editable for non-Steam games**), stats, **personal star rating + review**, Metacritic score, developer/publisher
 - Genre tags, Steam community tags, feature badges, your custom tags
 - **Achievements**: Progress bar, unlocked/locked lists with global completion percentages
 - **Quick Notes**: A per-game notepad for tracking your thoughts, strategies, progress
@@ -197,7 +197,6 @@ TheRoost/
 
 ## What's Coming Next
 
-- **Manual Playtime Entry**: Edit total playtime for any game — essential for non-tracked launchers.
 - **Custom Game Art Upload**: Drag-and-drop local images as cover art.
 - **Manual Shelf Assignment**: Pin specific games to shelves alongside filter-based population.
 - **Achievements Tracker**: Dedicated page with completion progress across your whole library.

@@ -840,20 +840,26 @@ Refactored the Settings page from a single scrollable column (14 sections) into 
 
 ---
 
-# Version 2.0 — Planned
+# Version 1.4.0 — Manual Playtime Entry (Done)
 
-Each feature below ships as an incremental minor version (v1.4.0, v1.5.0, etc.). Ordered by development efficiency: quick wins extending existing systems first, then new pages surfacing existing data, then infrastructure, then major new integrations. Once all features are shipped, the app elevates to 2.0.0.
+### v1.4.0 — Manual Playtime Entry
+Added manual playtime editing for non-Steam games (Manual, Epic, GOG, EA, Ubisoft, Battle.net).
+
+**Implementation:**
+- New `manual_playtime_minutes` column on `games` table (schema v19)
+- Two modes: "Set Total" (overwrite) and "Add" (increment)
+- Inline editor in GameDetail Quick Stats with hours + minutes inputs
+- Process monitor auto-accumulates tracked session duration for non-Steam games
+- All playtime queries updated: overlay, AI context, top-games leaderboard
+- Non-Steam games now show accurate playtime across profile stats, overlay, and sorting
 
 ---
 
-### v1.4.0 — Manual Playtime Entry
-Edit total playtime for any game — essential for games from non-tracked launchers or retroactive corrections.
+---
 
-- Edit total playtime for any game via GameDetail sidebar
-- Playtime adjustment dialog with hours/minutes input
-- Additive or absolute mode (add X hours vs. set to X hours)
-- Audit log of manual adjustments
-- Reflected in all statistics, charts, and sorting
+# Version 2.0 — Planned
+
+Each feature below ships as an incremental minor version (v1.5.0, v1.6.0, etc.). Ordered by development efficiency: quick wins extending existing systems first, then new pages surfacing existing data, then infrastructure, then major new integrations. Once all features are shipped, the app elevates to 2.0.0.
 
 ---
 

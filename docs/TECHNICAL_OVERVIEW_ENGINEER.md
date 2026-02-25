@@ -2,7 +2,7 @@
 
 > **Audience**: AI assistants, senior developers, contributors
 > **Last updated**: 2026-02-24
-> **Version**: 1.3.5 (Settings tabbed layout)
+> **Version**: 1.4.0 (Manual playtime entry)
 
 ---
 
@@ -17,7 +17,7 @@
 | Framework | Tauri v2 (Rust) + React 18 + TypeScript + Vite |
 | State | Zustand (18 slices) |
 | Routing | React Router v6 data router (`createBrowserRouter`) |
-| Database | SQLite via rusqlite (bundled), WAL mode, schema v18 |
+| Database | SQLite via rusqlite (bundled), WAL mode, schema v19 |
 | Platform | Windows 11 (registry, credential manager, WASAPI, SMTC, NVML, PDH) |
 | Launch | `npm run tauri dev` |
 
@@ -911,5 +911,6 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | v1.2.0 | Done | Route error boundaries (per-route `errorElement`, `RouteErrorFallback`) |
 | v1.3.0 | Done | Personal ratings & reviews (5-star system, review text, sort/filter, AI awareness) |
 | v1.3.5 | Done | Settings tabbed layout (5 tabs, save bar outside scroll, CSS display toggle) |
+| v1.4.0 | Done | Manual playtime entry (non-Steam games, set/add modes, process monitor auto-increment) |
 
 See `docs/ROADMAP.md` for the full roadmap.

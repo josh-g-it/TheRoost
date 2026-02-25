@@ -89,6 +89,12 @@ export const sessionApi = {
     invoke<GameSession[]>("get_recent_sessions", { limit }),
 
   getActiveSessions: () => invoke<GameSession[]>("get_active_sessions"),
+
+  setManualPlaytime: (gameId: string, minutes: number) =>
+    invoke<void>("set_manual_playtime", { gameId, minutes }),
+
+  addManualPlaytime: (gameId: string, minutes: number) =>
+    invoke<void>("add_manual_playtime", { gameId, minutes }),
 };
 
 export const tagsApi = {

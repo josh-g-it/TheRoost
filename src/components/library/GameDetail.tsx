@@ -17,7 +17,7 @@ import {
 } from "../../utils/formatters";
 import { useGameLaunch } from "../../hooks/useGameLaunch";
 import { useLibraryStore } from "../../store/librarySlice";
-import { customGameApi, gameApi, notesApi } from "../../services/tauri";
+import { customGameApi, gameApi, notesApi, sessionApi } from "../../services/tauri";
 import { logger } from "../../utils/logger";
 import { useMetadataStore } from "../../store/metadataSlice";
 import { useSessionStore } from "../../store/sessionSlice";
@@ -120,6 +120,10 @@ export function GameDetail({ game, onClose }: GameDetailProps) {
   const [showReview, setShowReview] = useState(false);
   const [reviewContent, setReviewContent] = useState("");
   const reviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [isEditingPlaytime, setIsEditingPlaytime] = useState(false);
+  const [playtimeHours, setPlaytimeHours] = useState("");
+  const [playtimeMinutes, setPlaytimeMinutes] = useState("");
 
   const openArtPicker = useUIStore((s) => s.openArtPicker);
   const artPickerGameId = useUIStore((s) => s.artPickerGameId);
@@ -366,10 +370,109 @@ export function GameDetail({ game, onClose }: GameDetailProps) {
               <h4 className="game-detail__section-title">Quick Stats</h4>
               <div className="game-detail__stat-list">
                 <div className="game-detail__stat">
-                  <span className="game-detail__stat-label">Playtime</span>
-                  <span className="game-detail__stat-value">
-                    {formatPlaytime(game.playtimeForever)}
-                  </span>
+                  <div className="game-detail__stat-header">
+                    <span className="game-detail__stat-label">Playtime</span>
+                    {isNonSteam && !isEditingPlaytime && (
+                      <button
+                        className="game-detail__playtime-edit-btn"
+                        onClick={() => {
+                          const h = Math.floor(game.playtimeForever / 60);
+                          const m = game.playtimeForever % 60;
+                          setPlaytimeHours(h.toString());
+                          setPlaytimeMinutes(m.toString());
+                          setIsEditingPlaytime(true);
+                        }}
+                        title="Edit playtime"
+                      >
+                        <AppIcon name="settings" size={12} />
+                      </button>
+                    )}
+                  </div>
+                  {isEditingPlaytime ? (
+                    <div className="game-detail__playtime-editor">
+                      <div className="game-detail__playtime-inputs">
+                        <input
+                          type="number"
+                          min="0"
+                          className="game-detail__playtime-input"
+                          value={playtimeHours}
+                          onChange={(e) => setPlaytimeHours(e.target.value)}
+                          placeholder="0"
+                        />
+                        <span className="game-detail__playtime-unit">h</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          className="game-detail__playtime-input"
+                          value={playtimeMinutes}
+                          onChange={(e) => setPlaytimeMinutes(e.target.value)}
+                          placeholder="0"
+                        />
+                        <span className="game-detail__playtime-unit">m</span>
+                      </div>
+                      <div className="game-detail__playtime-actions">
+                        <button
+                          className="game-detail__playtime-action"
+                          onClick={async () => {
+                            const h = parseInt(playtimeHours) || 0;
+                            const m = parseInt(playtimeMinutes) || 0;
+                            const totalMinutes = h * 60 + m;
+                            await sessionApi.setManualPlaytime(game.gameId, totalMinutes);
+                            const lib = useLibraryStore.getState().library;
+                            if (lib) {
+                              const games = lib.games.map((g) =>
+                                g.gameId === game.gameId
+                                  ? { ...g, playtimeForever: totalMinutes }
+                                  : g,
+                              );
+                              useLibraryStore.setState({
+                                library: { ...lib, games },
+                              });
+                            }
+                            setIsEditingPlaytime(false);
+                          }}
+                        >
+                          Set Total
+                        </button>
+                        <button
+                          className="game-detail__playtime-action"
+                          onClick={async () => {
+                            const h = parseInt(playtimeHours) || 0;
+                            const m = parseInt(playtimeMinutes) || 0;
+                            const addMinutes = h * 60 + m;
+                            if (addMinutes === 0) return;
+                            await sessionApi.addManualPlaytime(game.gameId, addMinutes);
+                            const newTotal = game.playtimeForever + addMinutes;
+                            const lib = useLibraryStore.getState().library;
+                            if (lib) {
+                              const games = lib.games.map((g) =>
+                                g.gameId === game.gameId
+                                  ? { ...g, playtimeForever: newTotal }
+                                  : g,
+                              );
+                              useLibraryStore.setState({
+                                library: { ...lib, games },
+                              });
+                            }
+                            setIsEditingPlaytime(false);
+                          }}
+                        >
+                          Add
+                        </button>
+                        <button
+                          className="game-detail__playtime-action game-detail__playtime-action--cancel"
+                          onClick={() => setIsEditingPlaytime(false)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="game-detail__stat-value">
+                      {formatPlaytime(game.playtimeForever)}
+                    </span>
+                  )}
                 </div>
                 {game.playtime2weeks != null && (
                   <div className="game-detail__stat">

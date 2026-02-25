@@ -223,6 +223,102 @@
   color: var(--color-text-secondary);
 }
 
+/* Playtime editor */
+.game-detail__stat-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.game-detail__playtime-edit-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.game-detail__playtime-edit-btn:hover {
+  opacity: 1;
+  color: var(--color-accent-primary);
+}
+
+.game-detail__playtime-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.game-detail__playtime-inputs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.game-detail__playtime-input {
+  width: 52px;
+  padding: 3px var(--space-xs);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.game-detail__playtime-input:focus {
+  outline: none;
+  border-color: var(--color-accent-primary);
+}
+
+/* Hide spinner arrows */
+.game-detail__playtime-input::-webkit-inner-spin-button,
+.game-detail__playtime-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.game-detail__playtime-unit {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.game-detail__playtime-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.game-detail__playtime-action {
+  font-size: var(--font-size-xs);
+  padding: 2px 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-primary);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.game-detail__playtime-action:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.game-detail__playtime-action--cancel {
+  border-color: transparent;
+  background: transparent;
+}
+
+.game-detail__playtime-action--cancel:hover {
+  color: var(--color-text-primary);
+  background: transparent;
+}
+
 /* Metacritic badge */
 .game-detail__metacritic {
   display: inline-flex;

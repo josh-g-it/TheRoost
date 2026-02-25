@@ -60,6 +60,8 @@ pub fn run() {
             sessions::get_game_sessions,
             sessions::get_recent_sessions,
             sessions::get_active_sessions,
+            sessions::set_manual_playtime,
+            sessions::add_manual_playtime,
             tags::get_all_tags,
             tags::create_tag,
             tags::update_tag,
