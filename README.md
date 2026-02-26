@@ -75,7 +75,7 @@ The Roost is a multi-launcher game library manager for Windows. It brings togeth
 | Frontend | React 18, TypeScript, Vite |
 | State | Zustand |
 | Charts | Recharts |
-| Testing | Vitest + Rust unit tests (715 total) |
+| Testing | Vitest + Rust unit tests (718 total) |
 
 ## Installation
 

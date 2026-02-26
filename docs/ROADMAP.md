@@ -1019,8 +1019,8 @@ Game-focused disk usage visualization — see exactly how much space your games 
 - Auto-scans on page visit; "Rescan" button for manual refresh
 - Loading state with per-game progress ("Scanning 12 of 47 games... Cyberpunk 2077")
 
-**Implementation:** 1 Tauri command (`scan_storage`), `storage_service.rs` (drive stats + walkdir + progress events), `StorageView.tsx` + CSS, `storage` icon in all 6 icon sets, command palette `nav:storage` action, 4 Rust tests + 5 frontend tests
-- 267 Rust tests + 448 frontend tests passing (715 total)
+**Implementation:** 1 Tauri command (`scan_storage`), `storage_service.rs` (drive stats + walkdir + progress events), `StorageView.tsx` + CSS, `storage` icon in all 6 icon sets, command palette `nav:storage` action, 4 Rust tests + 8 frontend tests
+- 267 Rust tests + 451 frontend tests passing (718 total)
 
 ---
 
