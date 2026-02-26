@@ -2754,15 +2754,17 @@ mod tests {
     use std::collections::HashSet;
 
     fn test_db() -> CacheDb {
-        let dir = std::env::temp_dir().join(format!("theroost_test_{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
-        let path = dir.join(format!(
-            "test_{}.db",
+        let dir = std::env::temp_dir().join(format!(
+            "theroost_test_{}_{:?}_{}",
+            std::process::id(),
+            std::thread::current().id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
         ));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test.db");
         CacheDb::new(&path).unwrap()
     }
 
