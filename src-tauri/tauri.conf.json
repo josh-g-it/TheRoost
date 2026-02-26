@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: http://asset.localhost https://asset.localhost https://steamcdn-a.akamaihd.net https://avatars.steamstatic.com https://cdn.akamai.steamstatic.com https://cdn.cloudflare.steamstatic.com https://shared.akamai.steamstatic.com https://media.steampowered.com https://cdn2.steamgriddb.com https://cdn.steamgriddb.com https://images.gog.com https://images-1.gog.com https://images-2.gog.com https://images-3.gog.com https://www.google.com; style-src 'self'",
+      "csp": "default-src 'self'; img-src 'self' data: http://asset.localhost https://asset.localhost https: ; style-src 'self'",
       "assetProtocol": {
         "scope": ["$APPDATA/**"]
       }
