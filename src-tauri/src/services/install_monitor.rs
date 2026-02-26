@@ -3,8 +3,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use tauri::Emitter;
 use tauri::AppHandle;
+use tauri::Emitter;
 
 use crate::models::install::InstallProgress;
 use crate::services::cache_db::CacheDb;
@@ -63,11 +63,7 @@ pub async fn run(app_handle: AppHandle, db: CacheDbHandle) {
     }
 }
 
-fn scan_once(
-    app_handle: &AppHandle,
-    db: &CacheDbHandle,
-    prev_states: &mut HashMap<u32, u32>,
-) {
+fn scan_once(app_handle: &AppHandle, db: &CacheDbHandle, prev_states: &mut HashMap<u32, u32>) {
     // Get Steam path — silently return if Steam isn't installed
     let steam_path = match registry::get_steam_install_path() {
         Ok(p) => p,
