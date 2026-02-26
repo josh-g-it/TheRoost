@@ -23,6 +23,7 @@ pub mod settings_store;
 pub mod steam_client;
 pub mod steamgriddb;
 pub mod steamspy_client;
+pub mod storage_service;
 pub mod store_client;
 pub mod tray;
 pub mod vdf_parser;

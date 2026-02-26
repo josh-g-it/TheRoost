@@ -9,7 +9,7 @@ use commands::{
     achievements, ai, audio, autostart, backup, cover_art, custom_games, developer,
     external_scanner, favorites, friends, game_launcher, hidden_games, media_bookmarks,
     media_controls, metadata, news, notes, overlay, ratings, recaps, saved_filters, sessions,
-    settings, steam_api, steam_scanner, system_monitor, tags, updater,
+    settings, steam_api, steam_scanner, storage, system_monitor, tags, updater,
 };
 use models::ai::CloudProvider;
 use services::ai::cloud_config::CloudConfig;
@@ -170,6 +170,7 @@ pub fn run() {
             backup::restore_from_backup,
             backup::get_backup_credential_hints,
             backup::restart_app,
+            storage::scan_storage,
         ])
         .setup(|app| {
             // Initialize tracing with our custom layer that forwards events to the frontend

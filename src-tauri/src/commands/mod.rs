@@ -24,6 +24,7 @@ pub mod sessions;
 pub mod settings;
 pub mod steam_api;
 pub mod steam_scanner;
+pub mod storage;
 pub mod system_monitor;
 pub mod tags;
 pub mod updater;

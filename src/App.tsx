@@ -14,6 +14,7 @@ import { ActivityView } from "./components/activity/ActivityView";
 import { ProfileView } from "./components/profile/ProfileView";
 import { NotesView } from "./components/notes/NotesView";
 import { NewsView } from "./components/news/NewsView";
+import { StorageView } from "./components/storage/StorageView";
 
 const router = createBrowserRouter([
   {
@@ -37,6 +38,11 @@ const router = createBrowserRouter([
       },
       { path: "/notes", element: <NotesView />, errorElement: <RouteErrorFallback /> },
       { path: "/news", element: <NewsView />, errorElement: <RouteErrorFallback /> },
+      {
+        path: "/storage",
+        element: <StorageView />,
+        errorElement: <RouteErrorFallback />,
+      },
       {
         path: "/settings",
         element: <SettingsView />,

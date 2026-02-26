@@ -4520,7 +4520,7 @@ dependencies = [
 
 [[package]]
 name = "the-roost"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4547,6 +4547,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "walkdir",
  "windows 0.62.2",
  "winreg 0.52.0",
  "zip 2.4.2",

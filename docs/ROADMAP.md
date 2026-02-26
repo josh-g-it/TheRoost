@@ -1001,14 +1001,26 @@ Data safety — package your entire Roost configuration into a single `.roost` Z
 
 ---
 
-### v1.10.0 — Storage Overview
-Disk-aware features — see what's using space across your game library.
+### v1.10.0 — Storage Overview ✅ SHIPPED
+Game-focused disk usage visualization — see exactly how much space your games consume.
 
-- Per-drive storage breakdown (used/free, game count per drive)
-- Per-game install size tracking (read from disk or launcher metadata)
-- Sort/filter library by install size
-- Visual storage map (treemap or bar chart by drive)
-- Identify largest installs, suggest cleanup candidates
+**Scanning approach:**
+- Leverages existing `install_path` data from all 6 launcher scanners + custom games
+- Windows `GetDiskFreeSpaceExW` API for instant drive-level stats (total/free)
+- `walkdir` crate recursively measures each game directory, with progress events to the frontend
+- No full-disk scan needed — only walks known game directories
+
+**Storage page (`/storage` route):**
+- **Stat cards**: Games on Disk, Game Storage, Largest Game, Drives
+- **Drive Overview**: Per-drive stacked bars showing game vs other vs free space, with percentage labels and legend
+- **Storage by Launcher**: Recharts donut chart breaking down total game storage by source (Steam, Epic, GOG, etc.)
+- **Games by Size**: Horizontal bar chart of all games sorted by disk usage (default: top 20, toggle to show all)
+- **Scan info**: Displays scan duration after completion
+- Auto-scans on page visit; "Rescan" button for manual refresh
+- Loading state with per-game progress ("Scanning 12 of 47 games... Cyberpunk 2077")
+
+**Implementation:** 1 Tauri command (`scan_storage`), `storage_service.rs` (drive stats + walkdir + progress events), `StorageView.tsx` + CSS, `storage` icon in all 6 icon sets, command palette `nav:storage` action, 4 Rust tests + 5 frontend tests
+- 267 Rust tests + 448 frontend tests passing (715 total)
 
 ---
 

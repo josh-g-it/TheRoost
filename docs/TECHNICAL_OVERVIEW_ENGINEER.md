@@ -2,7 +2,7 @@
 
 > **Audience**: AI assistants, senior developers, contributors
 > **Last updated**: 2026-02-26
-> **Version**: 1.9.0 (Backup & Restore — full archive backup/restore with guided wizard)
+> **Version**: 1.10.0 (Storage Overview — game-focused disk usage visualization)
 
 ---
 
@@ -118,9 +118,9 @@ TheRoost/
 │   │
 │   └── src/
 │       ├── main.rs               # Entry → lib::run()
-│       ├── lib.rs                # Tauri setup, tracing init, 122 commands, background services
+│       ├── lib.rs                # Tauri setup, tracing init, 130 commands, background services
 │       │
-│       ├── commands/             # 29 command modules, 122 total commands (see §3.1)
+│       ├── commands/             # 30 command modules, 130 total commands (see §3.1)
 │       │   ├── steam_scanner.rs, steam_api.rs, settings.rs, game_launcher.rs
 │       │   ├── metadata.rs, sessions.rs, tags.rs, favorites.rs
 │       │   ├── hidden_games.rs, saved_filters.rs, developer.rs
@@ -168,7 +168,7 @@ TheRoost/
 
 ### 3.1 Command Registry (lib.rs)
 
-129 Tauri commands across 29 modules:
+130 Tauri commands across 30 modules:
 
 | Module | Commands |
 |--------|----------|
@@ -201,6 +201,7 @@ TheRoost/
 | `updater` | `check_for_update`, `install_update`, `get_app_version` |
 | `autostart` | `get_autostart_enabled`, `set_autostart_enabled` |
 | `backup` | `estimate_backup_size`, `create_backup`, `validate_backup`, `check_active_sessions`, `restore_from_backup`, `get_backup_credential_hints`, `restart_app` |
+| `storage` | `scan_storage` |
 
 ### 3.2 Background Services (started in lib.rs setup)
 
@@ -593,7 +594,7 @@ Key type definitions in `src/types/`:
 
 ### 4.6 Frontend API Layer (services/tauri.ts)
 
-28 API namespaces wrapping `invoke()` calls:
+29 API namespaces wrapping `invoke()` calls:
 
 | Namespace | Methods | Purpose |
 |-----------|---------|---------|
@@ -625,6 +626,7 @@ Key type definitions in `src/types/`:
 | `autostartApi` | 2 | Launch-on-startup toggle |
 | `cloudAiApi` | 8 | Cloud AI key management, resolve, usage, settings |
 | `backupApi` | 7 | Backup create/restore, validation, credential hints, restart |
+| `storageApi` | 1 | Storage scan (drive stats + per-game directory sizes) |
 | `developerApi` | 1 | Clear all data |
 
 ### 4.7 Image CDN & CSP
@@ -1020,5 +1022,6 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | v1.7.0 | Done | Game News Feed (aggregated news from favorites + recently played, read tracking, unread badge, `/news` route, `nav:news` command palette action, hero art cards, game filter, expanded article view, BBCode/HTML content parser, source filter, force refresh) |
 | v1.8.0 | Done | Gaming Recap & Insights (auto-generated monthly/yearly recaps, Activity page tab toggle, 8 recap sections with Recharts, fun comparisons, achievement highlights, genre breakdown, schema v23 `recaps` table, auto-generate on launch) |
 | v1.9.0 | Done | Backup & Restore (`.roost` ZIP archive, 4-step RestoreWizard, safety backup + rollback, credential hints, schema compatibility, progress events) |
+| v1.10.0 | Done | Storage Overview (`/storage` route, drive bars via Windows API, `walkdir` per-game dir sizing, Recharts donut + bar charts, progress events, `nav:storage` command palette action) |
 
 See `docs/ROADMAP.md` for the full roadmap.

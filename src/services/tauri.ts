@@ -440,3 +440,11 @@ export const backupApi = {
     invoke<string[]>("get_backup_credential_hints", { archivePath }),
   restartApp: () => invoke<void>("restart_app"),
 };
+
+// ── Storage ────────────────────────────────────────────────────
+
+import type { StorageScanResult } from "../types/storage";
+
+export const storageApi = {
+  scanStorage: () => invoke<StorageScanResult>("scan_storage"),
+};

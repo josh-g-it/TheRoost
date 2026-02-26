@@ -17,6 +17,7 @@ const navItems: { path: string; label: string; icon: IconName }[] = [
   { path: "/profile", label: "Profile", icon: "profile" },
   { path: "/notes", label: "Notes", icon: "notes" },
   { path: "/news", label: "News", icon: "news" },
+  { path: "/storage", label: "Storage", icon: "storage" },
   { path: "/settings", label: "Settings", icon: "settings" },
 ];
 

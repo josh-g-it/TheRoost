@@ -11,6 +11,7 @@ export type IconName =
   | "notes"
   | "settings"
   | "debug"
+  | "storage"
   // Actions
   | "search"
   | "close"
@@ -113,6 +114,7 @@ import {
   RiVolumeMuteLine,
   RiSparklingLine,
   RiNewspaperLine,
+  RiHardDriveLine,
 } from "react-icons/ri";
 
 const defaultSet: IconSet = {
@@ -120,6 +122,7 @@ const defaultSet: IconSet = {
   activity: RiBarChartBoxLine,
   profile: RiUserLine,
   notes: RiStickyNoteLine,
+  storage: RiHardDriveLine,
   settings: RiSettings4Line,
   debug: RiCodeSSlashLine,
   search: RiSearchLine,
@@ -214,6 +217,7 @@ import {
   LuVolumeX,
   LuSparkles,
   LuNewspaper,
+  LuHardDrive,
 } from "react-icons/lu";
 
 // Lucide doesn't have a filled star variant — use the same outline for both
@@ -224,6 +228,7 @@ const minimalSet: IconSet = {
   activity: LuChartBar,
   profile: LuUser,
   notes: LuNotepadText,
+  storage: LuHardDrive,
   settings: LuSettings,
   debug: LuCode,
   search: LuSearch,
@@ -319,6 +324,7 @@ import {
   HiOutlineSpeakerXMark,
   HiOutlineSparkles,
   HiOutlineNewspaper,
+  HiOutlineCircleStack,
 } from "react-icons/hi2";
 
 const heroicSet: IconSet = {
@@ -326,6 +332,7 @@ const heroicSet: IconSet = {
   activity: HiOutlineChartBar,
   profile: HiOutlineUser,
   notes: HiOutlineDocumentText,
+  storage: HiOutlineCircleStack,
   settings: HiOutlineCog6Tooth,
   debug: HiOutlineCommandLine,
   search: HiOutlineMagnifyingGlass,
@@ -421,6 +428,7 @@ import {
   IoVolumeMuteOutline,
   IoSparklesOutline,
   IoNewspaperOutline,
+  IoServerOutline,
 } from "react-icons/io5";
 
 const playfulSet: IconSet = {
@@ -428,6 +436,7 @@ const playfulSet: IconSet = {
   activity: IoBarChartOutline,
   profile: IoPersonOutline,
   notes: IoDocumentTextOutline,
+  storage: IoServerOutline,
   settings: IoSettingsOutline,
   debug: IoCodeSlashOutline,
   search: IoSearchOutline,
@@ -523,6 +532,7 @@ import {
   FaVolumeXmark,
   FaWandMagicSparkles,
   FaRegNewspaper,
+  FaHardDrive,
 } from "react-icons/fa6";
 
 const classicSet: IconSet = {
@@ -530,6 +540,7 @@ const classicSet: IconSet = {
   activity: FaChartBar,
   profile: FaUser,
   notes: FaNoteSticky,
+  storage: FaHardDrive,
   settings: FaGear,
   debug: FaCode,
   search: FaMagnifyingGlass,
@@ -625,6 +636,7 @@ import {
   GiSpeakerOff,
   GiSparkles,
   GiNewspaper,
+  GiLockedChest,
 } from "react-icons/gi";
 
 const fantasySet: IconSet = {
@@ -632,6 +644,7 @@ const fantasySet: IconSet = {
   activity: GiSandsOfTime,
   profile: GiCrown,
   notes: GiNotebook,
+  storage: GiLockedChest,
   settings: GiGears,
   debug: GiSpellBook,
   search: GiMagnifyingGlass,

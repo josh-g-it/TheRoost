@@ -129,6 +129,14 @@ const STATIC_DESCRIPTORS: ActionDescriptor[] = [
     category: "navigation",
   },
   {
+    id: "nav:storage",
+    label: "Go to Storage",
+    description: "Navigate to the storage overview",
+    keywords: ["storage", "disk", "space", "drive", "size"],
+    icon: "storage",
+    category: "navigation",
+  },
+  {
     id: "nav:settings",
     label: "Go to Settings",
     description: "Navigate to the settings page",
@@ -551,6 +559,10 @@ const EXECUTORS: Record<string, ActionExecutor> = {
   },
   "nav:news": (ctx) => {
     ctx.navigate("/news");
+    ctx.closeCommandCenter();
+  },
+  "nav:storage": (ctx) => {
+    ctx.navigate("/storage");
     ctx.closeCommandCenter();
   },
   "nav:settings": (ctx) => {

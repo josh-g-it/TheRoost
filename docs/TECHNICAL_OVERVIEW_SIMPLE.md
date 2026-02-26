@@ -1,7 +1,7 @@
 # The Roost — Technical Overview (Simple)
 
 > **Audience**: Non-technical readers, project stakeholders, curious users
-> **Last updated**: 2026-02-26 (v1.9.0 — Backup & Restore)
+> **Last updated**: 2026-02-26 (v1.10.0 — Storage Overview)
 
 ---
 
@@ -122,6 +122,13 @@ Organized into 5 tabs for quick access: General, Connections, Appearance, Naviga
 - AI assistant settings (Gemini API key, context scope, daily limits)
 - Developer section for advanced tools
 
+### Storage Overview
+- **Storage page**: A dedicated page showing how much disk space your games consume across all drives
+- **Drive breakdown**: Visual bars for each drive showing game storage vs other files vs free space
+- **Games by size**: See your largest game installs in a sorted bar chart — great for deciding what to uninstall
+- **By launcher**: Donut chart showing how much space each launcher's games use (Steam, Epic, GOG, etc.)
+- Scans only your game folders (not the entire disk), so it's fast — typically 5–15 seconds
+
 ### Backup & Restore
 - **Create Backup**: One click packages your entire library (database, settings, custom art) into a single `.roost` file — shows estimated size before saving
 - **Restore from Backup**: A guided 4-step wizard walks you through restoring: review backup details, check for active games, re-enter API keys, then restore with automatic safety backup
@@ -237,8 +244,8 @@ TheRoost/
 
 ## What's Coming Next
 
-- **Storage Overview**: See what's using disk space across your game library with per-drive breakdowns and cleanup suggestions.
 - **Steam Install/Uninstall**: Manage game installations directly from The Roost.
+- **Conversational AI Assistant**: Chat-style assistant with multi-turn conversations and multi-provider support.
 
 ---
 

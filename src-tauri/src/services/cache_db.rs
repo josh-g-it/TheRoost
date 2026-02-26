@@ -967,6 +967,21 @@ impl CacheDb {
         Ok(rows)
     }
 
+    /// Get installed games with name and source for storage scanning.
+    /// Returns (game_id, name, source, install_path).
+    pub fn get_installed_games_for_storage(
+        &self,
+    ) -> Result<Vec<(String, String, String, String)>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT game_id, COALESCE(name, ''), source, install_path \
+             FROM games WHERE install_path IS NOT NULL",
+        )?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
     /// Lightweight read of all registered games for the overlay.
     /// Returns (game_id, source, source_id, name, install_path, playtime_minutes).
     pub fn get_overlay_games(&self) -> Result<Vec<OverlayGameRow>, AppError> {

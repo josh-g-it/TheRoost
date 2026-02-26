@@ -15,6 +15,7 @@ pub mod saved_filter;
 pub mod session;
 pub mod settings;
 pub mod steam_api;
+pub mod storage;
 pub mod store_api;
 pub mod system_metrics;
 pub mod tag;
