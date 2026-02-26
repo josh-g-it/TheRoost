@@ -17,88 +17,59 @@
 
 ---
 
-The Roost is a multi-launcher game library manager for Windows. It unifies your game collections from Steam, Epic, GOG, EA, Ubisoft Connect, and Battle.net into a single, customizable interface with rich statistics, session tracking, and an AI-powered command palette.
+The Roost is a multi-launcher game library manager for Windows. It brings together your collections from Steam, Epic, GOG, EA, Ubisoft Connect, and Battle.net into a single customizable interface with rich statistics, session tracking, gaming recaps, and an AI-powered command palette.
 
 ## Features
 
-### Multi-Launcher Library
-- **6 launcher integrations** &mdash; Import games from Steam, Epic Games Store, GOG Galaxy, EA App, Ubisoft Connect, and Battle.net
-- **Custom games** &mdash; Add any game manually with its executable path, launch arguments, and description
-- **Per-game launch mode** &mdash; Choose between launching via the native launcher or directly for non-Steam games
+### Library
+- **6 launcher integrations** plus manual game entries with custom executables and launch arguments
+- **Shelves** &mdash; Organize games into configurable sections with filters, sorting, and manual pins
+- **Grid and list views** with multiple size/density options and cover art from SteamGridDB, GOG, or custom uploads
+- **Rich filtering** by genre, tags, features, launcher, favorites, ratings, and saved presets
+- **Custom tags** &mdash; Colored labels to organize games your way
 
-### Library Organization
-- **Hybrid shelves** &mdash; Configurable sections (Recently Played, Favorites, All Games, custom presets) with per-shelf filters, sort, and manual game pins &mdash; pin games to any shelf via right-click or GameDetail sidebar
-- **Two view modes** &mdash; Visual grid (3 sizes) with game artwork or compact sortable list (3 densities)
-- **Rich filtering** &mdash; By genre, Steam tags, features, source launcher, custom tags, favorites, hidden, rated/unrated, and saved filter presets
-- **Custom tags** &mdash; Create colored labels (15 theme-aware colors) to organize games your way
-- **Cover art** &mdash; Automatic art from SteamGridDB and GOG CDN, plus custom image upload with crop/reposition for all games (including Steam)
-
-### Tracking & Statistics
-- **Session tracking** &mdash; Automatic playtime monitoring via OS-level process detection with per-session history
-- **Manual playtime** &mdash; Set or add playtime for non-Steam games; tracked sessions auto-accumulate
-- **Personal ratings** &mdash; 5-star rating system with half-star precision and optional reviews
-- **Activity dashboard** &mdash; Configurable card layout with 8 card types, drill-down charts, drag-and-drop reorder
-- **Player profile** &mdash; Statistics and interactive Recharts charts (genre radar, playtime histogram, Metacritic scatter, leaderboards)
-- **Game notes** &mdash; Per-game notepad and a general scratchpad, browseable from the `/notes` compendium
-
-### Game News Feed
-- **Aggregated news** &mdash; Articles from Steam games you've favorited or recently played, shown on a dedicated `/news` page
-- **Hero art cards** &mdash; Each article shows the game's banner art, headline, author, date, and a text snippet
-- **Expanded article view** &mdash; Click to read the full article in-app (BBCode and HTML parsed into styled content), with an "Open in Browser" button
-- **Game filter** &mdash; Multi-select dropdown to focus on specific games' news
-- **Source filter** &mdash; Toggle between All, Official (developer posts), and Third Party (gaming news sites)
-- **Read tracking** &mdash; Unread count badge on the nav rail; articles marked as read on open; "Mark All Read" button
+### Tracking & Stats
+- **Automatic session tracking** with per-session history and manual playtime entry for non-Steam games
+- **Activity dashboard** &mdash; Customizable card layout with charts, heatmaps, and drill-down views
+- **Player profile** &mdash; Interactive charts for genre breakdown, playtime trends, Metacritic scatter, and leaderboards
+- **Personal ratings** &mdash; 5-star system with half-star precision and optional reviews
+- **Game notes** &mdash; Per-game notepad and a general scratchpad
 
 ### Gaming Recaps
-- **Monthly recaps** &mdash; Auto-generated summary of each month's gaming: total playtime, sessions, Game of the Month, top 5 games, genre breakdown, streaks, and more
-- **Yearly recaps** &mdash; Year-in-review with month-by-month timeline, Game of the Year, and aggregated annual stats
-- **Achievement highlights** &mdash; Top 5 rarest achievements unlocked during the period
-- **Fun comparisons** &mdash; "That's X flights from NYC to Tokyo" &mdash; playtime translated into relatable activities
-- **Tab toggle** &mdash; Activity page splits into "Activity" and "Recaps" tabs; no new route or sidebar clutter
-- **Auto-generation** &mdash; Last month's recap silently generated on app launch if it doesn't exist yet
+- **Monthly and yearly recaps** &mdash; Auto-generated summaries with Game of the Month/Year, top games, genre breakdown, play streaks, and session stats
+- **Achievement highlights** &mdash; Rarest achievements unlocked during the period
+- **Fun comparisons** &mdash; Your playtime translated into relatable activities ("That's 12 flights from NYC to Tokyo")
+
+### News Feed
+- **Aggregated articles** from games you've favorited or recently played
+- **In-app reading** with full article rendering, game and source filters, and read tracking
 
 ### System Overlay
-- **Global hotkey HUD** &mdash; Ctrl+Space (configurable) opens a system-wide overlay, even while minimized to tray
-- **5 floating panels** &mdash; Command center, game notes, system monitor (CPU/RAM/GPU sparklines), media controls, audio mixer
-- **Draggable & lockable** &mdash; Each panel is freely positionable with collision detection and position persistence
+- **Global hotkey HUD** (Ctrl+Space) with floating panels for quick commands, game notes, system monitor, media controls, and audio mixer
 
 ### AI Command Palette
-- **Pattern matcher** &mdash; Instant local AI resolves natural language queries ("installed RPGs sorted by playtime") into library actions
-- **Cloud AI** &mdash; Optional Gemini Flash integration for recommendations and conversational queries
-- **40+ searchable actions** &mdash; Navigation, themes, fonts, icon sets, view modes, sort, filter, settings shortcuts
-- **Category prefixes** &mdash; Type "theme", "sort", "filter", or "go to" for focused results
+- **Natural language search** &mdash; "installed RPGs sorted by playtime" resolves instantly into library actions
+- **Optional cloud AI** (Gemini Flash) for recommendations and conversational queries
+- **40+ actions** for navigation, themes, fonts, icon sets, view modes, sorting, and more
 
 ### Customization
-- **9 color palettes** &mdash; Dark Gaming, Fae, Midnight Purple, Cyber Neon, Arctic Frost, Ember Forge, Ocean Depths, Sakura, Verdant
-- **6 icon sets** &mdash; Remix, Lucide, Heroicons, Ionicons, Font Awesome, Game Icons
-- **5 font families** &mdash; System, Inter, Space Grotesk, Exo 2, JetBrains Mono
-- **4 UI scales** &mdash; Minimal, Comfortable, Expanded, Large
-
-### Infrastructure
-- **Auto-updates** &mdash; OTA updates via GitHub Releases with in-app notification banner
-- **System tray** &mdash; Minimize to tray with active session display and recently played quick-launch
-- **Launch on startup** &mdash; Optional auto-start with Windows
-- **Per-route error boundaries** &mdash; A crash in one page doesn't take down the whole app
+- 9 color palettes, 6 icon sets, 5 font families, 4 UI scales
+- Auto-updates, system tray with session display, and optional launch on startup
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Framework | [Tauri v2](https://v2.tauri.app/) |
-| Backend | Rust (122 commands across 29 modules, SQLite via rusqlite) |
+| Backend | Rust, SQLite (rusqlite) |
 | Frontend | React 18, TypeScript, Vite |
-| State | Zustand (19 slices) |
-| Database | SQLite (bundled, WAL mode, schema v23, 23 tables) |
-| Styling | CSS variables with theme system |
+| State | Zustand |
 | Charts | Recharts |
-| Drag & Drop | @dnd-kit |
-| Testing | Vitest (427 tests) + Rust (248 tests) |
+| Testing | Vitest + Rust unit tests (675 total) |
 
 ## Installation
 
-Download the latest installer from [Releases](https://github.com/josh-g-it/TheRoost/releases). Run the installer to set up The Roost.
-
-Existing installations can update in-app via **Settings > General > Check for Updates**.
+Download the latest installer from [Releases](https://github.com/josh-g-it/TheRoost/releases). Existing installations update in-app via **Settings > General > Check for Updates**.
 
 ## Development
 
@@ -111,20 +82,17 @@ Existing installations can update in-app via **Settings > General > Check for Up
 ### Setup
 
 ```bash
-# Install frontend dependencies
 npm install
-
-# Run in development mode
 npm run tauri dev
 ```
 
 ### Testing
 
 ```bash
-# Frontend tests (Vitest)
+# Frontend
 npx vitest run
 
-# Rust tests
+# Rust
 cd src-tauri && cargo test
 
 # Linting
@@ -135,4 +103,4 @@ cargo fmt --check
 
 ## License
 
-This project is licensed under the [GNU General Public License v3.0](LICENSE). You are free to use, modify, and distribute this software under the terms of the GPL-3.0. Any derivative work must also be open-sourced under the same license.
+[GNU General Public License v3.0](LICENSE)
