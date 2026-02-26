@@ -14,6 +14,46 @@
   padding-bottom: var(--space-xl);
 }
 
+/* ── Header Actions ──────────────────────────────────────── */
+.activity-view__header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+/* ── Tab Toggle ──────────────────────────────────────────── */
+.activity-view__tabs {
+  display: flex;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-subtle);
+  overflow: hidden;
+}
+
+.activity-view__tab {
+  padding: 5px 14px;
+  border: none;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.activity-view__tab:not(:last-child) {
+  border-right: 1px solid var(--color-border-subtle);
+}
+
+.activity-view__tab:hover:not(.activity-view__tab--active) {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.activity-view__tab--active {
+  background: var(--color-accent);
+  color: var(--color-accent-text, #fff);
+  font-weight: var(--font-weight-semibold);
+}
+
 /* ── Edit Layout Button ──────────────────────────────────── */
 .activity-view__edit-btn {
   display: flex;

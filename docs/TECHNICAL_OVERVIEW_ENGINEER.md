@@ -1,8 +1,8 @@
 # The Roost — Technical Overview (Engineer)
 
 > **Audience**: AI assistants, senior developers, contributors
-> **Last updated**: 2026-02-25
-> **Version**: 1.7.0 (Game News Feed — aggregated news from favorited/recently played games)
+> **Last updated**: 2026-02-26
+> **Version**: 1.8.0 (Gaming Recap & Insights — auto-generated monthly/yearly gaming recaps)
 
 ---
 
@@ -15,9 +15,9 @@
 | Package | `the-roost` (npm + cargo) |
 | Tauri ID | `app.theroost` |
 | Framework | Tauri v2 (Rust) + React 18 + TypeScript + Vite |
-| State | Zustand (18 slices) |
+| State | Zustand (19 slices) |
 | Routing | React Router v6 data router (`createBrowserRouter`) |
-| Database | SQLite via rusqlite (bundled), WAL mode, schema v22 |
+| Database | SQLite via rusqlite (bundled), WAL mode, schema v23 |
 | Platform | Windows 11 (registry, credential manager, WASAPI, SMTC, NVML, PDH) |
 | Launch | `npm run tauri dev` |
 
@@ -64,7 +64,12 @@ TheRoost/
 │   │   │                         #   NowPlayingBanner, CardMenu, AddCardButton,
 │   │   │                         #   SessionDrillDown, ChartFilterMenu, MemoriesCard,
 │   │   │                         #   charts/ (DailyPlaytimeChart, MostPlayedChart,
-│   │   │                         #     SessionLengthDistribution, PlaytimeByDayOfWeek)
+│   │   │                         #     SessionLengthDistribution, PlaytimeByDayOfWeek),
+│   │   │                         #   recap/ (RecapTab, RecapPeriodSelector, RecapView,
+│   │   │                         #     RecapHeroSection, RecapStatsGrid, RecapTopGames,
+│   │   │                         #     RecapGenreBreakdown, RecapMonthlyTimeline,
+│   │   │                         #     RecapDiscoveries, RecapAchievements,
+│   │   │                         #     RecapFunComparisons)
 │   │   ├── profile/              # ProfileView, ProfileHeader, ChartCard, ChartToolbar,
 │   │   │                         #   ProfileDrillDown,
 │   │   │                         #   charts/ (GenreDNARadar, PlaytimeDistribution,
@@ -93,11 +98,11 @@ TheRoost/
 │   │   ├── useTrayListener.ts    # Tray event listener (navigate on tray clicks)
 │   │   └── useDebugListener.ts   # Tauri event listener for Rust logs
 │   │
-│   ├── store/                    # 18 Zustand slices (see §4.2)
+│   ├── store/                    # 19 Zustand slices (see §4.2)
 │   ├── services/
 │   │   └── tauri.ts              # invoke() wrappers — 26 API namespaces (see §4.6)
 │   │
-│   ├── types/                    # 21 type files (see §4.5)
+│   ├── types/                    # 22 type files (see §4.5)
 │   ├── utils/                    # icons, logger, errors, formatters, sorting, filtering,
 │   │                             #   shelfFiltering, commandPalette, streaks,
 │   │                             #   profileStats, activityStats, steamBBCode
@@ -113,32 +118,33 @@ TheRoost/
 │   │
 │   └── src/
 │       ├── main.rs               # Entry → lib::run()
-│       ├── lib.rs                # Tauri setup, tracing init, 116 commands, background services
+│       ├── lib.rs                # Tauri setup, tracing init, 122 commands, background services
 │       │
-│       ├── commands/             # 28 command modules, 116 total commands (see §3.1)
+│       ├── commands/             # 29 command modules, 122 total commands (see §3.1)
 │       │   ├── steam_scanner.rs, steam_api.rs, settings.rs, game_launcher.rs
 │       │   ├── metadata.rs, sessions.rs, tags.rs, favorites.rs
 │       │   ├── hidden_games.rs, saved_filters.rs, developer.rs
 │       │   ├── external_scanner.rs, cover_art.rs, custom_games.rs
-│       │   ├── achievements.rs, friends.rs, news.rs
+│       │   ├── achievements.rs, friends.rs, news.rs, recaps.rs
 │       │   ├── overlay.rs, notes.rs, ratings.rs, system_monitor.rs
 │       │   ├── media_controls.rs, media_bookmarks.rs, audio.rs
 │       │   ├── ai.rs, updater.rs, autostart.rs
 │       │   └── mod.rs
 │       │
-│       ├── models/               # 20 model files, 50+ structs (see §3.3)
+│       ├── models/               # 21 model files, 50+ structs (see §3.3)
 │       │   ├── game.rs, settings.rs, metadata.rs, session.rs, tag.rs
 │       │   ├── saved_filter.rs, steam_api.rs, store_api.rs, log_event.rs
-│       │   ├── achievement.rs, friend.rs, news.rs, note.rs, rating.rs
+│       │   ├── achievement.rs, friend.rs, news.rs, note.rs, rating.rs, recap.rs
 │       │   ├── media_session.rs, media_bookmark.rs, audio.rs, system_metrics.rs
 │       │   └── mod.rs
 │       │
-│       ├── services/             # 40 service modules (see §3.5)
-│       │   ├── cache_db.rs       # SQLite: schema v22, 22 tables, WAL mode
+│       ├── services/             # 42 service modules (see §3.5)
+│       │   ├── cache_db.rs       # SQLite: schema v23, 23 tables, WAL mode
 │       │   ├── steam_client.rs   # Shared HTTP client (OnceLock, 15s timeout, sanitized errors)
 │       │   ├── store_client.rs, steamspy_client.rs, steamgriddb.rs
 │       │   ├── metadata_service.rs, achievement_service.rs
 │       │   ├── friends_service.rs, news_service.rs, cover_art.rs
+│       │   ├── recap_service.rs, fun_comparisons.rs
 │       │   ├── image_processing.rs
 │       │   ├── settings_store.rs, credential_store.rs
 │       │   ├── registry.rs, vdf_parser.rs, log_bridge.rs
@@ -162,7 +168,7 @@ TheRoost/
 
 ### 3.1 Command Registry (lib.rs)
 
-118 Tauri commands across 27 modules:
+122 Tauri commands across 28 modules:
 
 | Module | Commands |
 |--------|----------|
@@ -183,6 +189,7 @@ TheRoost/
 | `achievements` | `fetch_game_achievements`, `get_all_achievement_stats`, `batch_fetch_achievements`, `clear_achievement_cache` |
 | `friends` | `fetch_friends_list`, `fetch_friend_library` |
 | `news` | `fetch_game_news`, `fetch_followed_games`, `fetch_news_feed`, `mark_news_read`, `get_unread_news_count`, `clear_news_cache` |
+| `recaps` | `get_recap`, `list_recaps`, `generate_recap`, `delete_recap` |
 | `overlay` | `toggle_overlay`, `hide_overlay`, `show_main_and_navigate`, `overlay_select_game`, `update_overlay_shortcut`, `get_overlay_library`, `overlay_apply_tag_filter`, `notify_settings_changed`, `overlay_execute_palette_action` |
 | `notes` | `get_game_note`, `save_game_note`, `delete_game_note`, `get_all_notes_with_content` |
 | `ratings` | `get_game_rating`, `save_game_rating`, `delete_game_rating`, `get_all_ratings` |
@@ -202,6 +209,7 @@ TheRoost/
 | `library_sync` | 30 min | Poll Steam API for owned games; register new games; record playtime snapshots; cleanup old snapshots (30-day TTL) |
 | `overlay` | On shortcut | Create/toggle overlay window; register global shortcut (default Ctrl+Space) |
 | `tray` | On session change | System tray icon with context menu showing active game, recent games |
+| `recap_service` | 10s after launch | Auto-generate monthly/yearly recaps if a new period has elapsed |
 
 ### 3.3 Game Identity Model
 
@@ -259,9 +267,9 @@ All scanners register games into the unified UUID-based `games` table with their
 
 ### 3.7 SQLite Schema (cache_db.rs)
 
-**Current schema version: v22** — Location: `%APPDATA%/app.theroost/theroost.db`
+**Current schema version: v23** — Location: `%APPDATA%/app.theroost/theroost.db`
 
-22 tables:
+23 tables:
 
 | Table | Purpose | PK |
 |-------|---------|-----|
@@ -285,10 +293,11 @@ All scanners register games into the unified UUID-based `games` table with their
 | `audio_session_prefs` | Per-exe audio visibility prefs | `exe_name TEXT` |
 | `game_ratings` | Personal ratings + reviews | `game_id TEXT` |
 | `news_read` | Read-tracking for news feed articles | `(game_id, news_id)` |
+| `recaps` | Generated monthly/yearly recap data (encoded JSON) | `period_key TEXT` |
 
 Database features: WAL mode, foreign keys enforced, 7 indexes for query performance.
 
-Migration system checks `user_version` pragma and applies incremental migrations v1→v22.
+Migration system checks `user_version` pragma and applies incremental migrations v1→v23.
 
 ### 3.8 Process Monitor & Session Tracking
 
@@ -457,7 +466,7 @@ main.tsx → ErrorBoundary → App
 
 ### 4.2 State Management (Zustand)
 
-18 independent stores:
+19 independent stores:
 
 | Slice | Key State | Purpose |
 |-------|-----------|---------|
@@ -477,6 +486,7 @@ main.tsx → ErrorBoundary → App
 | `friendsSlice` | `friends[]`, `friendLibraries: Map` | Friends + library comparison |
 | `notesSlice` | `notes[]` | Game notes CRUD |
 | `ratingsSlice` | `ratings: Map<gameId, GameRating>` | Personal ratings + reviews |
+| `recapSlice` | `summaries`, `currentRecap`, `selectedPeriodKey` | Monthly/yearly gaming recap data |
 | `activityLayoutSlice` | `cards: ActivityCardConfig[]`, `isEditMode` | Customizable activity page layout |
 | `backgroundTasksSlice` | `activeTasks`, `progress: Map` | Background task progress tracking |
 | `debugSlice` | `events[]` (2000 max circular buffer) | Log event capture |
@@ -491,12 +501,14 @@ main.tsx → ErrorBoundary → App
 - Loads tags, favorites, hidden games, saved filters on mount
 - Passes `persistShelves` callback through Shelf → GameGrid/HorizontalScrollRow → GameCard/GameDetail for pin actions
 
-**ActivityView** — Customizable card dashboard (Phase 10)
+**ActivityView** — Customizable card dashboard + gaming recaps (Phase 10 + v1.8.0)
+- Header tab toggle: "Activity" (card dashboard) / "Recaps" (gaming recap browser)
 - Drag-and-drop layout via `@dnd-kit/core` + `@dnd-kit/sortable`
 - 8 card types: quick-stats, heatmap, daily-playtime, most-played, session-length, playtime-by-day, recent-sessions, memories
 - Cards support half/full width, per-card filter options (date range, game, tags, source)
 - Session drill-down overlay for exploring filtered data
 - Layout persisted in `AppSettings.activityLayout`
+- **Recaps tab**: RecapTab orchestrator with RecapPeriodSelector (monthly/yearly periods) + RecapView (8 section components: hero, stats grid, top games BarChart, genre breakdown PieChart, monthly timeline AreaChart (yearly only), discoveries, achievements, fun comparisons)
 
 **GameDetail** — Full game detail modal
 - Two-column layout: sidebar (play button, stats, personal rating + review, Metacritic, developer, genres, shelves) + main (description, screenshots, achievements, notes, sessions)
@@ -549,7 +561,7 @@ Applied via:
 
 Tag color palette: 15 CSS variables per theme (`--tag-color-0` through `--tag-color-14`).
 
-### 4.5 Types (21 files)
+### 4.5 Types (22 files)
 
 Key type definitions in `src/types/`:
 
@@ -567,6 +579,7 @@ Key type definitions in `src/types/`:
 | `news.ts` | `GameNewsItem`, `FeedNewsItem` |
 | `note.ts` | `GameNote`, `GameNoteWithName`, `GENERAL_NOTES_ID` |
 | `rating.ts` | `GameRating` |
+| `recap.ts` | `RecapData`, `RecapTopGame`, `RecapGenreEntry`, `RecapBusiestDay`, `RecapDiscovery`, `RecapAchievement`, `RecapComparison`, `RecapSummary` |
 | `systemMetrics.ts` | `SystemSample`, `ProcessMetrics`, `SystemMetricsSnapshot` |
 | `mediaSession.ts` | `MediaPlaybackStatus`, `MediaControlsMode`, `MediaSessionSnapshot` |
 | `audio.ts` | `AudioSession`, `AudioDevice`, `AudioSnapshot` |
@@ -579,7 +592,7 @@ Key type definitions in `src/types/`:
 
 ### 4.6 Frontend API Layer (services/tauri.ts)
 
-26 API namespaces wrapping `invoke()` calls:
+27 API namespaces wrapping `invoke()` calls:
 
 | Namespace | Methods | Purpose |
 |-----------|---------|---------|
@@ -598,6 +611,7 @@ Key type definitions in `src/types/`:
 | `achievementsApi` | 4 | Achievement fetch, batch, stats |
 | `friendsApi` | 2 | Friends list + library comparison |
 | `newsApi` | 6 | Game news + followed games + aggregated feed + read tracking + cache clear |
+| `recapApi` | 4 | Get/list/generate/delete gaming recaps |
 | `overlayApi` | 5 | Toggle, hide, navigate, shortcut, execute palette action |
 | `notesApi` | 4 | Note CRUD |
 | `ratingsApi` | 4 | Rating + review CRUD |
@@ -817,6 +831,22 @@ ActivityView (mount)
   → Per-card filters: date range, specific game, tags, source, day of week
   → Click chart element → SessionDrillDown (modal with filtered session list)
   → Layout persisted on change → saveSettings({ activityLayout })
+
+Recaps tab (v1.8.0):
+  → recapSlice.loadSummaries() → invoke("list_recaps") → RecapSummary[]
+  → RecapPeriodSelector: user picks month/year → recapSlice.loadRecap(periodKey)
+    → invoke("get_recap", { periodKey }) → RecapData (or null)
+  → RecapView renders 8 sections:
+      RecapHeroSection (Game of the Month/Year banner)
+      RecapStatsGrid (total playtime, sessions, unique games, avg/longest session, streak)
+      RecapTopGames (BarChart — top 5 games by playtime)
+      RecapGenreBreakdown (PieChart — genre distribution)
+      RecapMonthlyTimeline (AreaChart — month-by-month, yearly only)
+      RecapDiscoveries (games first played in the period)
+      RecapAchievements (top 5 rarest unlocked achievements)
+      RecapFunComparisons ("That's X flights from NYC to Tokyo")
+  → Auto-generation: recap_service.auto_generate_if_needed() runs 10s after app launch
+  → Manual regeneration: invoke("generate_recap", { periodType, year, month })
 ```
 
 ### 5.7 Notes System
@@ -884,10 +914,10 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | react-icons | 6 icon set libraries |
 | GitHub Actions | CI (lint + test) + Release (build + sign + publish) |
 
-**Test Coverage (624 total)**:
+**Test Coverage (675 total)**:
 
-**Rust (234 tests)**:
-- CacheDb: 101 tests (schema, CRUD for all 22 tables, transactions, migrations v1→v22, custom art)
+**Rust (248 tests)**:
+- CacheDb: 105 tests (schema, CRUD for all 23 tables, transactions, migrations v1→v23, custom art, recap queries)
 - AI pattern matcher: 38 tests (10 extractors, fuzzy matching, confidence scoring)
 - VDF parser: 15 tests (parsing, escapes, real-world formats)
 - Steam API URL parsing: 13 tests (Steam profile/vanity URL extraction)
@@ -901,9 +931,11 @@ cloud_ai_exclude_games, cloud_ai_include_games
 - Media: 2 tests + 2 model tests + 2 bookmark tests
 - Image processing: 7 tests (validation, crop/save, delete)
 - News service: 7 tests (feed aggregation, read tracking, unread count)
+- Recap service: 3 tests (monthly/yearly generation, auto-generate logic)
+- Fun comparisons: 1 test (pick_comparisons algorithm, tier selection)
 - AI Gemini provider: 1 test
 
-**Frontend (390 tests)**:
+**Frontend (427 tests)**:
 - Command palette: 72 tests (action registry, search, result capping, category prefix matching, hints, AI heuristic)
 - Activity stats: 56 tests (daily playtime, most played, session distribution, day-of-week)
 - Profile stats: 46 tests (genre DNA, playtime distribution, Metacritic scatter, leaderboard)
@@ -926,6 +958,8 @@ cloud_ai_exclude_games, cloud_ai_include_games
 - StarRating component: 8 tests (render, read-only, interactive, zero value)
 - Asset URL utility: 4 tests (remote URL passthrough, local: prefix conversion)
 - News slice: 8 tests (feed fetch, read tracking, unread count, mark all read)
+- Recap slice: 12 tests (load summaries, load/generate/delete recap, period selection)
+- Recap components: 25 tests (RecapTab, RecapView, RecapPeriodSelector, section rendering, chart data)
 - Notes slice: 2 tests
 
 **Shared test factories** (`src/test/factories.ts`): `makeGame()`, `makeMeta()`, `makeFilters()`, `makeSession()`, `makeShelf()`, `ts()`. Override object pattern for all factories. `makeGame` includes `description: null` by default. `makeShelf` includes `pinnedGameIds: []` by default.
@@ -982,5 +1016,6 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | v1.5.0 | Done | Custom game art upload (local upload + crop, Art Management Menu, unified resolution for all games) |
 | v1.6.0 | Done | Manual shelf assignment (hybrid shelves: filter rules + manual pins, context menu & GameDetail chips, ShelfEditor pin management) |
 | v1.7.0 | Done | Game News Feed (aggregated news from favorites + recently played, read tracking, unread badge, `/news` route, `nav:news` command palette action, hero art cards, game filter, expanded article view, BBCode/HTML content parser, source filter, force refresh) |
+| v1.8.0 | Done | Gaming Recap & Insights (auto-generated monthly/yearly recaps, Activity page tab toggle, 8 recap sections with Recharts, fun comparisons, achievement highlights, genre breakdown, schema v23 `recaps` table, auto-generate on launch) |
 
 See `docs/ROADMAP.md` for the full roadmap.

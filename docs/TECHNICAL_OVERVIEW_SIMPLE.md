@@ -1,7 +1,7 @@
 # The Roost — Technical Overview (Simple)
 
 > **Audience**: Non-technical readers, project stakeholders, curious users
-> **Last updated**: 2026-02-25 (v1.7.0 — Game News Feed)
+> **Last updated**: 2026-02-26 (v1.8.0 — Gaming Recap & Insights)
 
 ---
 
@@ -57,6 +57,20 @@ A fully customizable page with drag-and-drop cards:
 - Each card supports half or full width, and has its own filter options (date range, specific game, tags, source)
 - Click any chart element to drill down into the underlying sessions
 - Drag cards to rearrange, add/remove as you like — your layout is saved
+
+### Gaming Recaps
+The Roost automatically generates **monthly and yearly gaming recaps** — think of it like a personalized "gaming wrapped" experience. At the start of each month, the app looks back at the previous month and creates a recap showing:
+- Your **Game of the Month** (or Game of the Year for yearly recaps) with a hero banner
+- Total playtime, sessions played, and unique games
+- A **top 5 games** chart showing where your time went
+- Genre breakdown as a pie chart
+- Your busiest day, average session length, longest session, and play streak
+- **New discoveries** — games you played for the first time
+- **Achievement highlights** — the rarest achievements you unlocked
+- **Fun comparisons** — your playtime translated into relatable activities ("That's enough time to fly from NYC to Tokyo 3 times!")
+- Yearly recaps also include a **month-by-month timeline chart** showing how your gaming ebbed and flowed throughout the year
+
+Recaps are accessed via the **Recaps tab** on the Activity page. You can browse past recaps, regenerate them if your data changed, or delete ones you don't want. The app generates them automatically on launch when a new month or year has passed.
 
 ### Player Profile & Statistics
 - Steam avatar, display name, country flag, account age
@@ -170,7 +184,7 @@ TheRoost/
 │   ├── components/         ← Visual building blocks
 │   │   ├── layout/         ← App shell, icon rail, command center
 │   │   ├── library/        ← Game grid, cards, details, shelves, art management
-│   │   ├── activity/       ← Activity dashboard (8 customizable card types)
+│   │   ├── activity/       ← Activity dashboard (8 card types) + gaming recaps
 │   │   ├── profile/        ← Player profile (4 interactive charts)
 │   │   ├── sessions/       ← Reusable heatmap & timeline
 │   │   ├── overlay/        ← System overlay panels (5 HUD panels)
@@ -181,15 +195,15 @@ TheRoost/
 │   │   ├── setup/          ← First-time setup wizard
 │   │   └── debug/          ← Developer debug panel
 │   ├── hooks/              ← Reusable behaviors
-│   ├── store/              ← App state (18 independent stores)
+│   ├── store/              ← App state (19 independent stores)
 │   └── utils/              ← Helper functions (formatting, filtering, stats)
 │
 └── src-tauri/              ← The engine (behind the scenes)
     └── src/
-        ├── commands/       ← 118 things the frontend can ask the backend to do
+        ├── commands/       ← 122 things the frontend can ask the backend to do
         ├── models/         ← Data shapes (50+ structs)
-        ├── services/       ← Core logic (39 modules: APIs, database, monitoring,
-        │                      audio, media, overlay, AI, launcher scanners)
+        ├── services/       ← Core logic (42 modules: APIs, database, monitoring,
+        │                      audio, media, overlay, AI, launcher scanners, recaps)
         └── utils/          ← Error handling
 ```
 
@@ -203,7 +217,7 @@ TheRoost/
 | **Rust** for the backend | Fast, safe, great for system access (processes, audio, GPU) |
 | **React** for the UI | Popular, well-supported, great component model |
 | **Zustand** for state | Simple, lightweight, no boilerplate |
-| **SQLite** for local data | Fast, reliable local database (22 tables) — no server needed |
+| **SQLite** for local data | Fast, reliable local database (23 tables) — no server needed |
 | **Windows Credential Manager** | Industry-standard secure storage for API keys |
 | **Recharts** for charts | React-native charting for activity & profile dashboards |
 | **@dnd-kit** for drag-and-drop | Accessible, performant drag-and-drop for activity cards |
@@ -217,8 +231,8 @@ TheRoost/
 
 ## What's Coming Next
 
-- **Achievements Tracker**: Dedicated page with completion progress across your whole library.
-- **Gaming Recap & Insights**: Personalized summaries and trends from your play history.
+- **Backup & Restore**: Export your entire Roost configuration (database, settings, custom art) into a single archive and restore it on any machine.
+- **Storage Overview**: See what's using disk space across your game library with per-drive breakdowns and cleanup suggestions.
 
 ---
 

@@ -1,0 +1,198 @@
+/* ── Shared Section Styles ────────────────────────────────── */
+
+.recap-section {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+}
+
+.recap-section__title {
+  margin: 0 0 var(--space-xs);
+  font-size: 1rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.recap-section__subtitle {
+  margin: 0 0 var(--space-md);
+  font-size: 0.8125rem;
+  color: var(--color-text-tertiary);
+}
+
+.recap-section__chart {
+  margin-top: var(--space-sm);
+}
+
+/* ── Hero Section ────────────────────────────────────────── */
+
+.recap-hero {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-xl) var(--space-lg);
+}
+
+.recap-hero__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.recap-hero__period {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--color-text-primary);
+}
+
+.recap-hero__total {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.recap-hero__total-value {
+  font-size: 1.25rem;
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--color-accent);
+}
+
+.recap-hero__total-label {
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+}
+
+.recap-hero__spotlight {
+  text-align: center;
+  padding: var(--space-lg) 0 var(--space-sm);
+}
+
+.recap-hero__spotlight-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--space-xs);
+}
+
+.recap-hero__spotlight-name {
+  font-size: 1.75rem;
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.recap-hero__spotlight-stats {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+/* ── Stats Grid ──────────────────────────────────────────── */
+
+.recap-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-md);
+}
+
+@media (max-width: 900px) {
+  .recap-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ── Discoveries ─────────────────────────────────────────── */
+
+.recap-discoveries__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.recap-discoveries__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--color-bg-tertiary, var(--color-bg-hover));
+  color: var(--color-text-primary);
+  font-size: 0.8125rem;
+  font-weight: var(--font-weight-medium, 500);
+}
+
+/* ── Achievements ────────────────────────────────────────── */
+
+.recap-achievements__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.recap-achievements__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-tertiary, var(--color-bg-hover));
+}
+
+.recap-achievements__name {
+  font-size: 0.8125rem;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--color-text-primary);
+}
+
+.recap-achievements__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.recap-achievements__game {
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+}
+
+.recap-achievements__rarity {
+  font-size: 0.75rem;
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ── Fun Comparisons ─────────────────────────────────────── */
+
+.recap-comparisons__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-sm);
+}
+
+.recap-comparisons__card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-tertiary, var(--color-bg-hover));
+}
+
+.recap-comparisons__emoji {
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.recap-comparisons__text {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.recap-comparisons__text strong {
+  color: var(--color-text-primary);
+}

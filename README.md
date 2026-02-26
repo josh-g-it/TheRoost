@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.7.0-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/version-1.8.0-blue" alt="Version" />
   <img src="https://img.shields.io/badge/platform-Windows-0078D6" alt="Platform" />
   <img src="https://img.shields.io/badge/built_with-Tauri_v2-FFC131" alt="Tauri v2" />
   <img src="https://img.shields.io/badge/license-GPL--3.0-green" alt="License" />
@@ -49,6 +49,14 @@ The Roost is a multi-launcher game library manager for Windows. It unifies your 
 - **Source filter** &mdash; Toggle between All, Official (developer posts), and Third Party (gaming news sites)
 - **Read tracking** &mdash; Unread count badge on the nav rail; articles marked as read on open; "Mark All Read" button
 
+### Gaming Recaps
+- **Monthly recaps** &mdash; Auto-generated summary of each month's gaming: total playtime, sessions, Game of the Month, top 5 games, genre breakdown, streaks, and more
+- **Yearly recaps** &mdash; Year-in-review with month-by-month timeline, Game of the Year, and aggregated annual stats
+- **Achievement highlights** &mdash; Top 5 rarest achievements unlocked during the period
+- **Fun comparisons** &mdash; "That's X flights from NYC to Tokyo" &mdash; playtime translated into relatable activities
+- **Tab toggle** &mdash; Activity page splits into "Activity" and "Recaps" tabs; no new route or sidebar clutter
+- **Auto-generation** &mdash; Last month's recap silently generated on app launch if it doesn't exist yet
+
 ### System Overlay
 - **Global hotkey HUD** &mdash; Ctrl+Space (configurable) opens a system-wide overlay, even while minimized to tray
 - **5 floating panels** &mdash; Command center, game notes, system monitor (CPU/RAM/GPU sparklines), media controls, audio mixer
@@ -77,14 +85,14 @@ The Roost is a multi-launcher game library manager for Windows. It unifies your 
 | Layer | Technology |
 |-------|-----------|
 | Framework | [Tauri v2](https://v2.tauri.app/) |
-| Backend | Rust (118 commands across 27 modules, SQLite via rusqlite) |
+| Backend | Rust (122 commands across 29 modules, SQLite via rusqlite) |
 | Frontend | React 18, TypeScript, Vite |
-| State | Zustand (18 slices) |
-| Database | SQLite (bundled, WAL mode, schema v22, 22 tables) |
+| State | Zustand (19 slices) |
+| Database | SQLite (bundled, WAL mode, schema v23, 23 tables) |
 | Styling | CSS variables with theme system |
 | Charts | Recharts |
 | Drag & Drop | @dnd-kit |
-| Testing | Vitest (390 tests) + Rust (234 tests) |
+| Testing | Vitest (427 tests) + Rust (248 tests) |
 
 ## Installation
 

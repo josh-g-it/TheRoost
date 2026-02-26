@@ -30,6 +30,7 @@ import { SessionLengthDistribution } from "./charts/SessionLengthDistribution";
 import { PlaytimeByDayOfWeek } from "./charts/PlaytimeByDayOfWeek";
 import { MemoriesCard } from "./cards/MemoriesCard";
 import { ChartFilterMenu } from "./cards/ChartFilterMenu";
+import { RecapTab } from "./recap/RecapTab";
 import { useSessionStore } from "../../store/sessionSlice";
 import { useLibraryStore } from "../../store/librarySlice";
 import { useSettingsStore } from "../../store/settingsSlice";
@@ -654,6 +655,8 @@ function DragOverlayCard({ card }: { card?: ActivityCardConfig }) {
 // ── Main Component ───────────────────────────────────────────────
 
 export function ActivityView() {
+  const [activeTab, setActiveTab] = useState<"activity" | "recaps">("activity");
+
   const recentSessions = useSessionStore((s) => s.recentSessions);
   const activeSessions = useSessionStore((s) => s.activeSessions);
   const loadRecentSessions = useSessionStore((s) => s.loadRecentSessions);
@@ -871,92 +874,119 @@ export function ActivityView() {
         title="Activity"
         subtitle="Your gaming activity"
         actions={
-          <button
-            className={`activity-view__edit-btn${isEditMode ? " activity-view__edit-btn--active" : ""}`}
-            onClick={() => setEditMode(!isEditMode)}
-          >
-            <AppIcon name="edit" size={14} />
-            <span>{isEditMode ? "Done Editing" : "Edit Layout"}</span>
-          </button>
+          <div className="activity-view__header-actions">
+            <div className="activity-view__tabs">
+              <button
+                className={`activity-view__tab${activeTab === "activity" ? " activity-view__tab--active" : ""}`}
+                onClick={() => setActiveTab("activity")}
+              >
+                Activity
+              </button>
+              <button
+                className={`activity-view__tab${activeTab === "recaps" ? " activity-view__tab--active" : ""}`}
+                onClick={() => setActiveTab("recaps")}
+              >
+                Recaps
+              </button>
+            </div>
+
+            {activeTab === "activity" && (
+              <button
+                className={`activity-view__edit-btn${isEditMode ? " activity-view__edit-btn--active" : ""}`}
+                onClick={() => setEditMode(!isEditMode)}
+              >
+                <AppIcon name="edit" size={14} />
+                <span>{isEditMode ? "Done Editing" : "Edit Layout"}</span>
+              </button>
+            )}
+          </div>
         }
       />
 
-      <div className="activity-view__content">
-        <NowPlayingBanner activeSessions={activeSessions} gameNames={gameNames} />
+      {activeTab === "activity" ? (
+        <>
+          <div className="activity-view__content">
+            <NowPlayingBanner activeSessions={activeSessions} gameNames={gameNames} />
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragMove={handleDragMove}
-          onDragEnd={handleDragEnd}
-          onDragCancel={handleDragCancel}
-        >
-          <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
-            <div className="activity-view__cards" ref={gridRef}>
-              {cards.map((card, index) => {
-                const render = CARD_REGISTRY[card.type];
-                if (!render) return null;
-                const isScrollable =
-                  card.type === "recent-sessions" || card.type === "memories";
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragMove={handleDragMove}
+              onDragEnd={handleDragEnd}
+              onDragCancel={handleDragCancel}
+            >
+              <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
+                <div className="activity-view__cards" ref={gridRef}>
+                  {cards.map((card, index) => {
+                    const render = CARD_REGISTRY[card.type];
+                    if (!render) return null;
+                    const isScrollable =
+                      card.type === "recent-sessions" || card.type === "memories";
 
-                return (
-                  <SortableCard
-                    key={card.id}
-                    card={card}
-                    index={index}
-                    totalCards={cards.length}
-                    isEditMode={isEditMode}
-                    isScrollable={isScrollable}
-                    onReorder={reorderCards}
-                    onRemove={removeCard}
-                    onToggleWidth={setCardWidth}
-                    onReset={resetCardOptions}
-                  >
-                    {render(card, cardData, updateCardOptions, drillDown.open)}
-                  </SortableCard>
-                );
-              })}
+                    return (
+                      <SortableCard
+                        key={card.id}
+                        card={card}
+                        index={index}
+                        totalCards={cards.length}
+                        isEditMode={isEditMode}
+                        isScrollable={isScrollable}
+                        onReorder={reorderCards}
+                        onRemove={removeCard}
+                        onToggleWidth={setCardWidth}
+                        onReset={resetCardOptions}
+                      >
+                        {render(card, cardData, updateCardOptions, drillDown.open)}
+                      </SortableCard>
+                    );
+                  })}
 
-              {isEditMode && (
-                <AddCardButton existingTypes={existingTypes} onAdd={addCard} />
-              )}
+                  {isEditMode && (
+                    <AddCardButton existingTypes={existingTypes} onAdd={addCard} />
+                  )}
 
-              {/* Drop slot indicators during drag */}
-              {dropSlots.length > 0 && (
-                <div className="drop-slot-overlay">
-                  {dropSlots.map((slot, i) => (
-                    <div
-                      key={i}
-                      className={`drop-slot${i === activeSlotIdx ? " drop-slot--active" : ""}`}
-                      style={{
-                        top: slot.top,
-                        left: slot.left,
-                        width: slot.width,
-                        height: slot.height,
-                      }}
-                    />
-                  ))}
+                  {/* Drop slot indicators during drag */}
+                  {dropSlots.length > 0 && (
+                    <div className="drop-slot-overlay">
+                      {dropSlots.map((slot, i) => (
+                        <div
+                          key={i}
+                          className={`drop-slot${i === activeSlotIdx ? " drop-slot--active" : ""}`}
+                          style={{
+                            top: slot.top,
+                            left: slot.left,
+                            width: slot.width,
+                            height: slot.height,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </SortableContext>
+              </SortableContext>
 
-          {/* Floating overlay follows cursor during drag — avoids grid stretching */}
-          <DragOverlay dropAnimation={null}>
-            {activeId ? (
-              <DragOverlayCard card={cards.find((c) => c.id === activeId)} />
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      </div>
+              {/* Floating overlay follows cursor during drag — avoids grid stretching */}
+              <DragOverlay dropAnimation={null}>
+                {activeId ? (
+                  <DragOverlayCard card={cards.find((c) => c.id === activeId)} />
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          </div>
 
-      {drillDown.isOpen && drillDown.context && (
-        <SessionDrillDown
-          context={drillDown.context}
-          gameNames={gameNames}
-          onClose={drillDown.close}
-        />
+          {drillDown.isOpen && drillDown.context && (
+            <SessionDrillDown
+              context={drillDown.context}
+              gameNames={gameNames}
+              onClose={drillDown.close}
+            />
+          )}
+        </>
+      ) : (
+        <div className="activity-view__content">
+          <RecapTab />
+        </div>
       )}
     </div>
   );

@@ -1,4 +1,10 @@
-import type { Game, StoreMetadata, LibraryFilters, GameSession } from "../types";
+import type {
+  Game,
+  StoreMetadata,
+  LibraryFilters,
+  GameSession,
+  RecapData,
+} from "../types";
 import type { ShelfConfig } from "../types/shelf";
 import { DEFAULT_SHELF_FILTERS } from "../types/shelf";
 
@@ -93,6 +99,45 @@ export function makeShelf(overrides: Partial<ShelfConfig> = {}): ShelfConfig {
     groupByGenre: false,
     maxVisibleGames: null,
     pinnedGameIds: [],
+    ...overrides,
+  };
+}
+
+export function makeRecap(overrides?: Partial<RecapData>): RecapData {
+  return {
+    version: 1,
+    periodType: "monthly",
+    periodKey: "2026-02",
+    generatedAt: Date.now(),
+    totalMinutes: 1200,
+    totalSessions: 30,
+    uniqueGamesPlayed: 5,
+    avgSessionMinutes: 40,
+    longestSessionMinutes: 180,
+    longestSessionGameId: "g1",
+    longestSessionGameName: "Elden Ring",
+    longestStreakDays: 7,
+    topGame: { gameId: "g1", name: "Elden Ring", minutes: 600, sessions: 15 },
+    topGames: [
+      { gameId: "g1", name: "Elden Ring", minutes: 600, sessions: 15 },
+      { gameId: "g2", name: "Hades", minutes: 300, sessions: 8 },
+      { gameId: "g3", name: "Celeste", minutes: 200, sessions: 5 },
+    ],
+    genreBreakdown: [
+      { genre: "Action", minutes: 600, percentage: 50 },
+      { genre: "Roguelike", minutes: 300, percentage: 25 },
+      { genre: "Platformer", minutes: 200, percentage: 17 },
+    ],
+    busiestDay: { day: "Saturday", minutes: 240 },
+    prevPeriodMinutes: 1000,
+    newDiscoveries: [{ gameId: "g3", name: "Celeste" }],
+    achievementsUnlocked: 12,
+    notableAchievements: [
+      { gameName: "Elden Ring", achievementName: "Lord of Frenzied Flame", rarity: 3.2 },
+    ],
+    funComparisons: [
+      { activity: "watching the Lord of the Rings trilogy", count: 1.8, emoji: "🎬" },
+    ],
     ...overrides,
   };
 }

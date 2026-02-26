@@ -154,6 +154,9 @@ impl CacheDb {
         if current < 22 {
             self.apply_v22()?;
         }
+        if current < 23 {
+            self.apply_v23()?;
+        }
 
         // Repair: restore any entries invalidated by cache invalidation (cached_at = 0).
         // This is a fast no-op if no rows match.
@@ -682,6 +685,21 @@ impl CacheDb {
 
             INSERT OR REPLACE INTO schema_version (version, applied_at)
                 VALUES (22, datetime('now'));",
+        )?;
+        Ok(())
+    }
+
+    fn apply_v23(&self) -> Result<(), AppError> {
+        self.conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS recaps (
+                period_key TEXT PRIMARY KEY,
+                period_type TEXT NOT NULL,
+                encoded_data TEXT NOT NULL,
+                generated_at INTEGER NOT NULL
+            );
+
+            INSERT OR REPLACE INTO schema_version (version, applied_at)
+                VALUES (23, datetime('now'));",
         )?;
         Ok(())
     }
@@ -1687,6 +1705,223 @@ impl CacheDb {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(sessions)
+    }
+
+    // ── Recap Queries ─────────────────────────────────────────────
+
+    /// Get all completed sessions within a time range [start, end).
+    pub fn get_sessions_in_range(
+        &self,
+        start_time: i64,
+        end_time: i64,
+    ) -> Result<Vec<GameSession>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, game_id, start_time, end_time, duration_minutes
+             FROM game_sessions
+             WHERE start_time >= ?1 AND start_time < ?2
+               AND end_time IS NOT NULL
+             ORDER BY start_time ASC",
+        )?;
+        let sessions = stmt
+            .query_map(params![start_time, end_time], |row| {
+                Ok(GameSession {
+                    id: row.get(0)?,
+                    game_id: row.get(1)?,
+                    start_time: row.get(2)?,
+                    end_time: row.get(3)?,
+                    duration_minutes: row.get(4)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(sessions)
+    }
+
+    /// Get achievements unlocked within a time range.
+    /// Returns (game_id, achievement) pairs.
+    pub fn get_achievements_in_range(
+        &self,
+        start_time: i64,
+        end_time: i64,
+    ) -> Result<Vec<(String, GameAchievement)>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT ga.game_id, ga.api_name, ga.display_name, ga.description,
+                    ga.icon_url, ga.icon_gray_url, ga.hidden, ga.achieved,
+                    ga.unlock_time, ga.global_percent
+             FROM game_achievements ga
+             WHERE ga.achieved = 1
+               AND ga.unlock_time IS NOT NULL
+               AND ga.unlock_time >= ?1 AND ga.unlock_time < ?2
+             ORDER BY ga.unlock_time ASC",
+        )?;
+        let results = stmt
+            .query_map(params![start_time, end_time], |row| {
+                let game_id: String = row.get(0)?;
+                let achievement = GameAchievement {
+                    api_name: row.get(1)?,
+                    display_name: row.get(2)?,
+                    description: row.get(3)?,
+                    icon_url: row.get(4)?,
+                    icon_gray_url: row.get(5)?,
+                    hidden: row.get::<_, i32>(6)? != 0,
+                    achieved: row.get::<_, i32>(7)? != 0,
+                    unlock_time: row.get(8)?,
+                    global_percent: row.get(9)?,
+                };
+                Ok((game_id, achievement))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(results)
+    }
+
+    /// Get the first session timestamp for each game (for new discoveries detection).
+    pub fn get_first_session_per_game(&self) -> Result<Vec<(String, i64)>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT game_id, MIN(start_time) as first_played
+             FROM game_sessions
+             WHERE end_time IS NOT NULL
+             GROUP BY game_id",
+        )?;
+        let results = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<(String, i64)>, _>>()?;
+        Ok(results)
+    }
+
+    /// Bulk lookup game names by IDs.
+    pub fn get_game_names_bulk(
+        &self,
+        game_ids: &[String],
+    ) -> Result<Vec<(String, String)>, AppError> {
+        if game_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders: String = (1..=game_ids.len())
+            .map(|i| format!("?{}", i))
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT game_id, name FROM games WHERE game_id IN ({})",
+            placeholders
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params: Vec<&dyn rusqlite::types::ToSql> = game_ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::types::ToSql)
+            .collect();
+        let results = stmt
+            .query_map(params.as_slice(), |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<(String, String)>, _>>()?;
+        Ok(results)
+    }
+
+    /// Bulk lookup genres from store_metadata by game IDs.
+    /// Returns (game_id, genres_json_string) pairs.
+    pub fn get_genres_for_games(
+        &self,
+        game_ids: &[String],
+    ) -> Result<Vec<(String, String)>, AppError> {
+        if game_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders: String = (1..=game_ids.len())
+            .map(|i| format!("?{}", i))
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT game_id, genres FROM store_metadata WHERE game_id IN ({}) AND genres IS NOT NULL",
+            placeholders
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params: Vec<&dyn rusqlite::types::ToSql> = game_ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::types::ToSql)
+            .collect();
+        let results = stmt
+            .query_map(params.as_slice(), |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<(String, String)>, _>>()?;
+        Ok(results)
+    }
+
+    // ── Recap CRUD ──────────────────────────────────────────────────
+
+    /// Store a computed recap (insert or replace).
+    pub fn save_recap(
+        &self,
+        period_key: &str,
+        period_type: &str,
+        data: &crate::models::recap::RecapData,
+    ) -> Result<(), AppError> {
+        let json = serde_json::to_string(data)
+            .map_err(|e| AppError::Parse(format!("Failed to serialize recap: {}", e)))?;
+        let now = chrono::Utc::now().timestamp();
+        self.conn.execute(
+            "INSERT OR REPLACE INTO recaps (period_key, period_type, encoded_data, generated_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![period_key, period_type, json, now],
+        )?;
+        Ok(())
+    }
+
+    /// Get a specific recap by period key.
+    pub fn get_recap(
+        &self,
+        period_key: &str,
+    ) -> Result<Option<crate::models::recap::RecapData>, AppError> {
+        let result = self.conn.query_row(
+            "SELECT encoded_data FROM recaps WHERE period_key = ?1",
+            params![period_key],
+            |row| {
+                let json: String = row.get(0)?;
+                Ok(json)
+            },
+        );
+        match result {
+            Ok(json) => {
+                let data: crate::models::recap::RecapData = serde_json::from_str(&json)
+                    .map_err(|e| AppError::Parse(format!("Failed to parse recap: {}", e)))?;
+                Ok(Some(data))
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(AppError::Database(e)),
+        }
+    }
+
+    /// List all recap summaries, ordered by period_key descending.
+    pub fn list_recaps(&self) -> Result<Vec<crate::models::recap::RecapSummary>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT period_key, period_type, generated_at, encoded_data
+             FROM recaps ORDER BY period_key DESC",
+        )?;
+        let results: Vec<crate::models::recap::RecapSummary> = stmt
+            .query_map([], |row| {
+                let period_key: String = row.get(0)?;
+                let period_type: String = row.get(1)?;
+                let generated_at: i64 = row.get(2)?;
+                let json: String = row.get(3)?;
+                Ok((period_key, period_type, generated_at, json))
+            })?
+            .filter_map(|r| {
+                let (period_key, period_type, generated_at, json) = r.ok()?;
+                let data: crate::models::recap::RecapData = serde_json::from_str(&json).ok()?;
+                Some(crate::models::recap::RecapSummary {
+                    period_key,
+                    period_type,
+                    generated_at,
+                    total_minutes: data.total_minutes,
+                    top_game_name: data.top_game.name.clone(),
+                })
+            })
+            .collect();
+        Ok(results)
+    }
+
+    /// Delete a specific recap.
+    pub fn delete_recap(&self, period_key: &str) -> Result<(), AppError> {
+        self.conn.execute(
+            "DELETE FROM recaps WHERE period_key = ?1",
+            params![period_key],
+        )?;
+        Ok(())
     }
 
     // ── Tray helpers ──────────────────────────────────────────────
@@ -2848,7 +3083,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 22);
+        assert_eq!(version, 23);
     }
 
     // ── Store Metadata ──────────────────────────────────────────────
@@ -4837,5 +5072,206 @@ mod tests {
 
         // Read records should be gone
         assert_eq!(db.get_read_news_ids(&ids).unwrap().len(), 0);
+    }
+
+    // ── Recap CRUD Tests ─────────────────────────────────────────────
+
+    fn make_recap_data(
+        period_type: &str,
+        period_key: &str,
+        total_minutes: u32,
+    ) -> crate::models::recap::RecapData {
+        use crate::models::recap::*;
+        RecapData {
+            version: 1,
+            period_type: period_type.to_string(),
+            period_key: period_key.to_string(),
+            generated_at: 1700000000,
+            total_minutes,
+            total_sessions: 10,
+            unique_games_played: 3,
+            avg_session_minutes: total_minutes / 10.max(1),
+            longest_session_minutes: 120,
+            longest_session_game_id: "game-1".to_string(),
+            longest_session_game_name: "Test Game".to_string(),
+            longest_streak_days: 5,
+            top_game: RecapTopGame {
+                game_id: "game-1".to_string(),
+                name: "Test Game".to_string(),
+                minutes: total_minutes / 2,
+                sessions: 5,
+            },
+            top_games: vec![RecapTopGame {
+                game_id: "game-1".to_string(),
+                name: "Test Game".to_string(),
+                minutes: total_minutes / 2,
+                sessions: 5,
+            }],
+            genre_breakdown: vec![RecapGenreEntry {
+                genre: "Action".to_string(),
+                minutes: total_minutes,
+                percentage: 100.0,
+            }],
+            busiest_day: RecapBusiestDay {
+                day: "Saturday".to_string(),
+                minutes: total_minutes / 3,
+            },
+            prev_period_minutes: 0,
+            new_discoveries: vec![],
+            achievements_unlocked: 0,
+            notable_achievements: vec![],
+            fun_comparisons: vec![],
+            monthly_playtime: None,
+        }
+    }
+
+    #[test]
+    fn test_recap_save_and_load() {
+        let db = test_db();
+        let recap = make_recap_data("monthly", "2025-06", 600);
+
+        db.save_recap("2025-06", "monthly", &recap).unwrap();
+        let loaded = db
+            .get_recap("2025-06")
+            .unwrap()
+            .expect("recap should exist");
+
+        assert_eq!(loaded.version, 1);
+        assert_eq!(loaded.period_type, "monthly");
+        assert_eq!(loaded.period_key, "2025-06");
+        assert_eq!(loaded.total_minutes, 600);
+        assert_eq!(loaded.total_sessions, 10);
+        assert_eq!(loaded.unique_games_played, 3);
+        assert_eq!(loaded.longest_session_minutes, 120);
+        assert_eq!(loaded.longest_session_game_id, "game-1");
+        assert_eq!(loaded.longest_session_game_name, "Test Game");
+        assert_eq!(loaded.longest_streak_days, 5);
+        assert_eq!(loaded.top_game.game_id, "game-1");
+        assert_eq!(loaded.top_game.name, "Test Game");
+        assert_eq!(loaded.top_game.minutes, 300);
+        assert_eq!(loaded.top_games.len(), 1);
+        assert_eq!(loaded.genre_breakdown.len(), 1);
+        assert_eq!(loaded.genre_breakdown[0].genre, "Action");
+        assert_eq!(loaded.busiest_day.day, "Saturday");
+        assert!(loaded.monthly_playtime.is_none());
+    }
+
+    #[test]
+    fn test_recap_list() {
+        let db = test_db();
+        let monthly = make_recap_data("monthly", "2025-06", 600);
+        let yearly = make_recap_data("yearly", "2025", 7200);
+
+        db.save_recap("2025-06", "monthly", &monthly).unwrap();
+        db.save_recap("2025", "yearly", &yearly).unwrap();
+
+        let summaries = db.list_recaps().unwrap();
+        assert_eq!(summaries.len(), 2);
+
+        // Ordered by period_key DESC, so "2025-06" > "2025"
+        assert_eq!(summaries[0].period_key, "2025-06");
+        assert_eq!(summaries[0].period_type, "monthly");
+        assert_eq!(summaries[0].total_minutes, 600);
+        assert_eq!(summaries[0].top_game_name, "Test Game");
+
+        assert_eq!(summaries[1].period_key, "2025");
+        assert_eq!(summaries[1].period_type, "yearly");
+        assert_eq!(summaries[1].total_minutes, 7200);
+    }
+
+    #[test]
+    fn test_recap_delete() {
+        let db = test_db();
+        let recap = make_recap_data("monthly", "2025-06", 600);
+        db.save_recap("2025-06", "monthly", &recap).unwrap();
+
+        // Verify it exists
+        assert!(db.get_recap("2025-06").unwrap().is_some());
+
+        // Delete it
+        db.delete_recap("2025-06").unwrap();
+
+        // Verify it's gone
+        assert!(db.get_recap("2025-06").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_recap_overwrite() {
+        let db = test_db();
+        let recap1 = make_recap_data("monthly", "2025-06", 600);
+        db.save_recap("2025-06", "monthly", &recap1).unwrap();
+
+        // Overwrite with different data
+        let recap2 = make_recap_data("monthly", "2025-06", 1200);
+        db.save_recap("2025-06", "monthly", &recap2).unwrap();
+
+        let loaded = db
+            .get_recap("2025-06")
+            .unwrap()
+            .expect("recap should exist");
+        assert_eq!(loaded.total_minutes, 1200);
+        assert_eq!(loaded.top_game.minutes, 600); // 1200 / 2
+
+        // Should still be one entry, not two
+        let summaries = db.list_recaps().unwrap();
+        assert_eq!(summaries.len(), 1);
+    }
+
+    #[test]
+    fn test_get_sessions_in_range() {
+        let db = test_db();
+
+        // Create sessions at different timestamps
+        // Session 1: start_time = 1000, inside range [1000, 2000)
+        let id1 = db.start_session("game-a", 1000).unwrap();
+        db.close_session(id1, 1500, 8).unwrap();
+
+        // Session 2: start_time = 1500, inside range [1000, 2000)
+        let id2 = db.start_session("game-b", 1500).unwrap();
+        db.close_session(id2, 1800, 5).unwrap();
+
+        // Session 3: start_time = 2000, outside range (at boundary, excluded)
+        let id3 = db.start_session("game-a", 2000).unwrap();
+        db.close_session(id3, 2500, 8).unwrap();
+
+        // Session 4: start_time = 500, outside range (before)
+        let id4 = db.start_session("game-c", 500).unwrap();
+        db.close_session(id4, 900, 6).unwrap();
+
+        // Session 5: active (no end_time), inside range but should be excluded
+        let _id5 = db.start_session("game-a", 1200).unwrap();
+
+        let sessions = db.get_sessions_in_range(1000, 2000).unwrap();
+        assert_eq!(sessions.len(), 2);
+        assert_eq!(sessions[0].game_id, "game-a");
+        assert_eq!(sessions[0].start_time, 1000);
+        assert_eq!(sessions[1].game_id, "game-b");
+        assert_eq!(sessions[1].start_time, 1500);
+    }
+
+    #[test]
+    fn test_get_first_session_per_game() {
+        let db = test_db();
+
+        // game-a: sessions at 1000 and 2000 => first = 1000
+        let id1 = db.start_session("game-a", 1000).unwrap();
+        db.close_session(id1, 1500, 8).unwrap();
+        let id2 = db.start_session("game-a", 2000).unwrap();
+        db.close_session(id2, 2500, 8).unwrap();
+
+        // game-b: session at 3000 => first = 3000
+        let id3 = db.start_session("game-b", 3000).unwrap();
+        db.close_session(id3, 3500, 8).unwrap();
+
+        // game-c: only an active session (no end_time) => should be excluded
+        let _id4 = db.start_session("game-c", 500).unwrap();
+
+        let results = db.get_first_session_per_game().unwrap();
+        assert_eq!(results.len(), 2);
+
+        let map: std::collections::HashMap<String, i64> = results.into_iter().collect();
+        assert_eq!(map.get("game-a"), Some(&1000));
+        assert_eq!(map.get("game-b"), Some(&3000));
+        assert!(map.get("game-c").is_none());
     }
 }

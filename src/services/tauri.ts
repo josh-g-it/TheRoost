@@ -33,6 +33,8 @@ import type {
   ResolvedIntent,
   CloudAiUsage,
   UpdateInfo,
+  RecapData,
+  RecapSummary,
 } from "../types";
 
 export const steamApi = {
@@ -386,4 +388,12 @@ export const cloudAiApi = {
     invoke<void>("update_cloud_ai_settings", { enabled, provider, dailyLimit }),
   cloudResolve: (query: string) =>
     invoke<ResolvedIntent | null>("ai_cloud_resolve", { query }),
+};
+
+export const recapApi = {
+  getRecap: (periodKey: string) => invoke<RecapData | null>("get_recap", { periodKey }),
+  listRecaps: () => invoke<RecapSummary[]>("list_recaps"),
+  generateRecap: (periodKey: string, periodType: "monthly" | "yearly") =>
+    invoke<RecapData>("generate_recap", { periodKey, periodType }),
+  deleteRecap: (periodKey: string) => invoke<void>("delete_recap", { periodKey }),
 };

@@ -113,3 +113,13 @@ export type {
   CloudAiUsage,
 } from "./ai";
 export type { UpdateInfo } from "./updater";
+export type {
+  RecapData,
+  RecapTopGame,
+  RecapGenreEntry,
+  RecapBusiestDay,
+  RecapDiscovery,
+  RecapAchievement,
+  RecapComparison,
+  RecapSummary,
+} from "./recap";

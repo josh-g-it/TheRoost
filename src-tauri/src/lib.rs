@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 use commands::{
     achievements, ai, audio, autostart, cover_art, custom_games, developer, external_scanner,
     favorites, friends, game_launcher, hidden_games, media_bookmarks, media_controls, metadata,
-    news, notes, overlay, ratings, saved_filters, sessions, settings, steam_api, steam_scanner,
-    system_monitor, tags, updater,
+    news, notes, overlay, ratings, recaps, saved_filters, sessions, settings, steam_api,
+    steam_scanner, system_monitor, tags, updater,
 };
 use models::ai::CloudProvider;
 use services::ai::cloud_config::CloudConfig;
@@ -107,6 +107,10 @@ pub fn run() {
             news::mark_news_read,
             news::get_unread_news_count,
             news::clear_news_cache,
+            recaps::get_recap,
+            recaps::list_recaps,
+            recaps::generate_recap,
+            recaps::delete_recap,
             overlay::toggle_overlay,
             overlay::hide_overlay,
             overlay::show_main_and_navigate,
@@ -215,7 +219,15 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 process_monitor::run(monitor_handle, monitor_db, monitor_metrics).await;
             });
-            tracing::info!("Background tasks started (library sync + process monitor)");
+            // Spawn recap auto-generation check (runs once at startup after 10s delay)
+            let recap_db = db_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                services::recap_service::auto_generate_if_needed(&recap_db);
+            });
+            tracing::info!(
+                "Background tasks started (library sync + process monitor + recap check)"
+            );
 
             // Initialize system tray
             services::tray::init_tray(app, db_handle.clone())?;

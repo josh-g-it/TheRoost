@@ -874,7 +874,7 @@ Patch fix: "sort by last played" now works correctly for non-Steam games.
 
 # Version 2.0 — Planned
 
-Each feature below ships as an incremental minor version (v1.8.0, v1.9.0, etc.). Ordered by user-facing value first (recaps, backup), then infrastructure (storage, install management), then major integrations (AI, friends, controller). Once all features are shipped, the app elevates to 2.0.0.
+Each feature below ships as an incremental minor version (v1.9.0, v1.10.0, etc.). Ordered by user-facing value first (backup), then infrastructure (storage, install management), then major integrations (AI, friends, controller). Once all features are shipped, the app elevates to 2.0.0.
 
 ---
 
@@ -943,40 +943,39 @@ Aggregated news feed from your library — only the games you care about.
 
 ---
 
-### v1.8.0 — Gaming Recap & Insights
-Auto-generated monthly and yearly reviews — your personal gaming wrapped.
+### v1.8.0 — Gaming Recap & Insights ✅ SHIPPED
+Auto-generated monthly and yearly gaming recaps — your personal "gaming wrapped" experience.
 
-**Monthly Recap (auto-generated on 1st of each month):**
-- Total playtime for the previous month
-- Most played game (hours + sessions)
-- New games added to library
-- Games played for the first time
-- Genre breakdown (pie or donut chart)
-- Session patterns: busiest day of week, average session length, longest session
-- Streak data: longest daily play streak in the month
-- Comparison to previous month (up/down trends)
+**Backend (`recap_service.rs` + `fun_comparisons.rs` + `cache_db.rs`):**
+- `generate_monthly_recap` / `generate_yearly_recap` — compute recap data from sessions, achievements, game metadata
+- `auto_generate_if_needed` — runs 10s after app launch, checks if new month/year recaps are due
+- `RecapData` model with sub-structs: `RecapTopGame`, `RecapGenreEntry`, `RecapBusiestDay`, `RecapDiscovery`, `RecapAchievement`, `RecapComparison`, `RecapSummary`
+- `fun_comparisons.rs` — ~40 hardcoded activities across 3 tiers, `pick_comparisons` algorithm maps playtime to relatable activities
+- `recaps` table (schema v23): `period_key TEXT PK, period_type TEXT, encoded_data TEXT, generated_at INTEGER`
+- New DB queries: `get_sessions_in_range`, `get_achievements_in_range`, `get_first_session_per_game`, `get_game_names_bulk`, `get_genres_for_games`
+- 4 Tauri commands: `get_recap`, `list_recaps`, `generate_recap`, `delete_recap`
 
-**Yearly Review (auto-generated January 1st):**
-- Everything from monthly recap, aggregated across 12 months
-- "Game of the Year" (most played)
-- Month-by-month playtime timeline chart
-- Top 5 most played games with hours
-- New discoveries (games first played this year)
-- Genre evolution over the year
-- Total sessions, total hours, total unique games played
-- Fun stats: "You could have watched X movies in that time"
+**Monthly Recap Content:**
+- Total playtime, sessions, unique games, Game of the Month
+- Top 5 games by playtime (BarChart)
+- Average/longest session, longest play streak, busiest day
+- Genre breakdown (PieChart)
+- Trend comparison vs previous month (up/down indicators)
+- New discoveries (games first played that month)
+- Achievement highlights (top 5 rarest unlocked)
+- Fun comparisons ("That's X flights from NYC to Tokyo")
 
-**UI & Storage:**
-- Dedicated section in Activity page (or expandable panel)
-- Recaps stored in SQLite — generated once, persisted for historical browsing
-- Browse past recaps: "December 2025", "Year 2025", etc.
-- Shareable: export recap as image card (designed for social media sharing)
-- Manual regeneration option if data was retroactively updated
+**Yearly Recap (additional):**
+- Game of the Year, month-by-month playtime timeline (AreaChart)
 
-**Generation:**
-- Background task on app launch checks if a new recap is due
-- Recaps computed from session data + library state snapshots
-- Handles edge cases: no play data for a month → "You took a break!" messaging
+**Frontend (`components/activity/recap/`):**
+- Activity page header: "Activity" / "Recaps" tab toggle
+- `RecapTab` orchestrator + `RecapPeriodSelector` (monthly/yearly period picker)
+- `RecapView` with 8 section components: `RecapHeroSection`, `RecapStatsGrid`, `RecapTopGames`, `RecapGenreBreakdown`, `RecapMonthlyTimeline` (yearly only), `RecapDiscoveries`, `RecapAchievements`, `RecapFunComparisons`
+- `recapSlice` Zustand store: summaries, currentRecap, selectedPeriodKey
+- `recapApi` in `services/tauri.ts`
+- CSS: `RecapTab.css`, `RecapView.css`, `RecapSections.css`
+- 248 Rust tests + 427 frontend tests passing (675 total)
 
 ---
 

@@ -10,6 +10,7 @@ pub mod metadata;
 pub mod news;
 pub mod note;
 pub mod rating;
+pub mod recap;
 pub mod saved_filter;
 pub mod session;
 pub mod settings;
