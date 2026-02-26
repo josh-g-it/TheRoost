@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.5.0-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/version-1.7.0-blue" alt="Version" />
   <img src="https://img.shields.io/badge/platform-Windows-0078D6" alt="Platform" />
   <img src="https://img.shields.io/badge/built_with-Tauri_v2-FFC131" alt="Tauri v2" />
   <img src="https://img.shields.io/badge/license-GPL--3.0-green" alt="License" />
@@ -27,7 +27,7 @@ The Roost is a multi-launcher game library manager for Windows. It unifies your 
 - **Per-game launch mode** &mdash; Choose between launching via the native launcher or directly for non-Steam games
 
 ### Library Organization
-- **Customizable shelves** &mdash; Organize your library with configurable sections (Recently Played, Favorites, All Games, custom presets) with per-shelf filters and sort
+- **Hybrid shelves** &mdash; Configurable sections (Recently Played, Favorites, All Games, custom presets) with per-shelf filters, sort, and manual game pins &mdash; pin games to any shelf via right-click or GameDetail sidebar
 - **Two view modes** &mdash; Visual grid (3 sizes) with game artwork or compact sortable list (3 densities)
 - **Rich filtering** &mdash; By genre, Steam tags, features, source launcher, custom tags, favorites, hidden, rated/unrated, and saved filter presets
 - **Custom tags** &mdash; Create colored labels (15 theme-aware colors) to organize games your way
@@ -41,6 +41,14 @@ The Roost is a multi-launcher game library manager for Windows. It unifies your 
 - **Player profile** &mdash; Statistics and interactive Recharts charts (genre radar, playtime histogram, Metacritic scatter, leaderboards)
 - **Game notes** &mdash; Per-game notepad and a general scratchpad, browseable from the `/notes` compendium
 
+### Game News Feed
+- **Aggregated news** &mdash; Articles from Steam games you've favorited or recently played, shown on a dedicated `/news` page
+- **Hero art cards** &mdash; Each article shows the game's banner art, headline, author, date, and a text snippet
+- **Expanded article view** &mdash; Click to read the full article in-app (BBCode and HTML parsed into styled content), with an "Open in Browser" button
+- **Game filter** &mdash; Multi-select dropdown to focus on specific games' news
+- **Source filter** &mdash; Toggle between All, Official (developer posts), and Third Party (gaming news sites)
+- **Read tracking** &mdash; Unread count badge on the nav rail; articles marked as read on open; "Mark All Read" button
+
 ### System Overlay
 - **Global hotkey HUD** &mdash; Ctrl+Space (configurable) opens a system-wide overlay, even while minimized to tray
 - **5 floating panels** &mdash; Command center, game notes, system monitor (CPU/RAM/GPU sparklines), media controls, audio mixer
@@ -53,9 +61,9 @@ The Roost is a multi-launcher game library manager for Windows. It unifies your 
 - **Category prefixes** &mdash; Type "theme", "sort", "filter", or "go to" for focused results
 
 ### Customization
-- **12 themes** &mdash; From light to dark, with cyber-neon, sakura, arctic frost, and more
+- **9 color palettes** &mdash; Dark Gaming, Fae, Midnight Purple, Cyber Neon, Arctic Frost, Ember Forge, Ocean Depths, Sakura, Verdant
 - **6 icon sets** &mdash; Remix, Lucide, Heroicons, Ionicons, Font Awesome, Game Icons
-- **4 font families** &mdash; System, Inter, Space Grotesk, Exo 2, JetBrains Mono
+- **5 font families** &mdash; System, Inter, Space Grotesk, Exo 2, JetBrains Mono
 - **4 UI scales** &mdash; Minimal, Comfortable, Expanded, Large
 
 ### Infrastructure
@@ -69,14 +77,14 @@ The Roost is a multi-launcher game library manager for Windows. It unifies your 
 | Layer | Technology |
 |-------|-----------|
 | Framework | [Tauri v2](https://v2.tauri.app/) |
-| Backend | Rust (113 commands across 28 modules, SQLite via rusqlite) |
+| Backend | Rust (118 commands across 27 modules, SQLite via rusqlite) |
 | Frontend | React 18, TypeScript, Vite |
 | State | Zustand (18 slices) |
-| Database | SQLite (bundled, WAL mode, schema v20) |
+| Database | SQLite (bundled, WAL mode, schema v22, 22 tables) |
 | Styling | CSS variables with theme system |
 | Charts | Recharts |
 | Drag & Drop | @dnd-kit |
-| Testing | Vitest (370 tests) + Rust (227 tests) |
+| Testing | Vitest (390 tests) + Rust (234 tests) |
 
 ## Installation
 
