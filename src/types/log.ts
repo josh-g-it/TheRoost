@@ -22,7 +22,8 @@ export type LogCategory =
   | "friends"
   | "news"
   | "notes"
-  | "routing";
+  | "routing"
+  | "backup";
 
 export interface LogEvent {
   id: string;

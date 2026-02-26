@@ -2,7 +2,7 @@
 
 > **Audience**: AI assistants, senior developers, contributors
 > **Last updated**: 2026-02-26
-> **Version**: 1.8.0 (Gaming Recap & Insights — auto-generated monthly/yearly gaming recaps)
+> **Version**: 1.9.0 (Backup & Restore — full archive backup/restore with guided wizard)
 
 ---
 
@@ -100,7 +100,7 @@ TheRoost/
 │   │
 │   ├── store/                    # 19 Zustand slices (see §4.2)
 │   ├── services/
-│   │   └── tauri.ts              # invoke() wrappers — 26 API namespaces (see §4.6)
+│   │   └── tauri.ts              # invoke() wrappers — 28 API namespaces (see §4.6)
 │   │
 │   ├── types/                    # 22 type files (see §4.5)
 │   ├── utils/                    # icons, logger, errors, formatters, sorting, filtering,
@@ -168,7 +168,7 @@ TheRoost/
 
 ### 3.1 Command Registry (lib.rs)
 
-122 Tauri commands across 28 modules:
+129 Tauri commands across 29 modules:
 
 | Module | Commands |
 |--------|----------|
@@ -200,6 +200,7 @@ TheRoost/
 | `ai` | `ai_resolve_intent`, `ai_cloud_resolve`, `store_cloud_api_key`, `delete_cloud_api_key`, `get_cloud_api_key_status`, `test_cloud_api_key`, `get_cloud_ai_usage`, `update_cloud_ai_settings` |
 | `updater` | `check_for_update`, `install_update`, `get_app_version` |
 | `autostart` | `get_autostart_enabled`, `set_autostart_enabled` |
+| `backup` | `estimate_backup_size`, `create_backup`, `validate_backup`, `check_active_sessions`, `restore_from_backup`, `get_backup_credential_hints`, `restart_app` |
 
 ### 3.2 Background Services (started in lib.rs setup)
 
@@ -592,7 +593,7 @@ Key type definitions in `src/types/`:
 
 ### 4.6 Frontend API Layer (services/tauri.ts)
 
-27 API namespaces wrapping `invoke()` calls:
+28 API namespaces wrapping `invoke()` calls:
 
 | Namespace | Methods | Purpose |
 |-----------|---------|---------|
@@ -623,6 +624,7 @@ Key type definitions in `src/types/`:
 | `updaterApi` | 3 | Update check, install, version |
 | `autostartApi` | 2 | Launch-on-startup toggle |
 | `cloudAiApi` | 8 | Cloud AI key management, resolve, usage, settings |
+| `backupApi` | 7 | Backup create/restore, validation, credential hints, restart |
 | `developerApi` | 1 | Clear all data |
 
 ### 4.7 Image CDN & CSP
@@ -1017,5 +1019,6 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | v1.6.0 | Done | Manual shelf assignment (hybrid shelves: filter rules + manual pins, context menu & GameDetail chips, ShelfEditor pin management) |
 | v1.7.0 | Done | Game News Feed (aggregated news from favorites + recently played, read tracking, unread badge, `/news` route, `nav:news` command palette action, hero art cards, game filter, expanded article view, BBCode/HTML content parser, source filter, force refresh) |
 | v1.8.0 | Done | Gaming Recap & Insights (auto-generated monthly/yearly recaps, Activity page tab toggle, 8 recap sections with Recharts, fun comparisons, achievement highlights, genre breakdown, schema v23 `recaps` table, auto-generate on launch) |
+| v1.9.0 | Done | Backup & Restore (`.roost` ZIP archive, 4-step RestoreWizard, safety backup + rollback, credential hints, schema compatibility, progress events) |
 
 See `docs/ROADMAP.md` for the full roadmap.

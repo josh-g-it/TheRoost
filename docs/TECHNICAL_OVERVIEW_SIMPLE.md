@@ -1,7 +1,7 @@
 # The Roost — Technical Overview (Simple)
 
 > **Audience**: Non-technical readers, project stakeholders, curious users
-> **Last updated**: 2026-02-26 (v1.8.0 — Gaming Recap & Insights)
+> **Last updated**: 2026-02-26 (v1.9.0 — Backup & Restore)
 
 ---
 
@@ -122,6 +122,12 @@ Organized into 5 tabs for quick access: General, Connections, Appearance, Naviga
 - AI assistant settings (Gemini API key, context scope, daily limits)
 - Developer section for advanced tools
 
+### Backup & Restore
+- **Create Backup**: One click packages your entire library (database, settings, custom art) into a single `.roost` file — shows estimated size before saving
+- **Restore from Backup**: A guided 4-step wizard walks you through restoring: review backup details, check for active games, re-enter API keys, then restore with automatic safety backup
+- API key values are never included in backups for security — the wizard reminds you which keys you had and lets you re-enter them
+- If anything goes wrong during restore, your previous data is automatically recovered
+
 ### Auto-Updates
 - The Roost checks for updates automatically (every 4 hours) and shows a non-intrusive banner when one is available
 - Click "View in Settings" to see release notes and install with one click
@@ -231,8 +237,8 @@ TheRoost/
 
 ## What's Coming Next
 
-- **Backup & Restore**: Export your entire Roost configuration (database, settings, custom art) into a single archive and restore it on any machine.
 - **Storage Overview**: See what's using disk space across your game library with per-drive breakdowns and cleanup suggestions.
+- **Steam Install/Uninstall**: Manage game installations directly from The Roost.
 
 ---
 

@@ -29,6 +29,9 @@ pub enum AppError {
 
     #[error("Lock poisoned: {0}")]
     LockPoisoned(String),
+
+    #[error("Backup error: {0}")]
+    Backup(String),
 }
 
 impl AppError {
@@ -44,6 +47,7 @@ impl AppError {
             AppError::StoreApi(_) => "STORE_API_ERROR",
             AppError::Validation(_) => "VALIDATION_ERROR",
             AppError::LockPoisoned(_) => "LOCK_POISONED",
+            AppError::Backup(_) => "BACKUP_ERROR",
         }
     }
 }

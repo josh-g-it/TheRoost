@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.8.0-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/version-1.9.0-blue" alt="Version" />
   <img src="https://img.shields.io/badge/platform-Windows-0078D6" alt="Platform" />
   <img src="https://img.shields.io/badge/built_with-Tauri_v2-FFC131" alt="Tauri v2" />
   <img src="https://img.shields.io/badge/license-GPL--3.0-green" alt="License" />
@@ -52,6 +52,11 @@ The Roost is a multi-launcher game library manager for Windows. It brings togeth
 - **Optional cloud AI** (Gemini Flash) for recommendations and conversational queries
 - **40+ actions** for navigation, themes, fonts, icon sets, view modes, sorting, and more
 
+### Backup & Restore
+- **Full backups** &mdash; One-click export of your database, settings, and custom art into a single `.roost` file
+- **Guided restore** &mdash; 4-step wizard validates your backup, checks for active sessions, and re-enters API keys
+- **Safety net** &mdash; Automatic pre-restore backup with rollback on failure
+
 ### Customization
 - 9 color palettes, 6 icon sets, 5 font families, 4 UI scales
 - Auto-updates, system tray with session display, and optional launch on startup
@@ -65,7 +70,7 @@ The Roost is a multi-launcher game library manager for Windows. It brings togeth
 | Frontend | React 18, TypeScript, Vite |
 | State | Zustand |
 | Charts | Recharts |
-| Testing | Vitest + Rust unit tests (675 total) |
+| Testing | Vitest + Rust unit tests (706 total) |
 
 ## Installation
 

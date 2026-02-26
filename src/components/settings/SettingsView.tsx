@@ -9,6 +9,7 @@ import { BookmarkManager } from "./BookmarkManager";
 import { CardDisplaySettings } from "./CardDisplaySettings";
 import { ThemeBuilder } from "./ThemeBuilder";
 import { DeveloperSettings } from "./DeveloperSettings";
+import { BackupRestoreSection } from "./BackupRestoreSection";
 import { useSettings } from "../../hooks/useSettings";
 import { useAppVersion } from "../../hooks/useAppVersion";
 import { useLibraryStore } from "../../store/librarySlice";
@@ -988,6 +989,8 @@ export function SettingsView() {
             </p>
             <TagManager />
           </section>
+
+          <BackupRestoreSection />
 
           <DeveloperSettings />
         </div>

@@ -2,6 +2,7 @@ pub mod achievements;
 pub mod ai;
 pub mod audio;
 pub mod autostart;
+pub mod backup;
 pub mod cover_art;
 pub mod custom_games;
 pub mod developer;

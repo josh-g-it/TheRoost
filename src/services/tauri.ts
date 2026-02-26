@@ -397,3 +397,46 @@ export const recapApi = {
     invoke<RecapData>("generate_recap", { periodKey, periodType }),
   deleteRecap: (periodKey: string) => invoke<void>("delete_recap", { periodKey }),
 };
+
+// ── Backup & Restore ────────────────────────────────────────────
+
+export interface BackupEstimate {
+  totalSizeBytes: number;
+  dbSizeBytes: number;
+  settingsSizeBytes: number;
+  artFileCount: number;
+  artTotalBytes: number;
+}
+
+export interface BackupManifest {
+  appVersion: string;
+  schemaVersion: number;
+  createdAt: string;
+  dbSizeBytes: number;
+  settingsSizeBytes: number;
+  artFileCount: number;
+  artTotalBytes: number;
+  credentialHints: string[];
+}
+
+export interface RestoreValidation {
+  valid: boolean;
+  manifest: BackupManifest | null;
+  error: string | null;
+  schemaCompatible: boolean;
+  schemaWarning: string | null;
+}
+
+export const backupApi = {
+  estimateSize: () => invoke<BackupEstimate>("estimate_backup_size"),
+  createBackup: (outputPath: string) =>
+    invoke<BackupManifest>("create_backup", { outputPath }),
+  validateBackup: (archivePath: string) =>
+    invoke<RestoreValidation>("validate_backup", { archivePath }),
+  checkActiveSessions: () => invoke<string[]>("check_active_sessions"),
+  restoreFromBackup: (archivePath: string, credentialValues: Record<string, string>) =>
+    invoke<void>("restore_from_backup", { archivePath, credentialValues }),
+  getCredentialHints: (archivePath: string) =>
+    invoke<string[]>("get_backup_credential_hints", { archivePath }),
+  restartApp: () => invoke<void>("restart_app"),
+};

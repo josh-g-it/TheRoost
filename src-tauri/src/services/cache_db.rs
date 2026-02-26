@@ -2980,6 +2980,50 @@ impl CacheDb {
         }
         Ok(result)
     }
+
+    // ── Backup helpers ────────────────────────────────────────────
+
+    /// Flush WAL data into the main database file so a raw file copy is consistent.
+    pub fn checkpoint_wal(&self) -> Result<(), AppError> {
+        self.conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
+        Ok(())
+    }
+
+    /// Return the current database schema version.
+    pub fn schema_version(&self) -> Result<u32, AppError> {
+        let version: u32 = self.conn.query_row(
+            "SELECT COALESCE(MAX(version), 0) FROM schema_version",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(version)
+    }
+
+    /// Replace the live database file with a restored copy.
+    ///
+    /// Opens an in-memory connection first (releasing the file lock on the live
+    /// DB), copies the restored file into place, then reopens the live path with
+    /// the standard WAL/FK pragmas.  The caller **must** hold the `CacheDbHandle`
+    /// Mutex for the entire operation.
+    pub fn swap_database(
+        &mut self,
+        restored_db_path: &Path,
+        live_db_path: &Path,
+    ) -> Result<(), AppError> {
+        // Release the file lock by switching to an in-memory connection
+        self.conn = Connection::open_in_memory()?;
+
+        // Overwrite the live database file with the restored copy
+        std::fs::copy(restored_db_path, live_db_path)?;
+
+        // Reopen the real database
+        let conn = Connection::open(live_db_path)?;
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
+        )?;
+        self.conn = conn;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

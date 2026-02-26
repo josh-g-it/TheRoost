@@ -979,21 +979,25 @@ Auto-generated monthly and yearly gaming recaps — your personal "gaming wrappe
 
 ---
 
-### v1.9.0 — Backup & Restore
-Data safety — package your entire Roost configuration into a single archive and restore it on any machine.
+### v1.9.0 — Backup & Restore ✅ SHIPPED
+Data safety — package your entire Roost configuration into a single `.roost` ZIP archive and restore it on any machine.
 
-**Export:**
-- Single "Backup" button in Settings packages all local data into a custom `.roost` ZIP archive
-- Contents: `theroost.db` (SQLite database), `settings.json`, `images/` directory (custom uploaded art)
-- Embeds schema version and app version in archive metadata for compatibility detection
-- Tauri save-file dialog for user to choose destination
-- API keys (Windows Credential Manager) are explicitly excluded — never exported
+**Backup:**
+- "Create Backup" button in Settings > Advanced with pre-backup size estimate
+- Contents: `manifest.json` (app version, schema version, timestamps, file counts), `theroost.db` (SQLite database), `settings.json`, `credentials_hint.json` (which API keys were configured — names only, never values), `art/` directory (custom uploaded PNGs)
+- WAL checkpoint before copy for SQLite consistency
+- Native save dialog (default: Desktop), progress events per phase
+- API key values (Windows Credential Manager) are explicitly excluded
 
 **Restore:**
-- "Restore" button in Settings with file picker for `.roost` archive
-- Schema version check: warn if backup is from a newer app version
-- Overwrites existing data (designed for fresh install / migration use case)
-- Restart prompt after restore to reinitialize all stores and connections
+- "Restore from Backup" button → native file picker → archive validation (integrity, schema compatibility)
+- Full-screen 4-step RestoreWizard: backup summary → active session check → credential re-entry → restore with progress
+- Pre-restore safety backup with automatic rollback on failure
+- Schema compatibility: same/older = ok (migrations run on open), newer = warn, 5+ ahead = block
+- Credential hints show which API keys the user previously had; wizard prompts for re-entry only for those
+- App restart after successful restore
+
+**Implementation:** 7 Tauri commands, `backup_service.rs` (estimate, create, validate, restore, safety backup, rollback, credential hints), `BackupRestoreSection.tsx`, `RestoreWizard.tsx` + CSS, 15 Rust tests + 16 frontend tests
 
 ---
 

@@ -6,10 +6,10 @@ mod utils;
 use std::sync::{Arc, Mutex};
 
 use commands::{
-    achievements, ai, audio, autostart, cover_art, custom_games, developer, external_scanner,
-    favorites, friends, game_launcher, hidden_games, media_bookmarks, media_controls, metadata,
-    news, notes, overlay, ratings, recaps, saved_filters, sessions, settings, steam_api,
-    steam_scanner, system_monitor, tags, updater,
+    achievements, ai, audio, autostart, backup, cover_art, custom_games, developer,
+    external_scanner, favorites, friends, game_launcher, hidden_games, media_bookmarks,
+    media_controls, metadata, news, notes, overlay, ratings, recaps, saved_filters, sessions,
+    settings, steam_api, steam_scanner, system_monitor, tags, updater,
 };
 use models::ai::CloudProvider;
 use services::ai::cloud_config::CloudConfig;
@@ -163,6 +163,13 @@ pub fn run() {
             updater::get_app_version,
             autostart::get_autostart_enabled,
             autostart::set_autostart_enabled,
+            backup::estimate_backup_size,
+            backup::create_backup,
+            backup::validate_backup,
+            backup::check_active_sessions,
+            backup::restore_from_backup,
+            backup::get_backup_credential_hints,
+            backup::restart_app,
         ])
         .setup(|app| {
             // Initialize tracing with our custom layer that forwards events to the frontend

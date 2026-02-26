@@ -1,6 +1,7 @@
 pub mod achievement_service;
 pub mod ai;
 pub mod audio_control;
+pub mod backup_service;
 pub mod cache_db;
 pub mod cover_art;
 pub mod credential_store;
