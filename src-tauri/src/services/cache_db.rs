@@ -977,7 +977,9 @@ impl CacheDb {
              FROM games WHERE install_path IS NOT NULL",
         )?;
         let rows = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
     }

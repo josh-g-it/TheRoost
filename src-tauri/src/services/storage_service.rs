@@ -71,7 +71,10 @@ fn extract_drive_letter(path: &str) -> String {
 }
 
 /// Run the full storage scan: drive stats + per-game directory sizes.
-pub fn scan_storage(app_handle: &AppHandle, db: &CacheDbHandle) -> Result<StorageScanResult, AppError> {
+pub fn scan_storage(
+    app_handle: &AppHandle,
+    db: &CacheDbHandle,
+) -> Result<StorageScanResult, AppError> {
     let start = Instant::now();
 
     // Load game install paths from DB (lock released immediately)

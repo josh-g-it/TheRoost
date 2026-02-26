@@ -12,6 +12,7 @@ import {
   Cell,
   Legend,
 } from "recharts";
+import type { YAxisTickContentProps } from "recharts";
 import { listen } from "@tauri-apps/api/event";
 import { storageApi } from "../../services/tauri";
 import type { StorageScanResult, DriveInfo, GameStorageEntry } from "../../types/storage";
@@ -306,20 +307,12 @@ function GamesBySize({
             type="category"
             dataKey="name"
             width={LABEL_WIDTH}
-            tick={({
-              x,
-              y,
-              payload,
-            }: {
-              x: number;
-              y: number;
-              payload: { value: string };
-            }) => {
-              const full = payload.value;
+            tick={(props: YAxisTickContentProps) => {
+              const full = String(props.payload.value ?? "");
               const display =
                 full.length > MAX_CHARS ? full.slice(0, MAX_CHARS - 1) + "…" : full;
               return (
-                <g transform={`translate(${x},${y})`}>
+                <g transform={`translate(${props.x},${props.y})`}>
                   <title>{full}</title>
                   <text
                     x={-4}
