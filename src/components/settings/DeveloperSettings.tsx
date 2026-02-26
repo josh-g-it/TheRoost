@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../common/Button";
 import { Input } from "../common/Input";
 import { useSettings } from "../../hooks/useSettings";
-import { developerApi, achievementsApi } from "../../services/tauri";
+import { developerApi, achievementsApi, newsApi } from "../../services/tauri";
 import { useAchievementsStore } from "../../store/achievementsSlice";
 import { getErrorMessage } from "../../utils/errors";
 import { logger } from "../../utils/logger";
@@ -23,6 +23,9 @@ export function DeveloperSettings() {
 
   // Achievement reset state
   const [resettingAchievements, setResettingAchievements] = useState(false);
+
+  // News cache state
+  const [clearingNews, setClearingNews] = useState(false);
 
   if (!settings) return null;
 
@@ -70,6 +73,20 @@ export function DeveloperSettings() {
       );
     } finally {
       setResettingAchievements(false);
+    }
+  };
+
+  const handleClearNewsCache = async () => {
+    setClearingNews(true);
+    try {
+      const count = await newsApi.clearNewsCache();
+      logger.info("DeveloperSettings", "news", "News cache cleared", { deleted: count });
+    } catch (e) {
+      logger.error("DeveloperSettings", "news", "Failed to clear news cache", {
+        error: getErrorMessage(e),
+      });
+    } finally {
+      setClearingNews(false);
     }
   };
 
@@ -151,6 +168,24 @@ export function DeveloperSettings() {
               onClick={handleResetAchievements}
             >
               Reset Achievements
+            </Button>
+          </div>
+
+          <div className="settings-view__field-row">
+            <div>
+              <label className="settings-view__label">Clear News Cache</label>
+              <p className="settings-view__field-hint">
+                Clear all cached news articles. Fresh articles will be fetched when you
+                next visit the News page or click Refresh.
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={clearingNews}
+              onClick={handleClearNewsCache}
+            >
+              Clear News Cache
             </Button>
           </div>
 

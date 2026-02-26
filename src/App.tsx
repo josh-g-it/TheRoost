@@ -13,6 +13,7 @@ import { DebugPanel } from "./components/debug/DebugPanel";
 import { ActivityView } from "./components/activity/ActivityView";
 import { ProfileView } from "./components/profile/ProfileView";
 import { NotesView } from "./components/notes/NotesView";
+import { NewsView } from "./components/news/NewsView";
 
 const router = createBrowserRouter([
   {
@@ -35,6 +36,7 @@ const router = createBrowserRouter([
         errorElement: <RouteErrorFallback />,
       },
       { path: "/notes", element: <NotesView />, errorElement: <RouteErrorFallback /> },
+      { path: "/news", element: <NewsView />, errorElement: <RouteErrorFallback /> },
       {
         path: "/settings",
         element: <SettingsView />,

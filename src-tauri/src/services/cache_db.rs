@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -146,6 +147,12 @@ impl CacheDb {
         }
         if current < 20 {
             self.apply_v20()?;
+        }
+        if current < 21 {
+            self.apply_v21()?;
+        }
+        if current < 22 {
+            self.apply_v22()?;
         }
 
         // Repair: restore any entries invalidated by cache invalidation (cached_at = 0).
@@ -654,6 +661,31 @@ impl CacheDb {
         Ok(())
     }
 
+    fn apply_v21(&self) -> Result<(), AppError> {
+        self.conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS news_read (
+                news_id TEXT PRIMARY KEY,
+                game_id TEXT NOT NULL,
+                read_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_news_read_game ON news_read(game_id);
+
+            INSERT OR REPLACE INTO schema_version (version, applied_at)
+                VALUES (21, datetime('now'));",
+        )?;
+        Ok(())
+    }
+
+    fn apply_v22(&self) -> Result<(), AppError> {
+        self.conn.execute_batch(
+            "ALTER TABLE game_news ADD COLUMN is_external INTEGER NOT NULL DEFAULT 0;
+
+            INSERT OR REPLACE INTO schema_version (version, applied_at)
+                VALUES (22, datetime('now'));",
+        )?;
+        Ok(())
+    }
+
     // ── Manual Playtime ─────────────────────────────────────────────
 
     /// Get the manual playtime for a game (in minutes).
@@ -1073,6 +1105,7 @@ impl CacheDb {
             "game_achievements",
             "game_achievement_freshness",
             "game_news",
+            "news_read",
             "favorites",
             "hidden_games",
             "playtime_snapshots",
@@ -2059,8 +2092,8 @@ impl CacheDb {
         tx.execute("DELETE FROM game_news WHERE game_id = ?1", params![game_id])?;
 
         let mut stmt = tx.prepare(
-            "INSERT INTO game_news (game_id, news_id, title, url, author, contents, date, feed_label, cached_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO game_news (game_id, news_id, title, url, author, contents, date, feed_label, is_external, cached_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         )?;
 
         for item in items {
@@ -2073,6 +2106,7 @@ impl CacheDb {
                 item.contents,
                 item.date,
                 item.feed_label,
+                item.is_external,
                 now,
             ])?;
         }
@@ -2081,9 +2115,16 @@ impl CacheDb {
         Ok(())
     }
 
+    /// Clear all cached news articles. Returns the number of rows deleted.
+    pub fn clear_news_cache(&self) -> Result<u32, AppError> {
+        let count = self.conn.execute("DELETE FROM game_news", [])?;
+        tracing::info!(deleted = count, "News cache cleared");
+        Ok(count as u32)
+    }
+
     pub fn get_game_news(&self, game_id: &str) -> Result<Vec<GameNewsItem>, AppError> {
         let mut stmt = self.conn.prepare(
-            "SELECT news_id, title, url, author, contents, date, feed_label
+            "SELECT news_id, title, url, author, contents, date, feed_label, is_external
              FROM game_news WHERE game_id = ?1 ORDER BY date DESC",
         )?;
         let items = stmt
@@ -2097,10 +2138,102 @@ impl CacheDb {
                     contents: row.get(4)?,
                     date: row.get(5)?,
                     feed_label: row.get(6)?,
+                    is_external: row.get(7)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(items)
+    }
+
+    // ── News Read Tracking ──────────────────────────────────────────
+
+    pub fn mark_news_read(&self, news_id: &str, game_id: &str) -> Result<(), AppError> {
+        self.conn.execute(
+            "INSERT OR IGNORE INTO news_read (news_id, game_id) VALUES (?1, ?2)",
+            params![news_id, game_id],
+        )?;
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub fn mark_all_news_read_for_game(&self, game_id: &str) -> Result<(), AppError> {
+        self.conn.execute(
+            "INSERT OR IGNORE INTO news_read (news_id, game_id)
+             SELECT news_id, game_id FROM game_news WHERE game_id = ?1",
+            params![game_id],
+        )?;
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub fn is_news_read(&self, news_id: &str) -> Result<bool, AppError> {
+        let count: u32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM news_read WHERE news_id = ?1",
+            params![news_id],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn get_read_news_ids(&self, news_ids: &[String]) -> Result<HashSet<String>, AppError> {
+        if news_ids.is_empty() {
+            return Ok(HashSet::new());
+        }
+        let placeholders: String = news_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT news_id FROM news_read WHERE news_id IN ({})",
+            placeholders
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let ids = stmt
+            .query_map(rusqlite::params_from_iter(news_ids.iter()), |row| {
+                row.get(0)
+            })?
+            .collect::<Result<HashSet<String>, _>>()?;
+        Ok(ids)
+    }
+
+    pub fn get_unread_news_count(&self) -> Result<u32, AppError> {
+        let count: u32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM game_news WHERE news_id NOT IN (SELECT news_id FROM news_read)",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(count)
+    }
+
+    /// Get all cached news items with game name, annotated with read status.
+    #[allow(dead_code)]
+    pub fn get_all_cached_news_with_read_status(
+        &self,
+    ) -> Result<Vec<(GameNewsItem, String, bool)>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT gn.news_id, gn.game_id, gn.title, gn.url, gn.author, gn.contents, gn.date, gn.feed_label, gn.is_external,
+                    COALESCE(g.name, ''), (nr.news_id IS NOT NULL) as is_read
+             FROM game_news gn
+             LEFT JOIN games g ON g.game_id = gn.game_id
+             LEFT JOIN news_read nr ON nr.news_id = gn.news_id
+             ORDER BY gn.date DESC",
+        )?;
+        let rows = stmt
+            .query_map([], |row| {
+                let item = GameNewsItem {
+                    news_id: row.get(0)?,
+                    game_id: row.get(1)?,
+                    title: row.get(2)?,
+                    url: row.get(3)?,
+                    author: row.get(4)?,
+                    contents: row.get(5)?,
+                    date: row.get(6)?,
+                    feed_label: row.get(7)?,
+                    is_external: row.get(8)?,
+                };
+                let game_name: String = row.get(9)?;
+                let is_read: bool = row.get(10)?;
+                Ok((item, game_name, is_read))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
     }
 
     // ── Game Notes ──────────────────────────────────────────────────
@@ -2705,7 +2838,7 @@ mod tests {
     }
 
     #[test]
-    fn test_schema_version_is_20() {
+    fn test_schema_version_is_22() {
         let db = test_db();
         let version: u32 = db
             .conn
@@ -2713,7 +2846,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 20);
+        assert_eq!(version, 22);
     }
 
     // ── Store Metadata ──────────────────────────────────────────────
@@ -4562,5 +4695,145 @@ mod tests {
         assert!(genres2.is_none());
         assert!(tags2.is_none());
         assert!((hours2 - 0.0).abs() < 0.01); // no playtime
+    }
+
+    // ── News Read Tracking Tests ──────────────────────────────────
+
+    fn make_news_items(game_id: &str, count: usize) -> Vec<GameNewsItem> {
+        (0..count)
+            .map(|i| GameNewsItem {
+                news_id: format!("news-{}-{}", game_id, i),
+                game_id: game_id.to_string(),
+                title: format!("Article {}", i),
+                url: format!("https://example.com/news/{}", i),
+                author: "Author".to_string(),
+                contents: "Content".to_string(),
+                date: 1700000000 + (i as u64 * 3600),
+                feed_label: "Community".to_string(),
+                is_external: false,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_news_read_mark_and_check() {
+        let db = test_db();
+        let game_id = db.register_game("steam", "440", "TF2").unwrap();
+
+        // Not read initially
+        assert!(!db.is_news_read("news-1").unwrap());
+
+        // Mark as read
+        db.mark_news_read("news-1", &game_id).unwrap();
+        assert!(db.is_news_read("news-1").unwrap());
+
+        // Idempotent (INSERT OR IGNORE)
+        db.mark_news_read("news-1", &game_id).unwrap();
+        assert!(db.is_news_read("news-1").unwrap());
+    }
+
+    #[test]
+    fn test_news_read_batch_query() {
+        let db = test_db();
+        let game_id = db.register_game("steam", "440", "TF2").unwrap();
+
+        db.mark_news_read("n1", &game_id).unwrap();
+        db.mark_news_read("n2", &game_id).unwrap();
+
+        let ids = vec!["n1".to_string(), "n2".to_string(), "n3".to_string()];
+        let read = db.get_read_news_ids(&ids).unwrap();
+        assert!(read.contains("n1"));
+        assert!(read.contains("n2"));
+        assert!(!read.contains("n3"));
+        assert_eq!(read.len(), 2);
+    }
+
+    #[test]
+    fn test_news_read_batch_empty_input() {
+        let db = test_db();
+        let read = db.get_read_news_ids(&[]).unwrap();
+        assert!(read.is_empty());
+    }
+
+    #[test]
+    fn test_unread_news_count() {
+        let db = test_db();
+        let game_id = db.register_game("steam", "440", "TF2").unwrap();
+
+        let items = make_news_items(&game_id, 5);
+        db.cache_game_news(&game_id, &items).unwrap();
+
+        // All 5 unread
+        assert_eq!(db.get_unread_news_count().unwrap(), 5);
+
+        // Mark 2 as read
+        db.mark_news_read(&items[0].news_id, &game_id).unwrap();
+        db.mark_news_read(&items[1].news_id, &game_id).unwrap();
+        assert_eq!(db.get_unread_news_count().unwrap(), 3);
+    }
+
+    #[test]
+    fn test_mark_all_news_read_for_game() {
+        let db = test_db();
+        let g1 = db.register_game("steam", "440", "TF2").unwrap();
+        let g2 = db.register_game("steam", "730", "CS2").unwrap();
+
+        let items1 = make_news_items(&g1, 3);
+        let items2 = make_news_items(&g2, 2);
+        db.cache_game_news(&g1, &items1).unwrap();
+        db.cache_game_news(&g2, &items2).unwrap();
+
+        assert_eq!(db.get_unread_news_count().unwrap(), 5);
+
+        // Mark all news for g1 as read
+        db.mark_all_news_read_for_game(&g1).unwrap();
+        assert_eq!(db.get_unread_news_count().unwrap(), 2);
+
+        // g2 news still unread
+        assert!(!db.is_news_read(&items2[0].news_id).unwrap());
+    }
+
+    #[test]
+    fn test_get_all_cached_news_with_read_status() {
+        let db = test_db();
+        let game_id = db.register_game("steam", "440", "TF2").unwrap();
+
+        let items = make_news_items(&game_id, 3);
+        db.cache_game_news(&game_id, &items).unwrap();
+
+        // Mark one as read
+        db.mark_news_read(&items[0].news_id, &game_id).unwrap();
+
+        let rows = db.get_all_cached_news_with_read_status().unwrap();
+        assert_eq!(rows.len(), 3);
+
+        // Check read status
+        let read_count = rows.iter().filter(|(_, _, is_read)| *is_read).count();
+        assert_eq!(read_count, 1);
+
+        // Check game name is populated
+        let (_, name, _) = &rows[0];
+        assert_eq!(name, "TF2");
+    }
+
+    #[test]
+    fn test_delete_game_cascades_news_read() {
+        let db = test_db();
+        let game_id = db.register_game("steam", "440", "TF2").unwrap();
+
+        let items = make_news_items(&game_id, 3);
+        db.cache_game_news(&game_id, &items).unwrap();
+        db.mark_news_read(&items[0].news_id, &game_id).unwrap();
+        db.mark_news_read(&items[1].news_id, &game_id).unwrap();
+
+        // Verify read records exist
+        let ids = items.iter().map(|i| i.news_id.clone()).collect::<Vec<_>>();
+        assert_eq!(db.get_read_news_ids(&ids).unwrap().len(), 2);
+
+        // Delete the game
+        db.delete_game(&game_id).unwrap();
+
+        // Read records should be gone
+        assert_eq!(db.get_read_news_ids(&ids).unwrap().len(), 0);
     }
 }

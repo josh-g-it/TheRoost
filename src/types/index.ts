@@ -83,7 +83,7 @@ export type {
 } from "./activity";
 export type { GameAchievement, GameAchievementSummary } from "./achievement";
 export type { FriendInfo, FriendGame, FriendLibrary } from "./friend";
-export type { GameNewsItem } from "./news";
+export type { GameNewsItem, FeedNewsItem } from "./news";
 export type { GameNote, GameNoteWithName } from "./note";
 export { GENERAL_NOTES_ID } from "./note";
 export type { GameRating } from "./rating";

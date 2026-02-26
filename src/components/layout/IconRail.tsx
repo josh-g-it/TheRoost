@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import { useSettingsStore } from "../../store/settingsSlice";
+import { useNewsStore } from "../../store/newsSlice";
 import { APP_NAME } from "../../constants";
 import { useAppVersion } from "../../hooks/useAppVersion";
 import type { RailMode } from "../../types";
@@ -14,6 +16,7 @@ const navItems: { path: string; label: string; icon: IconName }[] = [
   { path: "/activity", label: "Activity", icon: "activity" },
   { path: "/profile", label: "Profile", icon: "profile" },
   { path: "/notes", label: "Notes", icon: "notes" },
+  { path: "/news", label: "News", icon: "news" },
   { path: "/settings", label: "Settings", icon: "settings" },
 ];
 
@@ -38,6 +41,12 @@ export function IconRail({ onCommandCenterToggle, railMode }: IconRailProps) {
   const settings = useSettingsStore((s) => s.settings);
   const saveSettings = useSettingsStore((s) => s.saveSettings);
   const appVersion = useAppVersion();
+  const unreadCount = useNewsStore((s) => s.unreadCount);
+  const refreshUnreadCount = useNewsStore((s) => s.refreshUnreadCount);
+
+  useEffect(() => {
+    refreshUnreadCount();
+  }, [refreshUnreadCount]);
 
   const cycleRailMode = () => {
     if (!settings) return;
@@ -80,6 +89,11 @@ export function IconRail({ onCommandCenterToggle, railMode }: IconRailProps) {
           >
             <span className="icon-rail__link-icon">
               <AppIcon name={item.icon} size={20} />
+              {item.path === "/news" && unreadCount > 0 && (
+                <span className="icon-rail__badge">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
             </span>
             <span className="icon-rail__link-label">{item.label}</span>
           </NavLink>

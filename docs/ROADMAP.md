@@ -874,7 +874,7 @@ Patch fix: "sort by last played" now works correctly for non-Steam games.
 
 # Version 2.0 — Planned
 
-Each feature below ships as an incremental minor version (v1.5.0, v1.6.0, etc.). Ordered by development efficiency: quick wins extending existing systems first, then new pages surfacing existing data, then infrastructure, then major new integrations. Once all features are shipped, the app elevates to 2.0.0.
+Each feature below ships as an incremental minor version (v1.8.0, v1.9.0, etc.). Ordered by user-facing value first (recaps, backup), then infrastructure (storage, install management), then major integrations (AI, friends, controller). Once all features are shipped, the app elevates to 2.0.0.
 
 ---
 
@@ -893,86 +893,57 @@ Centralized Art Management Menu with local image upload, crop/reposition, and St
 
 ---
 
-### v1.6.0 — Manual Shelf Assignment
-Pin specific games to shelves — hybrid mode alongside existing filter-based population.
+### v1.6.0 — Manual Shelf Assignment ✅ SHIPPED
+Hybrid shelves — filter rules + manual game pins. Users can pin/unpin games to any shelf via context menu or GameDetail sidebar.
 
-- Manually add/remove specific games to any shelf (alongside existing filter-based population)
-- Right-click context menu on game cards: "Add to Shelf >" submenu listing available shelves
-- GameDetail sidebar: shelf membership section showing which shelves a game belongs to
-- Shelf editor: new "Manually Added" section showing pinned games, with remove option
-- Shelves become hybrid: filter rules populate automatically + manual pins override/supplement
-- A game can be manually pinned to multiple shelves
+- `ShelfConfig` extended with `pinnedGameIds: string[]` (stored in settings.json)
+- `processShelfGames()` hybrid pipeline: hidden filter → preset → shelf filters → pin union → global search → sort → slice
+- Pinned games always appear regardless of filters, but still respect hidden status and global search
+- Right-click context menu: "Shelves" section with checkbox per shelf
+- GameDetail sidebar: toggleable shelf chips with pin/plus icons
+- Shelf editor: "Manually Pinned" section for bulk management with dead-pin cleanup
+- Settings migration: old shelves without `pinnedGameIds` backfill to `[]`
+- No Rust changes, no DB migration, no new Tauri commands
+- 227 Rust tests + 382 frontend tests passing (609 total)
 
 ---
 
-### v1.7.0 — Achievements Tracker
-Dedicated achievements page — track completion progress across your entire library at a glance.
+### v1.7.0 — Game News Feed ✅ SHIPPED
+Aggregated news feed from your library — only the games you care about.
 
-**Achievements Page (`/achievements`):**
-- Full-page view listing every game with known achievements
-- Default sort: completion percentage (highest first)
-- Additional sort options: alphabetical, total achievements, most recent unlock, most unearned
-- Search/filter by game name
-- Per-source indicators (Steam achievements initially; extensible to other launchers)
+**Backend (`news_service.rs` + `cache_db.rs`):**
+- Steam GetNewsForApp/v2 API — fetches news for favorited + recently played games (last 15 days)
+- `FeedNewsItem` model with `source_id` for art resolution, `is_external` flag for source filtering
+- `news_read` + `game_news` tables (schema v22), 1-hour TTL with force-refresh bypass
+- 6 Tauri commands: `fetch_game_news`, `fetch_followed_games`, `fetch_news_feed`, `mark_news_read`, `get_unread_news_count`, `clear_news_cache`
+- Non-Steam games silently skipped (news comes from Steam's API)
 
-**At-a-Glance View (collapsed):**
-- Game cover art thumbnail + name
-- Completion progress bar with percentage (e.g., "47/62 — 75.8%")
-- Total earned vs. total available count
-- Most recent achievement earned (name + date)
-- Rarity indicator for hardest achievement earned (if data available)
+**News Feed UI (`/news` route):**
+- Chronological feed of `NewsArticleCard` components with game hero art banner, game name, headline, author, date, snippet
+- Click to expand: `NewsArticleDetail` modal with full article body + "Open in Browser" button
+- `NewsGameFilter` popover: multi-select game dropdown to focus on specific games' news
+- Source filter: "All" / "Official Only" / "Third Party Only" segmented control (based on `feed_type`)
+- Mark as read (on article open) + "Mark All Read" button
+- Unread count badge on icon rail "News" entry
+- Force refresh button bypasses 1-hour cache TTL
+- "Clear News Cache" in Developer Settings
 
-**Expanded Detail View (click to expand):**
-- Full achievement list: icon, name, description for each
-- Earned achievements: checkmark + unlock date/time (if available from API)
-- Unearned achievements: grayed out, sorted to bottom (or togglable sort)
-- Achievement rarity percentages (global unlock rate from Steam API)
-- Filter within game: earned/unearned/all, search by achievement name
-- Hidden/secret achievements: revealed once earned, spoiler-tagged when unearned
-
-**Data Pipeline:**
-- Steam: `GetPlayerAchievements` + `GetSchemaForGame` + `GetGlobalAchievementPercentagesForApp`
-- Cache in SQLite with achievement icons, descriptions, unlock timestamps
-- Background refresh with configurable staleness TTL
-- Extensible to other launchers if achievement APIs become available
+**Content Parsing (`steamBBCode.ts`):**
+- Dual-format parser: detects HTML vs BBCode via `isHtmlContent()` regex
+- `parseNewsContent()` — BBCode path converts 15 tag types (headings, lists, URLs, YouTube, spoilers, tables, etc.) to safe HTML; HTML path uses allowlist-based sanitizer (`ALLOWED_TAGS` + attribute filtering + URL validation)
+- `stripMarkup()` — plain text extraction for card snippets
+- YouTube `[previewyoutube]` tags rendered as styled clickable links (not embeds)
+- XSS prevention: HTML entity escaping for BBCode, allowlist sanitization for HTML
 
 **Navigation:**
-- Icon rail entry (after Notes)
-- Command palette: "Go to Achievements" action
-- GameDetail sidebar: achievement summary + link to filtered achievements page
+- `/news` route with `errorElement: <RouteErrorFallback />`
+- Icon rail entry with unread badge (pulsing dot when > 0)
+- `nav:news` command palette action
+- 234 Rust tests + 390 frontend tests passing (624 total)
 
 ---
 
-### v1.8.0 — Game News Feed
-Curated news from your library — only the games you care about.
-
-**News Sources & Filtering:**
-- Pull from already-cached Steam news data (`cache_game_news`)
-- Default scope: favorited games + last 10–15 most recently played games
-- Configurable in Settings: choose scope (favorites only, recent only, custom list, all installed)
-- Per-game opt-out: "Mute news for this game" from GameDetail or news feed
-- Deduplicate: strip duplicates across sources (same headline/URL)
-
-**News Feed UI (`/news` route or Activity card):**
-- Chronological feed of news items with game cover art, game name, headline, publish date
-- Click to expand: full article body (rendered from Steam's BBCode/HTML) or "Read more" external link
-- Filter bar: by game, by date range, unread only
-- Mark as read/unread (tracked in SQLite)
-- Unread count badge on icon rail entry
-
-**Activity Integration:**
-- "Latest News" activity card type (optional, added to card layout)
-- Shows top 3–5 recent headlines with game icons
-- Click through to full news feed
-
-**Notifications:**
-- Optional: toast notification when new news arrives for a favorited game
-- Tray menu: "X new articles" indicator
-- Overlay: news ticker or compact headlines panel (stretch)
-
----
-
-### v1.9.0 — Gaming Recap & Insights
+### v1.8.0 — Gaming Recap & Insights
 Auto-generated monthly and yearly reviews — your personal gaming wrapped.
 
 **Monthly Recap (auto-generated on 1st of each month):**
@@ -1009,39 +980,48 @@ Auto-generated monthly and yearly reviews — your personal gaming wrapped.
 
 ---
 
-### v1.10.0 — Import/Export
-Library backup and restore — data safety before bigger changes.
+### v1.9.0 — Backup & Restore
+Data safety — package your entire Roost configuration into a single archive and restore it on any machine.
 
-- Full backup: library data, settings, notes, shelves, layouts, bookmarks
-- Export formats: JSON (human-readable) and compressed binary
-- Selective import: choose which data categories to restore
-- Migration support: detect and handle schema version differences
-- Potential: import from other launchers' export formats (Playnite, etc.)
+**Export:**
+- Single "Backup" button in Settings packages all local data into a custom `.roost` ZIP archive
+- Contents: `theroost.db` (SQLite database), `settings.json`, `images/` directory (custom uploaded art)
+- Embeds schema version and app version in archive metadata for compatibility detection
+- Tauri save-file dialog for user to choose destination
+- API keys (Windows Credential Manager) are explicitly excluded — never exported
+
+**Restore:**
+- "Restore" button in Settings with file picker for `.roost` archive
+- Schema version check: warn if backup is from a newer app version
+- Overwrites existing data (designed for fresh install / migration use case)
+- Restart prompt after restore to reinitialize all stores and connections
 
 ---
 
-### v1.11.0 — Storage Overview
-Disk-aware features — see what's using space and manage installs without leaving The Roost.
+### v1.10.0 — Storage Overview
+Disk-aware features — see what's using space across your game library.
 
 - Per-drive storage breakdown (used/free, game count per drive)
 - Per-game install size tracking (read from disk or launcher metadata)
 - Sort/filter library by install size
 - Visual storage map (treemap or bar chart by drive)
 - Identify largest installs, suggest cleanup candidates
-- Uninstall games (delegate to launcher or native uninstaller)
 
 ---
 
-### v1.12.0 — Enhanced Pattern Matcher
-Evolve the local AI pattern matcher with learning, compound queries, and context awareness.
+### v1.11.0 — Steam Install/Uninstall
+Manage Steam game installations directly from The Roost — builds on storage overview.
 
-- Learning from user corrections (e.g., "no, I meant X" adjusts future matching)
-- Compound query support (multiple intents in a single sentence)
-- Context-aware suggestions based on current library state and recent activity
+- Browse uninstalled Steam library games (owned but not on disk)
+- Install via `steam://install/{appid}` URI scheme (delegates to Steam client)
+- Uninstall via `steam://uninstall/{appid}` URI scheme
+- Select target drive/Steam library folder for installation
+- Installation progress tracking via Steam client IPC or polling
+- Integrated with storage overview: see free space before installing
 
 ---
 
-### v1.13.0 — Conversational AI Assistant
+### v1.12.0 — Conversational AI Assistant
 Full conversational assistant with multi-provider support — evolve the cloud AI into a chat experience.
 
 **Conversational Assistant:**
@@ -1050,6 +1030,7 @@ Full conversational assistant with multi-provider support — evolve the cloud A
 - Richer responses: game comparisons, personalized recommendations with reasoning
 - Action suggestions inline with conversation (e.g., "Want me to filter your library to these?")
 - Conversation persistence (SQLite-backed chat history)
+- Achievement data accessible to cloud AI for richer insights
 
 **Multi-Provider Support:**
 - Claude (Anthropic) integration as an alternative cloud provider
@@ -1061,7 +1042,7 @@ Full conversational assistant with multi-provider support — evolve the cloud A
 
 ---
 
-### v1.14.0 — Friends Integration
+### v1.13.0 — Friends Integration
 Pull in friend data from external launchers — see who's online and what they're playing.
 
 **Steam Friends:**
@@ -1085,18 +1066,8 @@ Pull in friend data from external launchers — see who's online and what they'r
 
 ---
 
-### v1.15.0 — Steam Game Installation
-Install Steam games from within The Roost — browse uninstalled library and manage Steam library folders.
-
-- Browse uninstalled Steam library games (owned but not on disk)
-- Select target drive/Steam library folder for installation
-- Installation progress tracking via Steam client IPC or polling
-- Manage Steam library folders (view/add/remove install locations)
-
----
-
-### v1.16.0 — Big Picture Mode
-Full-screen, controller-friendly UI for couch gaming — navigate your entire library with a gamepad.
+### v1.14.0 — Controller & Couch Support
+Make The Roost fully navigable with a gamepad — same UI, adapted for couch distance and controller input.
 
 **Controller Input:**
 - Gamepad API integration (Web Gamepad API or Tauri native plugin)
@@ -1106,18 +1077,16 @@ Full-screen, controller-friendly UI for couch gaming — navigate your entire li
 - Trigger buttons for page-level navigation (LB/RB = prev/next shelf or section)
 - Configurable button mapping
 
-**Big Picture Layout:**
-- Dedicated full-screen window mode (separate from normal windowed UI)
-- Large card art, simplified navigation, reduced text density
-- Horizontal scrolling game rows (Netflix-style) grouped by shelf/collection
-- Game detail page optimized for distance viewing (large text, high-contrast)
-- Simplified settings accessible via controller
-- On-screen keyboard for search input
+**Couch Adaptation (same app, not a separate layout):**
+- "Couch mode" toggle: adjusts UI scale, focus indicators, and hit target sizes for distance viewing
+- Builds on existing `data-ui-scale` system with a controller-optimized scale tier
+- Visible focus rings on all interactive elements for spatial navigation
+- On-screen keyboard for search input when no physical keyboard is available
+- Game detail and settings adapted for larger text and high-contrast at distance
 
 **Overlay Integration:**
 - Controller-aware overlay variant (navigate HUD panels with gamepad)
 - Quick-launch wheel: radial menu of recent/favorite games
-- Controller vibration feedback on game launch
 
 ---
 
@@ -1127,5 +1096,7 @@ Features that may be explored in future versions:
 
 | Feature | Description |
 |---------|-------------|
+| Achievements Browser | Dedicated page for browsing per-game achievements, completion %, rarity stats |
+| Enhanced Pattern Matcher | Learning from corrections, compound queries, context-aware suggestions |
 | Plugin System | User-extensible architecture for custom launchers, data sources, or UI panels |
 | Game Deals | Price tracking and deal alerts from IsThereAnyDeal or similar APIs |

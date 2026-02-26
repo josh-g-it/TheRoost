@@ -48,6 +48,8 @@ export type IconName =
   | "lock"
   | "volume"
   | "volume-off"
+  // News
+  | "news"
   // AI
   | "sparkle"
   // Shelf display modes
@@ -110,6 +112,7 @@ import {
   RiVolumeUpLine,
   RiVolumeMuteLine,
   RiSparklingLine,
+  RiNewspaperLine,
 } from "react-icons/ri";
 
 const defaultSet: IconSet = {
@@ -154,6 +157,7 @@ const defaultSet: IconSet = {
   lock: RiLockLine,
   volume: RiVolumeUpLine,
   "volume-off": RiVolumeMuteLine,
+  news: RiNewspaperLine,
   sparkle: RiSparklingLine,
   "shelf-collapsed": RiLayoutRowLine,
   "shelf-extended": RiLayoutGridLine,
@@ -209,6 +213,7 @@ import {
   LuVolume2,
   LuVolumeX,
   LuSparkles,
+  LuNewspaper,
 } from "react-icons/lu";
 
 // Lucide doesn't have a filled star variant — use the same outline for both
@@ -256,6 +261,7 @@ const minimalSet: IconSet = {
   lock: LuLock,
   volume: LuVolume2,
   "volume-off": LuVolumeX,
+  news: LuNewspaper,
   sparkle: LuSparkles,
   "shelf-collapsed": LuRows3,
   "shelf-extended": LuGrid2X2,
@@ -312,6 +318,7 @@ import {
   HiOutlineSpeakerWave,
   HiOutlineSpeakerXMark,
   HiOutlineSparkles,
+  HiOutlineNewspaper,
 } from "react-icons/hi2";
 
 const heroicSet: IconSet = {
@@ -356,6 +363,7 @@ const heroicSet: IconSet = {
   lock: HiOutlineLockClosed,
   volume: HiOutlineSpeakerWave,
   "volume-off": HiOutlineSpeakerXMark,
+  news: HiOutlineNewspaper,
   sparkle: HiOutlineSparkles,
   "shelf-collapsed": HiOutlineRectangleGroup,
   "shelf-extended": HiOutlineTableCells,
@@ -412,6 +420,7 @@ import {
   IoVolumeHighOutline,
   IoVolumeMuteOutline,
   IoSparklesOutline,
+  IoNewspaperOutline,
 } from "react-icons/io5";
 
 const playfulSet: IconSet = {
@@ -456,6 +465,7 @@ const playfulSet: IconSet = {
   lock: IoLockClosedOutline,
   volume: IoVolumeHighOutline,
   "volume-off": IoVolumeMuteOutline,
+  news: IoNewspaperOutline,
   sparkle: IoSparklesOutline,
   "shelf-collapsed": IoReorderThreeOutline,
   "shelf-extended": IoAppsOutline,
@@ -512,6 +522,7 @@ import {
   FaVolumeHigh,
   FaVolumeXmark,
   FaWandMagicSparkles,
+  FaRegNewspaper,
 } from "react-icons/fa6";
 
 const classicSet: IconSet = {
@@ -556,6 +567,7 @@ const classicSet: IconSet = {
   lock: FaLock,
   volume: FaVolumeHigh,
   "volume-off": FaVolumeXmark,
+  news: FaRegNewspaper,
   sparkle: FaWandMagicSparkles,
   "shelf-collapsed": FaGripLines,
   "shelf-extended": FaTableCellsLarge,
@@ -612,6 +624,7 @@ import {
   GiSpeaker,
   GiSpeakerOff,
   GiSparkles,
+  GiNewspaper,
 } from "react-icons/gi";
 
 const fantasySet: IconSet = {
@@ -656,6 +669,7 @@ const fantasySet: IconSet = {
   lock: GiPadlock,
   volume: GiSpeaker,
   "volume-off": GiSpeakerOff,
+  news: GiNewspaper,
   sparkle: GiSparkles,
   "shelf-collapsed": GiBookshelf,
   "shelf-extended": GiCardRandom,

@@ -2,7 +2,7 @@
 
 > **Audience**: AI assistants, senior developers, contributors
 > **Last updated**: 2026-02-25
-> **Version**: 1.6.0 (Manual shelf assignment — hybrid shelves with pinned games)
+> **Version**: 1.7.0 (Game News Feed — aggregated news from favorited/recently played games)
 
 ---
 
@@ -17,7 +17,7 @@
 | Framework | Tauri v2 (Rust) + React 18 + TypeScript + Vite |
 | State | Zustand (18 slices) |
 | Routing | React Router v6 data router (`createBrowserRouter`) |
-| Database | SQLite via rusqlite (bundled), WAL mode, schema v20 |
+| Database | SQLite via rusqlite (bundled), WAL mode, schema v22 |
 | Platform | Windows 11 (registry, credential manager, WASAPI, SMTC, NVML, PDH) |
 | Launch | `npm run tauri dev` |
 
@@ -74,6 +74,8 @@ TheRoost/
 │   │   ├── settings/             # SettingsView, ThemeBuilder, TagManager,
 │   │   │                         #   CardDisplaySettings, DeveloperSettings, BookmarkManager
 │   │   ├── notes/                # NotesView (all-game notes compendium)
+│   │   ├── news/                 # NewsView (aggregated feed), NewsArticleCard,
+│   │   │                         #   NewsArticleDetail, NewsGameFilter
 │   │   ├── overlay/              # FloatingPanel, OverlayBackdrop, OverlayWindowManager,
 │   │   │                         #   OverlayCommandCenter, OverlayGameNotes,
 │   │   │                         #   OverlaySystemMonitor, OverlayMediaControls,
@@ -98,7 +100,7 @@ TheRoost/
 │   ├── types/                    # 21 type files (see §4.5)
 │   ├── utils/                    # icons, logger, errors, formatters, sorting, filtering,
 │   │                             #   shelfFiltering, commandPalette, streaks,
-│   │                             #   profileStats, activityStats
+│   │                             #   profileStats, activityStats, steamBBCode
 │   └── test/
 │       ├── setup.ts              # Vitest + jsdom + Tauri API mocks
 │       └── factories.ts          # Shared test factories (makeGame, makeMeta, makeShelf, etc.)
@@ -111,9 +113,9 @@ TheRoost/
 │   │
 │   └── src/
 │       ├── main.rs               # Entry → lib::run()
-│       ├── lib.rs                # Tauri setup, tracing init, 113 commands, background services
+│       ├── lib.rs                # Tauri setup, tracing init, 116 commands, background services
 │       │
-│       ├── commands/             # 28 command modules, 113 total commands (see §3.1)
+│       ├── commands/             # 28 command modules, 116 total commands (see §3.1)
 │       │   ├── steam_scanner.rs, steam_api.rs, settings.rs, game_launcher.rs
 │       │   ├── metadata.rs, sessions.rs, tags.rs, favorites.rs
 │       │   ├── hidden_games.rs, saved_filters.rs, developer.rs
@@ -132,7 +134,7 @@ TheRoost/
 │       │   └── mod.rs
 │       │
 │       ├── services/             # 40 service modules (see §3.5)
-│       │   ├── cache_db.rs       # SQLite: schema v20, 20 tables, WAL mode
+│       │   ├── cache_db.rs       # SQLite: schema v22, 22 tables, WAL mode
 │       │   ├── steam_client.rs   # Shared HTTP client (OnceLock, 15s timeout, sanitized errors)
 │       │   ├── store_client.rs, steamspy_client.rs, steamgriddb.rs
 │       │   ├── metadata_service.rs, achievement_service.rs
@@ -160,7 +162,7 @@ TheRoost/
 
 ### 3.1 Command Registry (lib.rs)
 
-113 Tauri commands across 28 modules:
+118 Tauri commands across 27 modules:
 
 | Module | Commands |
 |--------|----------|
@@ -180,7 +182,7 @@ TheRoost/
 | `custom_games` | `add_custom_game`, `remove_custom_game`, `update_custom_game` |
 | `achievements` | `fetch_game_achievements`, `get_all_achievement_stats`, `batch_fetch_achievements`, `clear_achievement_cache` |
 | `friends` | `fetch_friends_list`, `fetch_friend_library` |
-| `news` | `fetch_game_news`, `fetch_followed_games` |
+| `news` | `fetch_game_news`, `fetch_followed_games`, `fetch_news_feed`, `mark_news_read`, `get_unread_news_count`, `clear_news_cache` |
 | `overlay` | `toggle_overlay`, `hide_overlay`, `show_main_and_navigate`, `overlay_select_game`, `update_overlay_shortcut`, `get_overlay_library`, `overlay_apply_tag_filter`, `notify_settings_changed`, `overlay_execute_palette_action` |
 | `notes` | `get_game_note`, `save_game_note`, `delete_game_note`, `get_all_notes_with_content` |
 | `ratings` | `get_game_rating`, `save_game_rating`, `delete_game_rating`, `get_all_ratings` |
@@ -257,9 +259,9 @@ All scanners register games into the unified UUID-based `games` table with their
 
 ### 3.7 SQLite Schema (cache_db.rs)
 
-**Current schema version: v20** — Location: `%APPDATA%/app.theroost/theroost.db`
+**Current schema version: v22** — Location: `%APPDATA%/app.theroost/theroost.db`
 
-20 tables:
+22 tables:
 
 | Table | Purpose | PK |
 |-------|---------|-----|
@@ -282,10 +284,11 @@ All scanners register games into the unified UUID-based `games` table with their
 | `audio_device_aliases` | Custom audio device names | `device_id TEXT` |
 | `audio_session_prefs` | Per-exe audio visibility prefs | `exe_name TEXT` |
 | `game_ratings` | Personal ratings + reviews | `game_id TEXT` |
+| `news_read` | Read-tracking for news feed articles | `(game_id, news_id)` |
 
 Database features: WAL mode, foreign keys enforced, 7 indexes for query performance.
 
-Migration system checks `user_version` pragma and applies incremental migrations v1→v20.
+Migration system checks `user_version` pragma and applies incremental migrations v1→v22.
 
 ### 3.8 Process Monitor & Session Tracking
 
@@ -440,6 +443,7 @@ main.tsx → ErrorBoundary → App
     /activity  → ActivityView
     /profile   → ProfileView
     /notes     → NotesView
+    /news      → NewsView
     /settings  → SettingsView
     /debug     → DebugPanel
     *          → redirect to /library (catch-all)
@@ -469,7 +473,7 @@ main.tsx → ErrorBoundary → App
 | `shelvesSlice` | `shelves[]`, `editingShelfId` | Shelf CRUD + reorder + pin/unpin games |
 | `metadataSlice` | `cache: Map` | Store metadata cache |
 | `achievementsSlice` | `cache: Map<gameId, Summary>`, `profileStats` | Achievement cache + batch fetch |
-| `newsSlice` | `cache: Map<gameId, NewsItem[]>`, `followedGameIds` | News cache |
+| `newsSlice` | `cache: Map<gameId, NewsItem[]>`, `followedGameIds`, `feedItems`, `unreadCount` | News cache + aggregated feed + read tracking |
 | `friendsSlice` | `friends[]`, `friendLibraries: Map` | Friends + library comparison |
 | `notesSlice` | `notes[]` | Game notes CRUD |
 | `ratingsSlice` | `ratings: Map<gameId, GameRating>` | Personal ratings + reviews |
@@ -560,7 +564,7 @@ Key type definitions in `src/types/`:
 | `session.ts` | `GameSession`, `PlaytimeSnapshot` |
 | `achievement.ts` | `GameAchievement`, `GameAchievementSummary` |
 | `friend.ts` | `FriendInfo`, `FriendGame`, `FriendLibrary` |
-| `news.ts` | `GameNewsItem` |
+| `news.ts` | `GameNewsItem`, `FeedNewsItem` |
 | `note.ts` | `GameNote`, `GameNoteWithName`, `GENERAL_NOTES_ID` |
 | `rating.ts` | `GameRating` |
 | `systemMetrics.ts` | `SystemSample`, `ProcessMetrics`, `SystemMetricsSnapshot` |
@@ -593,7 +597,7 @@ Key type definitions in `src/types/`:
 | `coverArtApi` | 12 | SteamGridDB integration, art picker, custom upload, crop, art management |
 | `achievementsApi` | 4 | Achievement fetch, batch, stats |
 | `friendsApi` | 2 | Friends list + library comparison |
-| `newsApi` | 2 | Game news + followed games |
+| `newsApi` | 6 | Game news + followed games + aggregated feed + read tracking + cache clear |
 | `overlayApi` | 5 | Toggle, hide, navigate, shortcut, execute palette action |
 | `notesApi` | 4 | Note CRUD |
 | `ratingsApi` | 4 | Rating + review CRUD |
@@ -633,7 +637,7 @@ CSP allows images from:
 | `theme` | `theme:*`, `font:*`, `icons:*`, `scale:*` (24 total) |
 | `sort` | `sort:*` (8 actions) |
 | `filter` | `filter:*`, `action:hidden-games`, `action:reset-filters` + dynamic metadata |
-| `go to` / `navigate` | `nav:*` (6 nav actions) |
+| `go to` / `navigate` | `nav:*` (7 nav actions incl. `nav:news`) |
 
 **Hints dropdown** (`PALETTE_HINTS`): 6 entries (Navigate, Filter, Sort, Theme, Favorite, Notes) with `autofill` text for click-to-fill.
 
@@ -880,10 +884,10 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | react-icons | 6 icon set libraries |
 | GitHub Actions | CI (lint + test) + Release (build + sign + publish) |
 
-**Test Coverage (609 total)**:
+**Test Coverage (624 total)**:
 
-**Rust (227 tests)**:
-- CacheDb: 101 tests (schema, CRUD for all 20 tables, transactions, migrations v1→v20, custom art)
+**Rust (234 tests)**:
+- CacheDb: 101 tests (schema, CRUD for all 22 tables, transactions, migrations v1→v22, custom art)
 - AI pattern matcher: 38 tests (10 extractors, fuzzy matching, confidence scoring)
 - VDF parser: 15 tests (parsing, escapes, real-world formats)
 - Steam API URL parsing: 13 tests (Steam profile/vanity URL extraction)
@@ -896,9 +900,10 @@ cloud_ai_exclude_games, cloud_ai_include_games
 - AI cloud cache: 4 tests
 - Media: 2 tests + 2 model tests + 2 bookmark tests
 - Image processing: 7 tests (validation, crop/save, delete)
+- News service: 7 tests (feed aggregation, read tracking, unread count)
 - AI Gemini provider: 1 test
 
-**Frontend (382 tests)**:
+**Frontend (390 tests)**:
 - Command palette: 72 tests (action registry, search, result capping, category prefix matching, hints, AI heuristic)
 - Activity stats: 56 tests (daily playtime, most played, session distribution, day-of-week)
 - Profile stats: 46 tests (genre DNA, playtime distribution, Metacritic scatter, leaderboard)
@@ -920,6 +925,7 @@ cloud_ai_exclude_games, cloud_ai_include_games
 - Ratings slice: 4 tests (load, save, delete, getRating for unrated)
 - StarRating component: 8 tests (render, read-only, interactive, zero value)
 - Asset URL utility: 4 tests (remote URL passthrough, local: prefix conversion)
+- News slice: 8 tests (feed fetch, read tracking, unread count, mark all read)
 - Notes slice: 2 tests
 
 **Shared test factories** (`src/test/factories.ts`): `makeGame()`, `makeMeta()`, `makeFilters()`, `makeSession()`, `makeShelf()`, `ts()`. Override object pattern for all factories. `makeGame` includes `description: null` by default. `makeShelf` includes `pinnedGameIds: []` by default.
@@ -975,5 +981,6 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | v1.4.1 | Done | Last-played tracking fix for non-Steam games |
 | v1.5.0 | Done | Custom game art upload (local upload + crop, Art Management Menu, unified resolution for all games) |
 | v1.6.0 | Done | Manual shelf assignment (hybrid shelves: filter rules + manual pins, context menu & GameDetail chips, ShelfEditor pin management) |
+| v1.7.0 | Done | Game News Feed (aggregated news from favorites + recently played, read tracking, unread badge, `/news` route, `nav:news` command palette action, hero art cards, game filter, expanded article view, BBCode/HTML content parser, source filter, force refresh) |
 
 See `docs/ROADMAP.md` for the full roadmap.

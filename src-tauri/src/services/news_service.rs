@@ -1,17 +1,21 @@
+use std::collections::HashSet;
+
 use crate::models::news::*;
 use crate::services::cache_db::CacheDbHandle;
 use crate::services::steam_client::steam_get_json;
 use crate::utils::error::{AppError, MutexExt};
 
 /// Fetch news for a game. Results are cached in SQLite with a 1-hour TTL.
+/// When `force` is true, the cache TTL is bypassed and fresh data is fetched.
 pub async fn fetch_game_news(
     game_id: &str,
     appid: u32,
     count: u32,
     db: &CacheDbHandle,
+    force: bool,
 ) -> Result<Vec<GameNewsItem>, AppError> {
-    // Check cache first
-    {
+    // Check cache first (skip when force-refreshing)
+    if !force {
         let db = db.lock_or_err("DB")?;
         if db.is_news_fresh(game_id)? {
             let items = db.get_game_news(game_id)?;
@@ -32,7 +36,6 @@ pub async fn fetch_game_news(
         &[
             ("appid", &appid_str),
             ("count", &count_str),
-            ("maxlength", "500"),
             ("format", "json"),
         ],
     )
@@ -51,6 +54,7 @@ pub async fn fetch_game_news(
             contents: item.contents,
             date: item.date,
             feed_label: item.feedlabel,
+            is_external: item.feed_type == 0,
         })
         .collect();
 
@@ -64,6 +68,107 @@ pub async fn fetch_game_news(
 
     tracing::info!(game_id, count = items.len(), "Game news fetched and cached");
     Ok(items)
+}
+
+/// Build an aggregated news feed from favorites + recently played games.
+/// Reuses `fetch_game_news` per-game (respects 1-hour cache TTL unless `force` is true).
+pub async fn fetch_news_feed(db: &CacheDbHandle, force: bool) -> Result<Vec<FeedNewsItem>, AppError> {
+    // Step 1: Gather candidate game IDs (favorites + recent 15 days)
+    let games: Vec<(String, u32, String)> = {
+        let db_guard = db.lock_or_err("DB")?;
+        let fav_ids = db_guard.get_all_favorites().unwrap_or_default();
+        let recent_ids = db_guard
+            .get_recently_played_game_ids(15)
+            .unwrap_or_default();
+
+        let mut seen = HashSet::new();
+        let mut result = Vec::new();
+
+        for game_id in fav_ids.into_iter().chain(recent_ids.into_iter()) {
+            if !seen.insert(game_id.clone()) {
+                continue;
+            }
+            // Only Steam games have news via this API
+            if let Ok(Some((source, source_id))) = db_guard.get_game_source(&game_id) {
+                if source == "steam" {
+                    if let Ok(appid) = source_id.parse::<u32>() {
+                        let name = db_guard
+                            .get_game_name(&game_id)
+                            .ok()
+                            .flatten()
+                            .unwrap_or_default();
+                        result.push((game_id, appid, name));
+                    }
+                }
+            }
+        }
+        result
+    };
+
+    if games.is_empty() {
+        tracing::debug!("No Steam games in scope for news feed");
+        return Ok(Vec::new());
+    }
+
+    tracing::info!(game_count = games.len(), "Building news feed");
+
+    // Step 2: Fetch news per game (5 articles each, uses cache)
+    let mut all_items: Vec<(GameNewsItem, String, String)> = Vec::new();
+    for (game_id, appid, game_name) in &games {
+        let source_id = appid.to_string();
+        match fetch_game_news(game_id, *appid, 5, db, force).await {
+            Ok(items) => {
+                for item in items {
+                    all_items.push((item, game_name.clone(), source_id.clone()));
+                }
+            }
+            Err(e) => {
+                tracing::warn!(game_id, error = %e, "Failed to fetch news for game, skipping");
+            }
+        }
+    }
+
+    if all_items.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Step 3: Batch-query read status
+    let news_ids: Vec<String> = all_items
+        .iter()
+        .map(|(item, _, _)| item.news_id.clone())
+        .collect();
+    let read_ids = {
+        let db_guard = db.lock_or_err("DB")?;
+        db_guard.get_read_news_ids(&news_ids).unwrap_or_default()
+    };
+
+    // Step 4: Assemble FeedNewsItems
+    let mut feed: Vec<FeedNewsItem> = all_items
+        .into_iter()
+        .map(|(item, game_name, source_id)| {
+            let is_read = read_ids.contains(&item.news_id);
+            FeedNewsItem {
+                news_id: item.news_id,
+                game_id: item.game_id,
+                game_name,
+                source_id,
+                title: item.title,
+                url: item.url,
+                author: item.author,
+                contents: item.contents,
+                date: item.date,
+                feed_label: item.feed_label,
+                is_external: item.is_external,
+                is_read,
+            }
+        })
+        .collect();
+
+    // Step 5: Sort by date descending (newest first)
+    feed.sort_by(|a, b| b.date.cmp(&a.date));
+
+    tracing::info!(count = feed.len(), "News feed assembled");
+    Ok(feed)
 }
 
 /// Fetch the list of game appids the user follows on Steam.

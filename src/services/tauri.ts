@@ -19,6 +19,7 @@ import type {
   FriendInfo,
   FriendLibrary,
   GameNewsItem,
+  FeedNewsItem,
   GameNote,
   GameNoteWithName,
   GameRating,
@@ -264,6 +265,12 @@ export const newsApi = {
     invoke<GameNewsItem[]>("fetch_game_news", { gameId, count: count ?? 10 }),
   fetchFollowedGames: (apiKey: string, steamId: string) =>
     invoke<number[]>("fetch_followed_games", { apiKey, steamId }),
+  fetchNewsFeed: (force?: boolean) =>
+    invoke<FeedNewsItem[]>("fetch_news_feed", { force: force ?? false }),
+  markNewsRead: (newsId: string, gameId: string) =>
+    invoke<void>("mark_news_read", { newsId, gameId }),
+  getUnreadNewsCount: () => invoke<number>("get_unread_news_count"),
+  clearNewsCache: () => invoke<number>("clear_news_cache"),
 };
 
 export const savedFiltersApi = {

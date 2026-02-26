@@ -121,6 +121,14 @@ const STATIC_DESCRIPTORS: ActionDescriptor[] = [
     category: "navigation",
   },
   {
+    id: "nav:news",
+    label: "Go to News Feed",
+    description: "Navigate to the game news feed",
+    keywords: ["news", "feed", "articles", "updates"],
+    icon: "news",
+    category: "navigation",
+  },
+  {
     id: "nav:settings",
     label: "Go to Settings",
     description: "Navigate to the settings page",
@@ -539,6 +547,10 @@ const EXECUTORS: Record<string, ActionExecutor> = {
   },
   "nav:notes": (ctx) => {
     ctx.navigate("/notes");
+    ctx.closeCommandCenter();
+  },
+  "nav:news": (ctx) => {
+    ctx.navigate("/news");
     ctx.closeCommandCenter();
   },
   "nav:settings": (ctx) => {

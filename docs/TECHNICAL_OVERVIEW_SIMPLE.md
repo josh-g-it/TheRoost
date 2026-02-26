@@ -1,7 +1,7 @@
 # The Roost — Technical Overview (Simple)
 
 > **Audience**: Non-technical readers, project stakeholders, curious users
-> **Last updated**: 2026-02-25 (v1.6.0 — manual shelf assignment)
+> **Last updated**: 2026-02-25 (v1.7.0 — Game News Feed)
 
 ---
 
@@ -28,7 +28,7 @@ When you open The Roost, the frontend asks the backend for your games, settings,
 ## What Can It Do?
 
 ### Navigation & Command Center
-- **Icon Rail**: A slim navigation bar on the left. Shows just icons when collapsed (48px) — hover to expand with labels (180px). Links to Library, Activity, Profile, Notes, Settings, and Debug.
+- **Icon Rail**: A slim navigation bar on the left. Shows just icons when collapsed (48px) — hover to expand with labels (180px). Links to Library, Activity, Profile, Notes, News, Settings, and Debug. The News icon shows an unread badge when new articles are available.
 - **Command Center** (Ctrl+K): A full-screen overlay with a search bar that doubles as a command palette — type to search for actions or games. Category prefixes like "theme", "sort", "filter", or "go to" instantly narrow results to that category. A `?` button shows a hints dropdown with available command categories you can click to autofill. Below the search: 6 customizable action slots + quick stats. Fully customizable layout.
 
 ### Game Library
@@ -67,6 +67,19 @@ A fully customizable page with drag-and-drop cards:
 - A dedicated page showing all your game notes in one place
 - General note (not tied to any game) pinned at top
 - Create notes for any game, even ones you haven't written about yet
+
+### Game News Feed
+- A dedicated page showing aggregated news articles from Steam games you've favorited or recently played (within the last 15 days)
+- Each article card shows a **game hero art banner**, game name, headline, author, date, and a text snippet
+- Click an article to expand it in a **detail modal** showing the full formatted article text — with an "Open in Browser" button for the original source
+- Article content is automatically parsed from Steam's BBCode (official developer posts) or HTML (third-party news sites) into clean, styled text with proper headings, lists, links, images, and spoiler tags
+- **Game filter dropdown**: Focus on specific games' news via a multi-select popover
+- **Source filter**: Toggle between "All", "Official Only" (developer posts), and "Third Party Only" (gaming news sites)
+- Articles have read/unread status with visual distinction — marking as read happens automatically when you open an article
+- "Mark All Read" button to clear the unread badge; **Refresh** button to force-fetch latest news
+- Unread count badge appears on the News icon in the navigation rail
+- Non-Steam games are silently skipped (news comes from Steam's API)
+- Accessible via the icon rail or the `nav:news` command palette action
 
 ### System Overlay (Ctrl+Space)
 A transparent, always-on-top HUD you can pull up while gaming:
@@ -162,6 +175,7 @@ TheRoost/
 │   │   ├── sessions/       ← Reusable heatmap & timeline
 │   │   ├── overlay/        ← System overlay panels (5 HUD panels)
 │   │   ├── notes/          ← Notes compendium page
+│   │   ├── news/           ← Game news feed (article cards, detail modal, game filter)
 │   │   ├── settings/       ← Settings (theme builder, tags, bookmarks)
 │   │   ├── common/         ← Shared UI pieces (buttons, icons, tags)
 │   │   ├── setup/          ← First-time setup wizard
@@ -172,7 +186,7 @@ TheRoost/
 │
 └── src-tauri/              ← The engine (behind the scenes)
     └── src/
-        ├── commands/       ← 108 things the frontend can ask the backend to do
+        ├── commands/       ← 118 things the frontend can ask the backend to do
         ├── models/         ← Data shapes (50+ structs)
         ├── services/       ← Core logic (39 modules: APIs, database, monitoring,
         │                      audio, media, overlay, AI, launcher scanners)
@@ -189,7 +203,7 @@ TheRoost/
 | **Rust** for the backend | Fast, safe, great for system access (processes, audio, GPU) |
 | **React** for the UI | Popular, well-supported, great component model |
 | **Zustand** for state | Simple, lightweight, no boilerplate |
-| **SQLite** for local data | Fast, reliable local database (20 tables) — no server needed |
+| **SQLite** for local data | Fast, reliable local database (22 tables) — no server needed |
 | **Windows Credential Manager** | Industry-standard secure storage for API keys |
 | **Recharts** for charts | React-native charting for activity & profile dashboards |
 | **@dnd-kit** for drag-and-drop | Accessible, performant drag-and-drop for activity cards |
@@ -204,7 +218,7 @@ TheRoost/
 ## What's Coming Next
 
 - **Achievements Tracker**: Dedicated page with completion progress across your whole library.
-- **Game News Feed**: Aggregated news from across your library.
+- **Gaming Recap & Insights**: Personalized summaries and trends from your play history.
 
 ---
 
