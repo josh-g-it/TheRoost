@@ -18,6 +18,7 @@ pub struct GameStorageEntry {
     pub game_id: String,
     pub name: String,
     pub source: String,
+    pub source_id: String,
     pub install_path: String,
     pub size_bytes: u64,
     pub drive_letter: String,

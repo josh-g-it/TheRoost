@@ -23,6 +23,7 @@ pub mod saved_filters;
 pub mod sessions;
 pub mod settings;
 pub mod steam_api;
+pub mod steam_install;
 pub mod steam_scanner;
 pub mod storage;
 pub mod system_monitor;

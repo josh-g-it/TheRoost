@@ -104,6 +104,30 @@
   color: var(--color-accent-error);
 }
 
+/* Update pending badge */
+.library-controls__update-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--color-accent-warning, #e5a800);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-accent-warning, #e5a800);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.library-controls__update-badge:hover,
+.library-controls__update-badge--active {
+  background: var(--color-accent-warning, #e5a800);
+  color: var(--color-bg);
+}
+
 /* Genre filter popover */
 .library-controls__genre-filter {
   position: relative;

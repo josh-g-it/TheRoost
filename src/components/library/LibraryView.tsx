@@ -22,6 +22,7 @@ import { useShelvesStore, getShelvesForPersistence } from "../../store/shelvesSl
 import { useAchievementsStore } from "../../store/achievementsSlice";
 import { useBackgroundTasksStore } from "../../store/backgroundTasksSlice";
 import { useRatingsStore } from "../../store/ratingsSlice";
+import { useInstallStore } from "../../store/installSlice";
 import { processShelfGames } from "../../utils/shelfFiltering";
 import { filterGames } from "../../utils/filtering";
 import { sortGames } from "../../utils/sorting";
@@ -104,6 +105,9 @@ export function LibraryView() {
   const saveSettings = useSettingsStore((s) => s.saveSettings);
   const ratings = useRatingsStore((s) => s.ratings);
   const loadAllRatings = useRatingsStore((s) => s.loadAllRatings);
+  const updateInstallProgress = useInstallStore((s) => s.updateProgress);
+  const completeInstall = useInstallStore((s) => s.completeInstall);
+  const activeInstalls = useInstallStore((s) => s.activeInstalls);
 
   // Load tags, favorites, hidden games, saved filters, ratings on mount
   useEffect(() => {
@@ -122,7 +126,37 @@ export function LibraryView() {
     loadAllRatings,
   ]);
 
+  // Listen for install progress and completion events from the backend
+  useEffect(() => {
+    const listeners: (() => void)[] = [];
+
+    listen<import("../../types/install").InstallProgress[]>("install-progress", (event) =>
+      updateInstallProgress(event.payload),
+    ).then((unlisten) => listeners.push(unlisten));
+
+    listen<import("../../types/install").InstallProgress>("install-complete", (event) => {
+      completeInstall(event.payload.sourceId);
+      refresh();
+      logger.info("LibraryView", "install", `Install complete: ${event.payload.name}`);
+    }).then((unlisten) => listeners.push(unlisten));
+
+    return () => {
+      for (const unlisten of listeners) unlisten();
+    };
+  }, [updateInstallProgress, completeInstall, refresh]);
+
   const allGames = useMemo(() => library?.games ?? [], [library?.games]);
+
+  // Derive set of game IDs with pending updates from install monitor
+  const updatePendingIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const progress of activeInstalls.values()) {
+      if (progress.status === "update_required" && progress.gameId) {
+        ids.add(progress.gameId);
+      }
+    }
+    return ids;
+  }, [activeInstalls]);
 
   // Per-shelf processed games
   const shelfGamesMap = useMemo(() => {
@@ -156,6 +190,7 @@ export function LibraryView() {
       hiddenGames,
       cache,
       ratings,
+      updatePendingIds,
     );
     return sortGames(filtered, sortBy, sortOrder, cache, ratings);
   }, [
@@ -167,6 +202,7 @@ export function LibraryView() {
     hiddenGames,
     cache,
     ratings,
+    updatePendingIds,
     sortBy,
     sortOrder,
   ]);
@@ -331,6 +367,7 @@ export function LibraryView() {
         isLoading={isLoading}
         hiddenCount={hiddenGames.size}
         shelvesEnabled={viewMode === "grid" && shelves.length > 0}
+        updatePendingCount={updatePendingIds.size}
       />
 
       {library?.warnings && library.warnings.length > 0 && (

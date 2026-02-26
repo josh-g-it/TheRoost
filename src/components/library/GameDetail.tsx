@@ -27,6 +27,9 @@ import { useHiddenGamesStore } from "../../store/hiddenGamesSlice";
 import { useUIStore } from "../../store/uiSlice";
 import { useRatingsStore } from "../../store/ratingsSlice";
 import { useShelvesStore } from "../../store/shelvesSlice";
+import { useInstallStore } from "../../store/installSlice";
+import { InstallProgressOverlay } from "./InstallProgressOverlay";
+import { steamInstallApi } from "../../services/tauri";
 import { StarRating } from "../common/StarRating";
 import type { Game } from "../../types";
 import type { ScreenshotInfo } from "../../types/metadata";
@@ -181,6 +184,7 @@ export function GameDetail({ game, onClose, onPersistShelves }: GameDetailProps)
   const shelves = useShelvesStore((s) => s.shelves);
   const pinGameToShelf = useShelvesStore((s) => s.pinGameToShelf);
   const unpinGameFromShelf = useShelvesStore((s) => s.unpinGameFromShelf);
+  const installProgress = useInstallStore((s) => s.activeInstalls.get(game.sourceId));
 
   const gameTagIds = getGameTagIds(game.gameId);
   const gameTags = allTags.filter((t) => gameTagIds.includes(t.id));
@@ -315,17 +319,55 @@ export function GameDetail({ game, onClose, onPersistShelves }: GameDetailProps)
           {/* Left Sidebar */}
           <div className="game-detail__sidebar">
             <div className="game-detail__sidebar-actions">
-              <Button
-                size="lg"
-                onClick={() => launch(game.gameId)}
-                loading={launching === game.gameId}
-              >
-                {game.isInstalled
-                  ? "Play"
-                  : game.source === "steam"
-                    ? "Install / View in Steam"
-                    : "Launch"}
-              </Button>
+              {game.isInstalled ? (
+                <Button
+                  size="lg"
+                  onClick={() => launch(game.gameId)}
+                  loading={launching === game.gameId}
+                >
+                  Play
+                </Button>
+              ) : game.source === "steam" ? (
+                <Button
+                  size="lg"
+                  onClick={() => steamInstallApi.installGame(game.sourceId)}
+                >
+                  Install
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  onClick={() => launch(game.gameId)}
+                  loading={launching === game.gameId}
+                >
+                  Launch
+                </Button>
+              )}
+              {game.source === "steam" &&
+                game.isInstalled &&
+                installProgress?.status === "update_required" && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => steamInstallApi.updateGame(game.sourceId)}
+                  >
+                    Update
+                  </Button>
+                )}
+              {game.source === "steam" && game.isInstalled && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    steamInstallApi.uninstallGame(game.sourceId);
+                    setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 5000);
+                    setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 30000);
+                  }}
+                >
+                  Uninstall
+                </Button>
+              )}
+              {installProgress && <InstallProgressOverlay progress={installProgress} />}
               {hasLaunchToggle && (
                 <div className="game-detail__launch-mode">
                   <label

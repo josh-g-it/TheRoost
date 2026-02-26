@@ -54,6 +54,7 @@ vi.mock("../store/librarySlice", () => ({
     getState: () => ({
       library: { games: [] },
       refreshLibrary: vi.fn(),
+      scanLocalOnly: vi.fn(),
     }),
   },
 }));
@@ -88,6 +89,11 @@ vi.mock("../store/favoritesSlice", () => ({
 vi.mock("../services/tauri", () => ({
   externalApi: {
     scanExternalGames: vi.fn(),
+  },
+  steamInstallApi: {
+    installGame: vi.fn(),
+    uninstallGame: vi.fn(),
+    updateGame: vi.fn(),
   },
 }));
 
@@ -836,5 +842,127 @@ describe("extractGameMentions", () => {
     const mentions = extractGameMentions(summary, gamesWithShort);
     expect(mentions).toHaveLength(1);
     expect(mentions[0].name).toBe("Skyrim");
+  });
+});
+
+// ── Install/Uninstall game actions ───────────────────────────────
+
+describe("install/uninstall game actions", () => {
+  let actions: PaletteAction[];
+  const steamInstalled = makeGame({
+    gameId: "g1",
+    name: "Portal 2",
+    source: "steam",
+    sourceId: "620",
+    isInstalled: true,
+  });
+  const steamUninstalled = makeGame({
+    gameId: "g2",
+    name: "Half-Life 3",
+    source: "steam",
+    sourceId: "99999",
+    isInstalled: false,
+  });
+  const manualGame = makeGame({
+    gameId: "g3",
+    name: "My Custom Game",
+    source: "manual",
+    sourceId: "g3",
+    isInstalled: true,
+  });
+  const testGames = [steamInstalled, steamUninstalled, manualGame];
+
+  beforeEach(() => {
+    actions = buildActionRegistry(defaultSettings);
+  });
+
+  it("game:install descriptor exists in manifest", () => {
+    const manifest = getActionManifest(defaultSettings);
+    const installAction = manifest.find((e) => e.id === "game:install");
+    expect(installAction).toBeDefined();
+    expect(installAction!.parameterized).toBe(true);
+    expect(installAction!.parameterHint).toBe("install {game name}");
+  });
+
+  it("game:uninstall descriptor exists in manifest", () => {
+    const manifest = getActionManifest(defaultSettings);
+    const uninstallAction = manifest.find((e) => e.id === "game:uninstall");
+    expect(uninstallAction).toBeDefined();
+    expect(uninstallAction!.parameterized).toBe(true);
+    expect(uninstallAction!.parameterHint).toBe("uninstall {game name}");
+  });
+
+  it("'install half' shows only uninstalled Steam games", () => {
+    const result = searchPalette("install half", actions, testGames, emptyCache);
+    expect(result.actions).toHaveLength(1);
+    expect(result.actions[0].label).toContain("Half-Life 3");
+    expect(result.games).toHaveLength(0);
+  });
+
+  it("'install portal' returns nothing (Portal 2 is already installed)", () => {
+    const result = searchPalette("install portal", actions, testGames, emptyCache);
+    expect(result.actions).toHaveLength(0);
+  });
+
+  it("'uninstall portal' shows only installed Steam games", () => {
+    const result = searchPalette("uninstall portal", actions, testGames, emptyCache);
+    expect(result.actions).toHaveLength(1);
+    expect(result.actions[0].label).toContain("Portal 2");
+    expect(result.games).toHaveLength(0);
+  });
+
+  it("'uninstall half' returns nothing (Half-Life 3 is not installed)", () => {
+    const result = searchPalette("uninstall half", actions, testGames, emptyCache);
+    expect(result.actions).toHaveLength(0);
+  });
+
+  it("install/uninstall excludes non-Steam games", () => {
+    const result = searchPalette("install custom", actions, testGames, emptyCache);
+    expect(result.actions).toHaveLength(0);
+
+    const result2 = searchPalette("uninstall custom", actions, testGames, emptyCache);
+    expect(result2.actions).toHaveLength(0);
+  });
+
+  it("PALETTE_HINTS includes Install and Uninstall", () => {
+    const labels = PALETTE_HINTS.map((h) => h.label);
+    expect(labels).toContain("Install");
+    expect(labels).toContain("Uninstall");
+  });
+
+  it("game:update descriptor exists in manifest", () => {
+    const manifest = getActionManifest(defaultSettings);
+    const updateAction = manifest.find((e) => e.id === "game:update");
+    expect(updateAction).toBeDefined();
+    expect(updateAction!.parameterized).toBe(true);
+    expect(updateAction!.parameterHint).toBe("update {game name}");
+  });
+
+  it("'update portal' shows installed Steam games", () => {
+    const result = searchPalette("update portal", actions, testGames, emptyCache);
+    expect(result.actions).toHaveLength(1);
+    expect(result.actions[0].label).toContain("Portal 2");
+    expect(result.games).toHaveLength(0);
+  });
+
+  it("'update half' returns nothing (Half-Life 3 is not installed)", () => {
+    const result = searchPalette("update half", actions, testGames, emptyCache);
+    expect(result.actions).toHaveLength(0);
+  });
+
+  it("update excludes non-Steam games", () => {
+    const result = searchPalette("update custom", actions, testGames, emptyCache);
+    expect(result.actions).toHaveLength(0);
+  });
+
+  it("filter:update-pending appears in action registry", () => {
+    const action = actions.find((a) => a.id === "filter:update-pending");
+    expect(action).toBeDefined();
+    expect(action!.label).toBe("Show Games Pending Update");
+  });
+
+  it("PALETTE_HINTS includes Update", () => {
+    const labels = PALETTE_HINTS.map((h) => h.label);
+    expect(labels).toContain("Update");
   });
 });

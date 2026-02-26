@@ -3,6 +3,7 @@ pub mod ai;
 pub mod audio;
 pub mod friend;
 pub mod game;
+pub mod install;
 pub mod log_event;
 pub mod media_bookmark;
 pub mod media_session;

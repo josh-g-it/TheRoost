@@ -39,6 +39,7 @@ interface UIState {
   setFilterBySource: (sources: GameSource[]) => void;
   setFilterByRated: (filterByRated: "all" | "rated" | "unrated") => void;
   setFilterByMinRating: (filterByMinRating: number) => void;
+  setShowUpdatePendingOnly: (show: boolean) => void;
   selectGame: (id: string | null) => void;
   setCardDisplay: (options: CardDisplayOptions) => void;
   setGridSize: (size: GridSize) => void;
@@ -79,6 +80,7 @@ export const useUIStore = create<UIState>((set) => ({
     filterBySource: [],
     filterByRated: "all",
     filterByMinRating: 0,
+    showUpdatePendingOnly: false,
   },
   selectedGameId: null,
   cardDisplay: { ...DEFAULT_CARD_DISPLAY },
@@ -150,6 +152,11 @@ export const useUIStore = create<UIState>((set) => ({
   setFilterByMinRating: (filterByMinRating) =>
     set((state) => ({
       filters: { ...state.filters, filterByMinRating },
+    })),
+
+  setShowUpdatePendingOnly: (showUpdatePendingOnly) =>
+    set((state) => ({
+      filters: { ...state.filters, showUpdatePendingOnly },
     })),
 
   selectGame: (selectedGameId) => set({ selectedGameId }),

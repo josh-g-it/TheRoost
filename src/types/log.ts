@@ -23,7 +23,8 @@ export type LogCategory =
   | "news"
   | "notes"
   | "routing"
-  | "backup";
+  | "backup"
+  | "install";
 
 export interface LogEvent {
   id: string;

@@ -78,6 +78,7 @@ export interface LibraryFilters {
   filterBySource: GameSource[];
   filterByRated: "all" | "rated" | "unrated";
   filterByMinRating: number;
+  showUpdatePendingOnly: boolean;
 }
 
 // ── Saved Filters ───────────────────────────────────────────────

@@ -10,7 +10,9 @@ import { useUIStore } from "../../store/uiSlice";
 import { useTagsStore } from "../../store/tagsSlice";
 import { useMetadataStore } from "../../store/metadataSlice";
 import { useSavedFiltersStore } from "../../store/savedFiltersSlice";
+import { useInstallStore } from "../../store/installSlice";
 import { extractAllGenres } from "../../utils/filtering";
+import { steamInstallApi } from "../../services/tauri";
 import type { SortBy, LibraryFilters, SortOrder } from "../../types";
 import "./LibraryControls.css";
 
@@ -20,6 +22,7 @@ interface LibraryControlsProps {
   isLoading: boolean;
   hiddenCount: number;
   shelvesEnabled?: boolean;
+  updatePendingCount: number;
 }
 
 const SORT_OPTIONS: { value: SortBy; label: string }[] = [
@@ -39,6 +42,7 @@ export function LibraryControls({
   isLoading,
   hiddenCount,
   shelvesEnabled = false,
+  updatePendingCount,
 }: LibraryControlsProps) {
   const {
     viewMode,
@@ -57,7 +61,10 @@ export function LibraryControls({
     setFilterByCategoryIds,
     setFilterBySource,
     setFilterByRated,
+    setShowUpdatePendingOnly,
   } = useUIStore();
+
+  const activeInstalls = useInstallStore((s) => s.activeInstalls);
 
   const tags = useTagsStore((s) => s.tags);
   const cache = useMetadataStore((s) => s.cache);
@@ -122,6 +129,7 @@ export function LibraryControls({
     setFilterByCategoryIds(f.filterByCategoryIds ?? []);
     setFilterBySource(f.filterBySource ?? []);
     setFilterByRated(f.filterByRated ?? "all");
+    setShowUpdatePendingOnly(f.showUpdatePendingOnly ?? false);
     if (filter.sortBy) {
       setSorting(filter.sortBy, filter.sortOrder);
     }
@@ -158,6 +166,7 @@ export function LibraryControls({
     filters.filterByCategoryIds.length > 0 ||
     (filters.filterBySource ?? []).length > 0 ||
     filters.filterByRated !== "all" ||
+    filters.showUpdatePendingOnly ||
     filters.searchQuery.length > 0;
 
   const handleSaveFilter = async () => {
@@ -236,6 +245,38 @@ export function LibraryControls({
               />
               <span>Hidden{hiddenCount > 0 ? ` (${hiddenCount})` : ""}</span>
             </label>
+
+            {updatePendingCount > 0 && (
+              <button
+                className={`library-controls__update-badge ${filters.showUpdatePendingOnly ? "library-controls__update-badge--active" : ""}`}
+                onClick={() => {
+                  const newValue = !filters.showUpdatePendingOnly;
+                  setShowUpdatePendingOnly(newValue);
+                  if (newValue) setViewMode("list");
+                }}
+                title={`${updatePendingCount} update${updatePendingCount !== 1 ? "s" : ""} pending`}
+              >
+                <AppIcon name="refresh" size={12} />
+                {updatePendingCount} update{updatePendingCount !== 1 ? "s" : ""} pending
+              </button>
+            )}
+
+            {filters.showUpdatePendingOnly && updatePendingCount > 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  for (const progress of activeInstalls.values()) {
+                    if (progress.status === "update_required") {
+                      steamInstallApi.updateGame(progress.sourceId);
+                    }
+                  }
+                }}
+                title="Trigger updates for all pending games via Steam"
+              >
+                Update All
+              </Button>
+            )}
 
             {tags.length > 0 && (
               <div className="library-controls__tag-filter">

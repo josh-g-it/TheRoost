@@ -9,6 +9,7 @@ pub mod friends_service;
 pub mod fun_comparisons;
 pub mod gpu_monitor;
 pub mod image_processing;
+pub mod install_monitor;
 pub mod launchers;
 pub mod library_sync;
 pub mod log_bridge;

@@ -70,6 +70,7 @@ export function makeFilters(overrides: Partial<LibraryFilters> = {}): LibraryFil
     filterBySource: [],
     filterByRated: "all",
     filterByMinRating: 0,
+    showUpdatePendingOnly: false,
     ...overrides,
   };
 }
@@ -138,6 +139,23 @@ export function makeRecap(overrides?: Partial<RecapData>): RecapData {
     funComparisons: [
       { activity: "watching the Lord of the Rings trilogy", count: 1.8, emoji: "🎬" },
     ],
+    ...overrides,
+  };
+}
+
+export function makeInstallProgress(
+  overrides: Partial<import("../types/install").InstallProgress> & { sourceId: string },
+): import("../types/install").InstallProgress {
+  return {
+    gameId: null,
+    name: "Test Game",
+    stateFlags: 1026,
+    bytesDownloaded: 500_000_000,
+    bytesToDownload: 1_000_000_000,
+    bytesStaged: 0,
+    bytesToStage: 0,
+    progress: 0.5,
+    status: "downloading",
     ...overrides,
   };
 }

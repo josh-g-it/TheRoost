@@ -1,7 +1,7 @@
 # The Roost — Technical Overview (Simple)
 
 > **Audience**: Non-technical readers, project stakeholders, curious users
-> **Last updated**: 2026-02-26 (v1.10.0 — Storage Overview)
+> **Last updated**: 2026-02-26 (v1.11.0 — Steam Install/Uninstall/Update)
 
 ---
 
@@ -39,6 +39,7 @@ When you open The Roost, the frontend asks the backend for your games, settings,
 - **Custom tags**: Create colored labels to organize games your way. 15 theme-aware colors that look right in any theme.
 - **Favorites & hidden games**: Star games or hide them from view. Instant response with background sync.
 - **Cover art**: Automatically fetched from SteamGridDB and GOG. Pick from multiple options via the art picker, or let the app choose.
+- **Install, Uninstall & Update**: Manage Steam games directly from The Roost. Install, uninstall, or trigger updates — all handed off to Steam immediately. Track download progress in real-time with inline progress bars on game cards. An **update badge** in the toolbar shows how many games need updates; click it to filter and see them all, then hit **Update All** to batch-update. Works from right-click menus, the game detail panel, the command palette, or the Storage View chart.
 
 ### Game Details
 Click any game to see:
@@ -50,6 +51,7 @@ Click any game to see:
 - **News**: Recent articles about the game from Steam
 - Full description, screenshot gallery, session heatmap, and play history timeline
 - Cover art picker (choose from SteamGridDB options)
+- **Install/Uninstall/Update buttons** for Steam games — install, uninstall, or trigger updates
 
 ### Activity Dashboard
 A fully customizable page with drag-and-drop cards:
@@ -208,12 +210,12 @@ TheRoost/
 │   │   ├── setup/          ← First-time setup wizard
 │   │   └── debug/          ← Developer debug panel
 │   ├── hooks/              ← Reusable behaviors
-│   ├── store/              ← App state (19 independent stores)
+│   ├── store/              ← App state (20 independent stores)
 │   └── utils/              ← Helper functions (formatting, filtering, stats)
 │
 └── src-tauri/              ← The engine (behind the scenes)
     └── src/
-        ├── commands/       ← 122 things the frontend can ask the backend to do
+        ├── commands/       ← 134 things the frontend can ask the backend to do
         ├── models/         ← Data shapes (50+ structs)
         ├── services/       ← Core logic (42 modules: APIs, database, monitoring,
         │                      audio, media, overlay, AI, launcher scanners, recaps)
@@ -244,8 +246,9 @@ TheRoost/
 
 ## What's Coming Next
 
-- **Steam Install/Uninstall**: Manage game installations directly from The Roost.
 - **Conversational AI Assistant**: Chat-style assistant with multi-turn conversations and multi-provider support.
+- **Friends Integration**: See what your friends are playing.
+- **Controller & Couch Support**: Gamepad navigation for big-screen use.
 
 ---
 

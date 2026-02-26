@@ -9,6 +9,7 @@ export function filterGames(
   hiddenGames?: Set<string>,
   metadataCache?: Map<string, StoreMetadata>,
   ratingsCache?: Map<string, GameRating>,
+  updatePendingIds?: Set<string>,
 ): Game[] {
   return games.filter((game) => {
     // Hidden games logic: if showHiddenOnly, show ONLY hidden games
@@ -88,6 +89,10 @@ export function filterGames(
     if (filters.filterByMinRating > 0) {
       const rating = ratingsCache?.get(game.gameId)?.rating ?? 0;
       if (rating < filters.filterByMinRating) return false;
+    }
+
+    if (filters.showUpdatePendingOnly) {
+      if (!updatePendingIds?.has(game.gameId)) return false;
     }
 
     return true;

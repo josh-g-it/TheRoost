@@ -2,7 +2,7 @@
 
 > **Audience**: AI assistants, senior developers, contributors
 > **Last updated**: 2026-02-26
-> **Version**: 1.10.0 (Storage Overview — game-focused disk usage visualization)
+> **Version**: 1.11.0 (Steam Install/Uninstall/Update — manage Steam games from The Roost with progress tracking, update badge, and Update All)
 
 ---
 
@@ -15,7 +15,7 @@
 | Package | `the-roost` (npm + cargo) |
 | Tauri ID | `app.theroost` |
 | Framework | Tauri v2 (Rust) + React 18 + TypeScript + Vite |
-| State | Zustand (19 slices) |
+| State | Zustand (20 slices) |
 | Routing | React Router v6 data router (`createBrowserRouter`) |
 | Database | SQLite via rusqlite (bundled), WAL mode, schema v23 |
 | Platform | Windows 11 (registry, credential manager, WASAPI, SMTC, NVML, PDH) |
@@ -59,7 +59,7 @@ TheRoost/
 │   │   │                         #   ArtManagementMenu, AchievementSection, TagPicker,
 │   │   │                         #   AddCustomGameDialog, BackgroundTaskBanner, WelcomeDialog,
 │   │   │                         #   SourceFilterPopover, SteamTagFilterPopover,
-│   │   │                         #   CategoryFilterPopover
+│   │   │                         #   CategoryFilterPopover, InstallProgressOverlay
 │   │   ├── activity/             # ActivityView (customizable card layout with dnd-kit),
 │   │   │                         #   NowPlayingBanner, CardMenu, AddCardButton,
 │   │   │                         #   SessionDrillDown, ChartFilterMenu, MemoriesCard,
@@ -98,11 +98,11 @@ TheRoost/
 │   │   ├── useTrayListener.ts    # Tray event listener (navigate on tray clicks)
 │   │   └── useDebugListener.ts   # Tauri event listener for Rust logs
 │   │
-│   ├── store/                    # 19 Zustand slices (see §4.2)
+│   ├── store/                    # 20 Zustand slices (see §4.2)
 │   ├── services/
 │   │   └── tauri.ts              # invoke() wrappers — 28 API namespaces (see §4.6)
 │   │
-│   ├── types/                    # 22 type files (see §4.5)
+│   ├── types/                    # 23 type files (see §4.5)
 │   ├── utils/                    # icons, logger, errors, formatters, sorting, filtering,
 │   │                             #   shelfFiltering, commandPalette, streaks,
 │   │                             #   profileStats, activityStats, steamBBCode
@@ -118,9 +118,9 @@ TheRoost/
 │   │
 │   └── src/
 │       ├── main.rs               # Entry → lib::run()
-│       ├── lib.rs                # Tauri setup, tracing init, 130 commands, background services
+│       ├── lib.rs                # Tauri setup, tracing init, 134 commands, background services
 │       │
-│       ├── commands/             # 30 command modules, 130 total commands (see §3.1)
+│       ├── commands/             # 31 command modules, 133 total commands (see §3.1)
 │       │   ├── steam_scanner.rs, steam_api.rs, settings.rs, game_launcher.rs
 │       │   ├── metadata.rs, sessions.rs, tags.rs, favorites.rs
 │       │   ├── hidden_games.rs, saved_filters.rs, developer.rs
@@ -128,17 +128,17 @@ TheRoost/
 │       │   ├── achievements.rs, friends.rs, news.rs, recaps.rs
 │       │   ├── overlay.rs, notes.rs, ratings.rs, system_monitor.rs
 │       │   ├── media_controls.rs, media_bookmarks.rs, audio.rs
-│       │   ├── ai.rs, updater.rs, autostart.rs
+│       │   ├── ai.rs, updater.rs, autostart.rs, steam_install.rs
 │       │   └── mod.rs
 │       │
-│       ├── models/               # 21 model files, 50+ structs (see §3.3)
+│       ├── models/               # 22 model files, 50+ structs (see §3.3)
 │       │   ├── game.rs, settings.rs, metadata.rs, session.rs, tag.rs
 │       │   ├── saved_filter.rs, steam_api.rs, store_api.rs, log_event.rs
 │       │   ├── achievement.rs, friend.rs, news.rs, note.rs, rating.rs, recap.rs
-│       │   ├── media_session.rs, media_bookmark.rs, audio.rs, system_metrics.rs
+│       │   ├── media_session.rs, media_bookmark.rs, audio.rs, system_metrics.rs, install.rs
 │       │   └── mod.rs
 │       │
-│       ├── services/             # 42 service modules (see §3.5)
+│       ├── services/             # 43 service modules (see §3.5)
 │       │   ├── cache_db.rs       # SQLite: schema v23, 23 tables, WAL mode
 │       │   ├── steam_client.rs   # Shared HTTP client (OnceLock, 15s timeout, sanitized errors)
 │       │   ├── store_client.rs, steamspy_client.rs, steamgriddb.rs
@@ -148,7 +148,7 @@ TheRoost/
 │       │   ├── image_processing.rs
 │       │   ├── settings_store.rs, credential_store.rs
 │       │   ├── registry.rs, vdf_parser.rs, log_bridge.rs
-│       │   ├── process_monitor.rs, gpu_monitor.rs, library_sync.rs
+│       │   ├── process_monitor.rs, gpu_monitor.rs, library_sync.rs, install_monitor.rs
 │       │   ├── overlay.rs, tray.rs
 │       │   ├── media_controls.rs, audio_control.rs
 │       │   ├── launchers/ (mod, epic, gog, ea, ubisoft, battlenet)
@@ -168,7 +168,7 @@ TheRoost/
 
 ### 3.1 Command Registry (lib.rs)
 
-130 Tauri commands across 30 modules:
+134 Tauri commands across 31 modules:
 
 | Module | Commands |
 |--------|----------|
@@ -202,6 +202,7 @@ TheRoost/
 | `autostart` | `get_autostart_enabled`, `set_autostart_enabled` |
 | `backup` | `estimate_backup_size`, `create_backup`, `validate_backup`, `check_active_sessions`, `restore_from_backup`, `get_backup_credential_hints`, `restart_app` |
 | `storage` | `scan_storage` |
+| `steam_install` | `get_steam_library_folders`, `steam_install_game`, `steam_uninstall_game`, `steam_update_game` |
 
 ### 3.2 Background Services (started in lib.rs setup)
 
@@ -212,6 +213,7 @@ TheRoost/
 | `overlay` | On shortcut | Create/toggle overlay window; register global shortcut (default Ctrl+Space) |
 | `tray` | On session change | System tray icon with context menu showing active game, recent games |
 | `recap_service` | 10s after launch | Auto-generate monthly/yearly recaps if a new period has elapsed |
+| `install_monitor` | 3 sec | Poll Steam appmanifest files for active installs; emit progress + completion events; cross-session detection |
 
 ### 3.3 Game Identity Model
 
@@ -563,7 +565,7 @@ Applied via:
 
 Tag color palette: 15 CSS variables per theme (`--tag-color-0` through `--tag-color-14`).
 
-### 4.5 Types (22 files)
+### 4.5 Types (23 files)
 
 Key type definitions in `src/types/`:
 
@@ -591,10 +593,11 @@ Key type definitions in `src/types/`:
 | `tag.ts` | `Tag`, `GameTagAssignment` |
 | `activity.ts` | `DailyPlaytimePoint`, `MostPlayedEntry`, `SessionLengthBucket`, `ActivityQuickStats` |
 | `updater.ts` | `UpdateInfo` |
+| `install.ts` | `SteamLibraryFolderInfo`, `InstallProgress` |
 
 ### 4.6 Frontend API Layer (services/tauri.ts)
 
-29 API namespaces wrapping `invoke()` calls:
+30 API namespaces wrapping `invoke()` calls:
 
 | Namespace | Methods | Purpose |
 |-----------|---------|---------|
@@ -627,6 +630,7 @@ Key type definitions in `src/types/`:
 | `cloudAiApi` | 8 | Cloud AI key management, resolve, usage, settings |
 | `backupApi` | 7 | Backup create/restore, validation, credential hints, restart |
 | `storageApi` | 1 | Storage scan (drive stats + per-game directory sizes) |
+| `steamInstallApi` | 3 | Steam install/uninstall (library folders, install game, uninstall game) |
 | `developerApi` | 1 | Clear all data |
 
 ### 4.7 Image CDN & CSP
@@ -645,7 +649,7 @@ CSP allows images from:
 **Registry**: `STATIC_DESCRIPTORS` array of ~50 action descriptors (id, label, description, keywords, icon, category). `EXECUTORS` map of action IDs → executor functions. Separation allows search/display without execution dependencies.
 
 **Search pipeline** (`searchPalette()`):
-1. Game action prefix check: `favorite {name}` or `notes {name}` → scoped game search
+1. Game action prefix check: `favorite {name}`, `notes {name}`, `install {name}`, or `uninstall {name}` → scoped game search (install/uninstall filter to eligible Steam games)
 2. Category prefix check: `matchCategoryPrefix()` → exclusive mode for `theme`, `sort`, `filter`, `go to`/`navigate`
 3. Standard search: fuzzy match against descriptors + game names + dynamic metadata filters
 
@@ -918,12 +922,12 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | react-icons | 6 icon set libraries |
 | GitHub Actions | CI (lint + test) + Release (build + sign + publish) |
 
-**Test Coverage (675 total)**:
+**Test Coverage (750 total)**:
 
-**Rust (248 tests)**:
+**Rust (280 tests)**:
 - CacheDb: 105 tests (schema, CRUD for all 23 tables, transactions, migrations v1→v23, custom art, recap queries)
 - AI pattern matcher: 38 tests (10 extractors, fuzzy matching, confidence scoring)
-- VDF parser: 15 tests (parsing, escapes, real-world formats)
+- VDF parser: 20 tests (parsing, escapes, real-world formats, manifest progress parsing)
 - Steam API URL parsing: 13 tests (Steam profile/vanity URL extraction)
 - Process monitor: 12 tests (exe matching, metrics, state)
 - Epic scanner: 7 tests
@@ -938,9 +942,10 @@ cloud_ai_exclude_games, cloud_ai_include_games
 - Recap service: 3 tests (monthly/yearly generation, auto-generate logic)
 - Fun comparisons: 1 test (pick_comparisons algorithm, tier selection)
 - AI Gemini provider: 1 test
+- Install monitor: 8 tests (status derivation, progress computation)
 
-**Frontend (427 tests)**:
-- Command palette: 72 tests (action registry, search, result capping, category prefix matching, hints, AI heuristic)
+**Frontend (478 tests)**:
+- Command palette: 85 tests (action registry, search, result capping, category prefix matching, hints, AI heuristic, install/uninstall/update game actions)
 - Activity stats: 56 tests (daily playtime, most played, session distribution, day-of-week)
 - Profile stats: 46 tests (genre DNA, playtime distribution, Metacritic scatter, leaderboard)
 - Shelf filtering: 26 tests (presets, filters, search, hidden games, genre grouping, hybrid pin union)
@@ -948,7 +953,7 @@ cloud_ai_exclude_games, cloud_ai_include_games
 - Metadata slice: 17 tests (fetch cached/uncached, dedup guard, batch, refreshAll, error fallback)
 - Formatters: 17 tests (playtime, bytes, source names, formatLastPlayed)
 - Shelves slice: 23 tests (init, add, update, remove, reorder, displayMode, groupByGenre, pinGameToShelf, unpinGameFromShelf, settings backfill)
-- Filtering: 16 tests (all filter types, edge cases)
+- Filtering: 18 tests (all filter types, update-pending filter, edge cases)
 - Sorting: 14 tests (all sort modes, null handling, immutability)
 - Streaks: 11 tests (calculatePlayStreak, computePlaytimeInRange, edge cases)
 - FloatingPanel: 10 tests (render, pin/close, resize handle, className)
@@ -965,8 +970,11 @@ cloud_ai_exclude_games, cloud_ai_include_games
 - Recap slice: 12 tests (load summaries, load/generate/delete recap, period selection)
 - Recap components: 25 tests (RecapTab, RecapView, RecapPeriodSelector, section rendering, chart data)
 - Notes slice: 2 tests
+- Install slice: 6 tests (updateProgress, completeInstall, clearAll)
+- InstallProgressOverlay: 5 tests (downloading, staging, update queued, pending, bar width)
+- StorageView: 8 tests (drive bars, chart rendering, loading state)
 
-**Shared test factories** (`src/test/factories.ts`): `makeGame()`, `makeMeta()`, `makeFilters()`, `makeSession()`, `makeShelf()`, `ts()`. Override object pattern for all factories. `makeGame` includes `description: null` by default. `makeShelf` includes `pinnedGameIds: []` by default.
+**Shared test factories** (`src/test/factories.ts`): `makeGame()`, `makeMeta()`, `makeFilters()`, `makeSession()`, `makeShelf()`, `makeRecap()`, `makeInstallProgress()`, `ts()`. Override object pattern for all factories. `makeGame` includes `description: null` by default. `makeShelf` includes `pinnedGameIds: []` by default.
 
 **Coverage**: V8 provider configured in `vite.config.ts` — run `npx vitest run --coverage` to generate text + lcov reports.
 
@@ -1023,5 +1031,6 @@ cloud_ai_exclude_games, cloud_ai_include_games
 | v1.8.0 | Done | Gaming Recap & Insights (auto-generated monthly/yearly recaps, Activity page tab toggle, 8 recap sections with Recharts, fun comparisons, achievement highlights, genre breakdown, schema v23 `recaps` table, auto-generate on launch) |
 | v1.9.0 | Done | Backup & Restore (`.roost` ZIP archive, 4-step RestoreWizard, safety backup + rollback, credential hints, schema compatibility, progress events) |
 | v1.10.0 | Done | Storage Overview (`/storage` route, drive bars via Windows API, `walkdir` per-game dir sizing, Recharts donut + bar charts, progress events, `nav:storage` command palette action) |
+| v1.11.0 | Done | Steam Install/Uninstall (install/uninstall via `steam://` URI scheme, direct Steam handoff with delayed library rescan, appmanifest polling for progress tracking, install monitor background service, inline progress overlay on game cards, command palette `install`/`uninstall` game actions, Storage View bar chart context menu for uninstalling) |
 
 See `docs/ROADMAP.md` for the full roadmap.

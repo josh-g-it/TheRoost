@@ -257,6 +257,78 @@ pub fn parse_app_manifest(manifest_path: &Path) -> Result<LocalGameInfo, AppErro
     })
 }
 
+/// Raw manifest info including download progress fields.
+/// Used by the install monitor to track active downloads.
+#[derive(Debug, Clone)]
+pub struct ManifestProgressInfo {
+    pub appid: u32,
+    pub name: String,
+    pub state_flags: u32,
+    pub bytes_downloaded: u64,
+    pub bytes_to_download: u64,
+    pub bytes_staged: u64,
+    pub bytes_to_stage: u64,
+    pub size_on_disk: u64,
+}
+
+/// Parse an appmanifest_*.acf file extracting download progress fields.
+pub fn parse_app_manifest_progress(manifest_path: &Path) -> Result<ManifestProgressInfo, AppError> {
+    let content = fs::read_to_string(manifest_path)?;
+    parse_app_manifest_progress_from_str(&content)
+}
+
+/// Parse manifest progress from a string (for testability).
+pub fn parse_app_manifest_progress_from_str(
+    content: &str,
+) -> Result<ManifestProgressInfo, AppError> {
+    let vdf = parse_vdf(content)?;
+
+    let app_state = vdf
+        .iter()
+        .find(|(k, _)| k.to_lowercase() == "appstate")
+        .and_then(|(_, v)| v.as_section())
+        .ok_or_else(|| AppError::Parse("Missing 'AppState' in manifest".to_string()))?;
+
+    let appid = app_state
+        .get("appid")
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse::<u32>().ok())
+        .ok_or_else(|| AppError::Parse("Missing or invalid appid".to_string()))?;
+
+    let name = app_state
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Unknown Game")
+        .to_string();
+
+    let get_u32 = |key: &str| -> u32 {
+        app_state
+            .get(key)
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(0)
+    };
+
+    let get_u64 = |key: &str| -> u64 {
+        app_state
+            .get(key)
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(0)
+    };
+
+    Ok(ManifestProgressInfo {
+        appid,
+        name,
+        state_flags: get_u32("StateFlags"),
+        bytes_downloaded: get_u64("BytesDownloaded"),
+        bytes_to_download: get_u64("BytesToDownload"),
+        bytes_staged: get_u64("BytesStaged"),
+        bytes_to_stage: get_u64("BytesToStage"),
+        size_on_disk: get_u64("SizeOnDisk"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -505,5 +577,102 @@ mod tests {
 
         let string_val = VdfValue::String("hello".to_string());
         assert!(string_val.as_section().is_none());
+    }
+
+    #[test]
+    fn test_manifest_progress_fully_installed() {
+        let input = r#"
+            "AppState"
+            {
+                "appid"             "440"
+                "name"              "Team Fortress 2"
+                "StateFlags"        "4"
+                "SizeOnDisk"        "23456789012"
+                "BytesToDownload"   "0"
+                "BytesDownloaded"   "0"
+                "BytesToStage"      "0"
+                "BytesStaged"       "0"
+            }
+        "#;
+        let info = parse_app_manifest_progress_from_str(input).unwrap();
+        assert_eq!(info.appid, 440);
+        assert_eq!(info.name, "Team Fortress 2");
+        assert_eq!(info.state_flags, 4);
+        assert_eq!(info.size_on_disk, 23456789012);
+        assert_eq!(info.bytes_downloaded, 0);
+        assert_eq!(info.bytes_to_download, 0);
+    }
+
+    #[test]
+    fn test_manifest_progress_downloading() {
+        let input = r#"
+            "AppState"
+            {
+                "appid"             "730"
+                "name"              "Counter-Strike 2"
+                "StateFlags"        "1026"
+                "SizeOnDisk"        "5000000000"
+                "BytesToDownload"   "10000000000"
+                "BytesDownloaded"   "5000000000"
+                "BytesToStage"      "10000000000"
+                "BytesStaged"       "3000000000"
+            }
+        "#;
+        let info = parse_app_manifest_progress_from_str(input).unwrap();
+        assert_eq!(info.appid, 730);
+        assert_eq!(info.state_flags, 1026);
+        assert_eq!(info.bytes_to_download, 10000000000);
+        assert_eq!(info.bytes_downloaded, 5000000000);
+        assert_eq!(info.bytes_to_stage, 10000000000);
+        assert_eq!(info.bytes_staged, 3000000000);
+    }
+
+    #[test]
+    fn test_manifest_progress_missing_fields_default_zero() {
+        let input = r#"
+            "AppState"
+            {
+                "appid"     "570"
+                "name"      "Dota 2"
+            }
+        "#;
+        let info = parse_app_manifest_progress_from_str(input).unwrap();
+        assert_eq!(info.appid, 570);
+        assert_eq!(info.state_flags, 0);
+        assert_eq!(info.bytes_downloaded, 0);
+        assert_eq!(info.bytes_to_download, 0);
+        assert_eq!(info.bytes_staged, 0);
+        assert_eq!(info.bytes_to_stage, 0);
+        assert_eq!(info.size_on_disk, 0);
+    }
+
+    #[test]
+    fn test_manifest_progress_update_required() {
+        let input = r#"
+            "AppState"
+            {
+                "appid"             "1172470"
+                "name"              "Apex Legends"
+                "StateFlags"        "2"
+                "SizeOnDisk"        "67493527879"
+                "BytesToDownload"   "500000000"
+                "BytesDownloaded"   "0"
+            }
+        "#;
+        let info = parse_app_manifest_progress_from_str(input).unwrap();
+        assert_eq!(info.state_flags, 2);
+        assert_eq!(info.bytes_to_download, 500000000);
+    }
+
+    #[test]
+    fn test_manifest_progress_missing_appstate() {
+        let input = r#"
+            "WrongKey"
+            {
+                "appid" "440"
+            }
+        "#;
+        let result = parse_app_manifest_progress_from_str(input);
+        assert!(result.is_err());
     }
 }

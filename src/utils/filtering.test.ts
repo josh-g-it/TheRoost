@@ -140,6 +140,37 @@ describe("filterGames", () => {
     const result = filterGames(games, makeFilters({ filterBySource: [] }));
     expect(result).toHaveLength(3);
   });
+
+  it("showUpdatePendingOnly filters to games with pending updates", () => {
+    const updatePendingIds = new Set(["g1", "g3"]);
+    const result = filterGames(
+      games,
+      makeFilters({ showUpdatePendingOnly: true }),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      updatePendingIds,
+    );
+    expect(result).toHaveLength(2);
+    expect(result.map((g) => g.gameId)).toEqual(["g1", "g3"]);
+  });
+
+  it("showUpdatePendingOnly false returns all games", () => {
+    const updatePendingIds = new Set(["g1"]);
+    const result = filterGames(
+      games,
+      makeFilters({ showUpdatePendingOnly: false }),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      updatePendingIds,
+    );
+    expect(result).toHaveLength(3);
+  });
 });
 
 describe("extractAllGenres", () => {

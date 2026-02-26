@@ -10,6 +10,7 @@ export interface GameStorageEntry {
   gameId: string;
   name: string;
   source: string;
+  sourceId: string;
   installPath: string;
   sizeBytes: number;
   driveLetter: string;

@@ -18,7 +18,7 @@ import { useLibraryStore } from "../store/librarySlice";
 import { useMetadataStore } from "../store/metadataSlice";
 import { useNotesStore } from "../store/notesSlice";
 import { useFavoritesStore } from "../store/favoritesSlice";
-import { externalApi } from "../services/tauri";
+import { externalApi, steamInstallApi } from "../services/tauri";
 import {
   extractAllSteamTags,
   extractAllGenres,
@@ -70,6 +70,24 @@ export const PALETTE_HINTS: PaletteHint[] = [
     description: "Open or create game notes",
     icon: "notes",
     autofill: "notes ",
+  },
+  {
+    label: "Install",
+    description: "Install a Steam game",
+    icon: "installed",
+    autofill: "install ",
+  },
+  {
+    label: "Uninstall",
+    description: "Uninstall a Steam game",
+    icon: "close",
+    autofill: "uninstall ",
+  },
+  {
+    label: "Update",
+    description: "Trigger a Steam game update",
+    icon: "refresh",
+    autofill: "update ",
   },
 ];
 
@@ -231,6 +249,14 @@ const STATIC_DESCRIPTORS: ActionDescriptor[] = [
     description: "Show only games you have not rated yet",
     keywords: ["filter", "unrated", "no rating", "not rated"],
     icon: "star-outline",
+    category: "action",
+  },
+  {
+    id: "filter:update-pending",
+    label: "Show Games Pending Update",
+    description: "Show only Steam games with a pending update",
+    keywords: ["filter", "update", "pending", "patch", "queued"],
+    icon: "refresh",
     category: "action",
   },
 
@@ -524,6 +550,39 @@ const GAME_ACTION_DESCRIPTORS: GameActionDescriptor[] = [
     parameterHint: "notes {game name}",
     prefixes: ["notes", "note"],
   },
+  {
+    id: "game:install",
+    label: "Install Game",
+    description: "Install a Steam game via Steam",
+    keywords: ["install", "download", "steam"],
+    icon: "installed",
+    category: "game-action",
+    parameterized: true,
+    parameterHint: "install {game name}",
+    prefixes: ["install"],
+  },
+  {
+    id: "game:uninstall",
+    label: "Uninstall Game",
+    description: "Uninstall a Steam game via Steam",
+    keywords: ["uninstall", "remove", "delete"],
+    icon: "close",
+    category: "game-action",
+    parameterized: true,
+    parameterHint: "uninstall {game name}",
+    prefixes: ["uninstall"],
+  },
+  {
+    id: "game:update",
+    label: "Update Game",
+    description: "Trigger a Steam game update via Steam",
+    keywords: ["update", "validate", "patch"],
+    icon: "refresh",
+    category: "game-action",
+    parameterized: true,
+    parameterHint: "update {game name}",
+    prefixes: ["update"],
+  },
 ];
 
 /** Build a lookup from prefix keyword → game action descriptor. */
@@ -665,6 +724,7 @@ const EXECUTORS: Record<string, ActionExecutor> = {
     ui.setFilterBySource([]);
     ui.setFilterByRated("all");
     ui.setFilterByMinRating(0);
+    ui.setShowUpdatePendingOnly(false);
     ctx.navigate("/library");
     ctx.closeCommandCenter();
   },
@@ -732,6 +792,48 @@ const EXECUTORS: Record<string, ActionExecutor> = {
     }
     notesState.setScrollTarget(game.gameId);
     ctx.navigate("/notes");
+    ctx.closeCommandCenter();
+  },
+  "game:install": (ctx) => {
+    if (
+      ctx.targetGame &&
+      ctx.targetGame.source === "steam" &&
+      !ctx.targetGame.isInstalled
+    ) {
+      steamInstallApi.installGame(ctx.targetGame.sourceId);
+      ctx.navigate("/library");
+    }
+    ctx.closeCommandCenter();
+  },
+  "game:uninstall": (ctx) => {
+    if (
+      ctx.targetGame &&
+      ctx.targetGame.source === "steam" &&
+      ctx.targetGame.isInstalled
+    ) {
+      steamInstallApi.uninstallGame(ctx.targetGame.sourceId);
+      setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 5000);
+      setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 30000);
+      ctx.navigate("/library");
+    }
+    ctx.closeCommandCenter();
+  },
+  "game:update": (ctx) => {
+    if (
+      ctx.targetGame &&
+      ctx.targetGame.source === "steam" &&
+      ctx.targetGame.isInstalled
+    ) {
+      steamInstallApi.updateGame(ctx.targetGame.sourceId);
+      ctx.navigate("/library");
+    }
+    ctx.closeCommandCenter();
+  },
+  "filter:update-pending": (ctx) => {
+    const ui = useUIStore.getState();
+    ui.setShowUpdatePendingOnly(!ui.filters.showUpdatePendingOnly);
+    ui.setViewMode("list");
+    ctx.navigate("/library");
     ctx.closeCommandCenter();
   },
 };
@@ -913,9 +1015,20 @@ function matchGameActionPrefix(query: string, games: Game[]): PaletteAction[] | 
   const descriptor = PREFIX_MAP[prefix];
   if (!descriptor || !rest) return null;
 
-  const matchedGames = games
-    .filter((g) => g.name.toLowerCase().includes(rest.toLowerCase()))
-    .slice(0, MAX_GAME_RESULTS);
+  let matchedGames = games.filter((g) =>
+    g.name.toLowerCase().includes(rest.toLowerCase()),
+  );
+
+  // For install/uninstall/update, filter to eligible Steam games only
+  if (descriptor.id === "game:install") {
+    matchedGames = matchedGames.filter((g) => g.source === "steam" && !g.isInstalled);
+  } else if (descriptor.id === "game:uninstall") {
+    matchedGames = matchedGames.filter((g) => g.source === "steam" && g.isInstalled);
+  } else if (descriptor.id === "game:update") {
+    matchedGames = matchedGames.filter((g) => g.source === "steam" && g.isInstalled);
+  }
+
+  matchedGames = matchedGames.slice(0, MAX_GAME_RESULTS);
 
   if (matchedGames.length === 0) return null;
 

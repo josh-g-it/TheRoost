@@ -33,7 +33,7 @@ pub fn measure_directory_size(path: &Path) -> u64 {
 }
 
 /// Query Windows for drive total/free bytes via GetDiskFreeSpaceExW.
-fn get_drive_stats(drive_letter: &str) -> Option<(u64, u64)> {
+pub fn get_drive_stats(drive_letter: &str) -> Option<(u64, u64)> {
     use windows::core::HSTRING;
     use windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
 
@@ -62,7 +62,7 @@ fn get_drive_stats(drive_letter: &str) -> Option<(u64, u64)> {
 }
 
 /// Extract drive letter (e.g. "D:") from an install path.
-fn extract_drive_letter(path: &str) -> String {
+pub fn extract_drive_letter(path: &str) -> String {
     if path.len() >= 2 && path.as_bytes()[1] == b':' {
         path[..2].to_uppercase()
     } else {
@@ -99,7 +99,7 @@ pub fn scan_storage(
     let mut drive_game_bytes: HashMap<String, u64> = HashMap::new();
     let mut drive_game_count: HashMap<String, u32> = HashMap::new();
 
-    for (i, (game_id, name, source, install_path)) in games_raw.iter().enumerate() {
+    for (i, (game_id, name, source, source_id, install_path)) in games_raw.iter().enumerate() {
         // Emit progress
         let _ = app_handle.emit(
             "storage-scan-progress",
@@ -120,6 +120,7 @@ pub fn scan_storage(
             game_id: game_id.clone(),
             name: name.clone(),
             source: source.clone(),
+            source_id: source_id.clone(),
             install_path: install_path.clone(),
             size_bytes: size,
             drive_letter: drive,

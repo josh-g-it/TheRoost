@@ -9,6 +9,10 @@ import { useTagsStore } from "../../store/tagsSlice";
 import { useRatingsStore } from "../../store/ratingsSlice";
 import { useUIStore } from "../../store/uiSlice";
 import { useShelvesStore } from "../../store/shelvesSlice";
+import { useInstallStore } from "../../store/installSlice";
+import { useLibraryStore } from "../../store/librarySlice";
+import { InstallProgressOverlay } from "./InstallProgressOverlay";
+import { steamInstallApi } from "../../services/tauri";
 import { formatPlaytime } from "../../utils/formatters";
 import type { Game, GenreInfo, Tag, CardDisplayOptions } from "../../types";
 import "./GameCard.css";
@@ -50,6 +54,7 @@ export function GameCard({
   const shelves = useShelvesStore((s) => s.shelves);
   const pinGameToShelf = useShelvesStore((s) => s.pinGameToShelf);
   const unpinGameFromShelf = useShelvesStore((s) => s.unpinGameFromShelf);
+  const installProgress = useInstallStore((s) => s.activeInstalls.get(game.sourceId));
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -156,6 +161,7 @@ export function GameCard({
           )}
         </div>
       </div>
+      {installProgress && <InstallProgressOverlay progress={installProgress} />}
 
       {contextMenu &&
         createPortal(
@@ -178,6 +184,45 @@ export function GameCard({
             >
               {isHidden ? "Unhide game" : "Hide game"}
             </button>
+            {game.source === "steam" && (
+              <>
+                <div className="game-card__context-separator" />
+                {installProgress?.status === "update_required" && (
+                  <button
+                    className="game-card__context-item"
+                    onClick={() => {
+                      steamInstallApi.updateGame(game.sourceId);
+                      setContextMenu(null);
+                    }}
+                  >
+                    Update Game
+                  </button>
+                )}
+                {game.isInstalled ? (
+                  <button
+                    className="game-card__context-item game-card__context-item--danger"
+                    onClick={() => {
+                      steamInstallApi.uninstallGame(game.sourceId);
+                      setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 5000);
+                      setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 30000);
+                      setContextMenu(null);
+                    }}
+                  >
+                    Uninstall Game
+                  </button>
+                ) : (
+                  <button
+                    className="game-card__context-item"
+                    onClick={() => {
+                      steamInstallApi.installGame(game.sourceId);
+                      setContextMenu(null);
+                    }}
+                  >
+                    Install Game
+                  </button>
+                )}
+              </>
+            )}
             <div className="game-card__context-separator" />
             <div className="game-card__context-label">Rate</div>
             <div className="game-card__context-rating">

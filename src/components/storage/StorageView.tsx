@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   BarChart,
   Bar,
@@ -14,7 +15,8 @@ import {
 } from "recharts";
 import type { YAxisTickContentProps } from "recharts";
 import { listen } from "@tauri-apps/api/event";
-import { storageApi } from "../../services/tauri";
+import { storageApi, steamInstallApi } from "../../services/tauri";
+import { useLibraryStore } from "../../store/librarySlice";
 import type { StorageScanResult, DriveInfo, GameStorageEntry } from "../../types/storage";
 import { formatBytes, getSourceDisplayName } from "../../utils/formatters";
 import type { GameSource } from "../../types/game";
@@ -256,10 +258,12 @@ function GamesBySize({
   games,
   showAll,
   onToggle,
+  onBarClick,
 }: {
   games: GameStorageEntry[];
   showAll: boolean;
   onToggle: () => void;
+  onBarClick: (game: GameStorageEntry, event: React.MouseEvent) => void;
 }) {
   const colors = useChartColors();
 
@@ -351,7 +355,16 @@ function GamesBySize({
               );
             }}
           />
-          <Bar dataKey="gb" radius={[0, 4, 4, 0]} barSize={20}>
+          <Bar
+            dataKey="gb"
+            radius={[0, 4, 4, 0]}
+            barSize={20}
+            cursor="pointer"
+            onClick={(barData, _index, event) => {
+              const game = barData as unknown as GameStorageEntry;
+              onBarClick(game, event as unknown as React.MouseEvent);
+            }}
+          >
             {data.map((d, i) => (
               <Cell key={i} fill={d.color} />
             ))}
@@ -374,6 +387,12 @@ export function StorageView() {
     drive: null,
     source: null,
   });
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    game: GameStorageEntry;
+  } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const scanInFlight = useRef(false);
 
   const runScan = useCallback(async () => {
@@ -422,6 +441,34 @@ export function StorageView() {
     }));
     setShowAll(false);
   }, []);
+
+  // ── Context menu ────────────────────────────────────
+
+  const handleBarClick = useCallback(
+    (game: GameStorageEntry, event: React.MouseEvent) => {
+      if (game.source !== "steam") return;
+      setContextMenu({ x: event.clientX, y: event.clientY, game });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    const escHandler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setContextMenu(null);
+    };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("keydown", escHandler);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", escHandler);
+    };
+  }, [contextMenu]);
 
   // ── Derived data ─────────────────────────────────────
 
@@ -556,6 +603,7 @@ export function StorageView() {
                     games={filteredGames}
                     showAll={showAll}
                     onToggle={() => setShowAll((v) => !v)}
+                    onBarClick={handleBarClick}
                   />
                 </ChartCard>
               </div>
@@ -571,6 +619,40 @@ export function StorageView() {
           </>
         )}
       </div>
+
+      {contextMenu &&
+        createPortal(
+          <div
+            ref={contextMenuRef}
+            className="storage-view__context-menu"
+            style={{
+              position: "fixed",
+              top: contextMenu.y,
+              left: contextMenu.x,
+            }}
+          >
+            <div className="storage-view__context-header">{contextMenu.game.name}</div>
+            <div className="storage-view__context-detail">
+              {formatBytes(contextMenu.game.sizeBytes)}
+            </div>
+            <div className="storage-view__context-separator" />
+            <button
+              className="storage-view__context-item storage-view__context-item--danger"
+              onClick={() => {
+                steamInstallApi.uninstallGame(contextMenu.game.sourceId);
+                setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 5000);
+                setTimeout(() => {
+                  useLibraryStore.getState().scanLocalOnly();
+                  runScan();
+                }, 30000);
+                setContextMenu(null);
+              }}
+            >
+              Uninstall Game
+            </button>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

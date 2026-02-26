@@ -6,6 +6,9 @@ import { UserTag } from "../common/UserTag";
 import { AppIcon } from "../common/AppIcon";
 import { StarRating } from "../common/StarRating";
 import { useTagsStore } from "../../store/tagsSlice";
+import { useInstallStore } from "../../store/installSlice";
+import { useLibraryStore } from "../../store/librarySlice";
+import { steamInstallApi } from "../../services/tauri";
 import { formatPlaytime, formatBytes, formatLastPlayed } from "../../utils/formatters";
 import type { Game, GenreInfo, Tag, CardDisplayOptions } from "../../types";
 import "./GameListItem.css";
@@ -38,6 +41,7 @@ export function GameListItem({
   const allTags = useTagsStore((s) => s.tags);
   const getGameTagIds = useTagsStore((s) => s.getGameTagIds);
   const setGameTags = useTagsStore((s) => s.setGameTags);
+  const installProgress = useInstallStore((s) => s.activeInstalls.get(game.sourceId));
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -154,6 +158,45 @@ export function GameListItem({
             >
               {isHidden ? "Unhide game" : "Hide game"}
             </button>
+            {game.source === "steam" && (
+              <>
+                <div className="game-list-item__context-separator" />
+                {installProgress?.status === "update_required" && (
+                  <button
+                    className="game-list-item__context-item"
+                    onClick={() => {
+                      steamInstallApi.updateGame(game.sourceId);
+                      setContextMenu(null);
+                    }}
+                  >
+                    Update Game
+                  </button>
+                )}
+                {game.isInstalled ? (
+                  <button
+                    className="game-list-item__context-item game-list-item__context-item--danger"
+                    onClick={() => {
+                      steamInstallApi.uninstallGame(game.sourceId);
+                      setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 5000);
+                      setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 30000);
+                      setContextMenu(null);
+                    }}
+                  >
+                    Uninstall Game
+                  </button>
+                ) : (
+                  <button
+                    className="game-list-item__context-item"
+                    onClick={() => {
+                      steamInstallApi.installGame(game.sourceId);
+                      setContextMenu(null);
+                    }}
+                  >
+                    Install Game
+                  </button>
+                )}
+              </>
+            )}
             {allTags.length > 0 && (
               <>
                 <div className="game-list-item__context-separator" />

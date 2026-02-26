@@ -448,3 +448,11 @@ import type { StorageScanResult } from "../types/storage";
 export const storageApi = {
   scanStorage: () => invoke<StorageScanResult>("scan_storage"),
 };
+
+// ── Steam Install/Uninstall ──────────────────────────────────
+
+export const steamInstallApi = {
+  installGame: (sourceId: string) => invoke<void>("steam_install_game", { sourceId }),
+  uninstallGame: (sourceId: string) => invoke<void>("steam_uninstall_game", { sourceId }),
+  updateGame: (sourceId: string) => invoke<void>("steam_update_game", { sourceId }),
+};

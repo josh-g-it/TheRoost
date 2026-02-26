@@ -874,7 +874,7 @@ Patch fix: "sort by last played" now works correctly for non-Steam games.
 
 # Version 2.0 — Planned
 
-Each feature below ships as an incremental minor version (v1.9.0, v1.10.0, etc.). Ordered by user-facing value first (backup), then infrastructure (storage, install management), then major integrations (AI, friends, controller). Once all features are shipped, the app elevates to 2.0.0.
+Each feature below ships as an incremental minor version (v1.9.0, v1.10.0, etc.). Ordered by user-facing value first (backup), then infrastructure (storage, install/update management), then major integrations (AI, friends, controller). Once all features are shipped, the app elevates to 2.0.0.
 
 ---
 
@@ -1024,15 +1024,41 @@ Game-focused disk usage visualization — see exactly how much space your games 
 
 ---
 
-### v1.11.0 — Steam Install/Uninstall
-Manage Steam game installations directly from The Roost — builds on storage overview.
+### v1.11.0 — Steam Install/Uninstall/Update ✅ SHIPPED
+Manage Steam game installations directly from The Roost — install, uninstall, and update games without leaving the app.
 
-- Browse uninstalled Steam library games (owned but not on disk)
-- Install via `steam://install/{appid}` URI scheme (delegates to Steam client)
-- Uninstall via `steam://uninstall/{appid}` URI scheme
-- Select target drive/Steam library folder for installation
-- Installation progress tracking via Steam client IPC or polling
-- Integrated with storage overview: see free space before installing
+**Install & Uninstall:**
+- Install via `steam://install/{appid}` URI scheme (delegates to Steam client immediately)
+- Uninstall via `steam://uninstall/{appid}` URI scheme (Steam shows confirmation dialog)
+- Install/Uninstall buttons in GameDetail sidebar, game card right-click context menu, game list right-click context menu, and Storage View chart context menu
+- Command palette actions: `game:install` ("install {game}") and `game:uninstall` ("uninstall {game}") with smart filtering (install shows uninstalled Steam games only, uninstall shows installed Steam games only)
+
+**Update Management:**
+- Update via `steam://validate/{appid}` URI scheme (triggers file validation + downloads pending updates)
+- "Update Game" option in GameCard, GameListItem, and GameDetail context menus (visible only when `installProgress.status === "update_required"`)
+- `steam_update_game` Rust command in `commands/steam_install.rs`
+- **Update badge** in library toolbar: shows count of games pending updates (e.g., "3 updates pending"), amber warning style
+- **Update-pending filter**: Click the badge to toggle `showUpdatePendingOnly` — automatically switches to list view showing only games needing updates
+- **Update All button**: Visible when update filter is active — triggers `steam://validate` for all pending games in a single click
+- Command palette: `game:update` prefix ("update {game}") filters to installed Steam games; `filter:update-pending` toggles the update filter; "Update" hint in hints dropdown
+- `action:reset-filters` clears the update-pending filter along with all other filters
+
+**Install Monitor Service (`install_monitor.rs`):**
+- Background Rust service polls Steam appmanifest files every 3 seconds
+- Derives install status from `state_flags` bitmask: `update_required` (flag & 2), `downloading` (flag & 1026), `fully_installed` (flag == 4)
+- Calculates download progress from `BytesDownloaded` / `BytesToDownload` manifest fields
+- Emits `install-progress` events to frontend with `InstallProgress` payload (sourceId, gameId, status, progress, bytesDownloaded, bytesToDownload, gameName)
+- `installSlice` Zustand store holds `activeInstalls: Map<string, InstallProgress>`
+- Inline progress bars overlaid on game cards during active downloads
+
+**Frontend:**
+- `showUpdatePendingOnly` added to `LibraryFilters` interface + `uiSlice` store
+- `filterGames()` extended with `updatePendingIds: Set<string>` 8th parameter
+- `LibraryView` derives `updatePendingIds` from `activeInstalls` via `useMemo`
+- Badge + Update All UI in `LibraryControls` with theme-aware warning color styling
+
+**Implementation:** 1 new Tauri command (`steam_update_game`), 134 commands total. `LibraryFilters` extended, `filterGames` extended, command palette expanded with 2 new descriptors + 2 executors + 1 hint.
+- 280 Rust tests + 478 frontend tests passing (758 total)
 
 ---
 

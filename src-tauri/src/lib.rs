@@ -9,14 +9,14 @@ use commands::{
     achievements, ai, audio, autostart, backup, cover_art, custom_games, developer,
     external_scanner, favorites, friends, game_launcher, hidden_games, media_bookmarks,
     media_controls, metadata, news, notes, overlay, ratings, recaps, saved_filters, sessions,
-    settings, steam_api, steam_scanner, storage, system_monitor, tags, updater,
+    settings, steam_api, steam_install, steam_scanner, storage, system_monitor, tags, updater,
 };
 use models::ai::CloudProvider;
 use services::ai::cloud_config::CloudConfig;
 use services::cache_db::CacheDb;
 use services::log_bridge::TauriLogLayer;
 use services::settings_store;
-use services::{library_sync, process_monitor};
+use services::{install_monitor, library_sync, process_monitor};
 use tauri::Manager;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -171,6 +171,10 @@ pub fn run() {
             backup::get_backup_credential_hints,
             backup::restart_app,
             storage::scan_storage,
+            steam_install::get_steam_library_folders,
+            steam_install::steam_install_game,
+            steam_install::steam_uninstall_game,
+            steam_install::steam_update_game,
         ])
         .setup(|app| {
             // Initialize tracing with our custom layer that forwards events to the frontend
@@ -227,6 +231,13 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 process_monitor::run(monitor_handle, monitor_db, monitor_metrics).await;
             });
+            // Spawn install monitor background task (3-second manifest polling)
+            let install_handle = app.handle().clone();
+            let install_db = db_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                install_monitor::run(install_handle, install_db).await;
+            });
+
             // Spawn recap auto-generation check (runs once at startup after 10s delay)
             let recap_db = db_handle.clone();
             tauri::async_runtime::spawn(async move {
@@ -234,7 +245,7 @@ pub fn run() {
                 services::recap_service::auto_generate_if_needed(&recap_db);
             });
             tracing::info!(
-                "Background tasks started (library sync + process monitor + recap check)"
+                "Background tasks started (library sync + process monitor + install monitor + recap check)"
             );
 
             // Initialize system tray
