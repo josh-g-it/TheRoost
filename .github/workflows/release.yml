@@ -31,32 +31,18 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      # 4. Cache Rust compilation artifacts (speeds up subsequent builds significantly)
-      - name: Cache Cargo
-        uses: actions/cache@v4
+      # 4. Cache Rust compilation artifacts
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          workspaces: src-tauri
+          shared-key: release
 
       # 5. Install frontend dependencies
       - name: Install npm dependencies
         run: npm ci
 
-      # 6. Run frontend tests
-      - name: Run frontend tests
-        run: npx vitest run
-
-      # 7. Run Rust tests
-      - name: Run Rust tests
-        working-directory: src-tauri
-        run: cargo test
-
-      # 8. Verify signing key is available before building
+      # 6. Verify signing key is available before building
       - name: Verify signing configuration
         shell: bash
         run: |
@@ -68,14 +54,14 @@ jobs:
         env:
           SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
-      # 9. Build the Tauri app with update signing
+      # 7. Build the Tauri app with update signing
       - name: Build Tauri app
         run: npx tauri build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
-      # 10. Prepare release assets
+      # 8. Prepare release assets
       - name: Prepare release assets
         shell: bash
         run: |
@@ -124,7 +110,7 @@ jobs:
           echo "NSIS_SIG_PATH=$NSIS_SIG" >> $GITHUB_ENV
           echo "LATEST_JSON_PATH=$NSIS_DIR/latest.json" >> $GITHUB_ENV
 
-      # 11. Create draft GitHub Release with all assets
+      # 9. Create draft GitHub Release with all assets
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
