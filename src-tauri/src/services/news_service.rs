@@ -72,7 +72,10 @@ pub async fn fetch_game_news(
 
 /// Build an aggregated news feed from favorites + recently played games.
 /// Reuses `fetch_game_news` per-game (respects 1-hour cache TTL unless `force` is true).
-pub async fn fetch_news_feed(db: &CacheDbHandle, force: bool) -> Result<Vec<FeedNewsItem>, AppError> {
+pub async fn fetch_news_feed(
+    db: &CacheDbHandle,
+    force: bool,
+) -> Result<Vec<FeedNewsItem>, AppError> {
     // Step 1: Gather candidate game IDs (favorites + recent 15 days)
     let games: Vec<(String, u32, String)> = {
         let db_guard = db.lock_or_err("DB")?;
