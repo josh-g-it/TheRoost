@@ -1,26 +1,71 @@
 # v1.12.0 Handoff — Conversational AI Assistant
 
 > Use this document to get up to speed at the start of a new session.
-> Last updated: 2026-02-27 — Phase 6 complete, ready for Phase 7.
+> Last updated: 2026-02-27 — Phase 7 complete, ready for Phase 8.
 
 ---
 
 ## Current State
 
 - **Version**: 1.11.0 (synced across `tauri.conf.json`, `package.json`, `Cargo.toml`)
-- **Branch**: master — Phase 1+2+3+4+5+6 committed and pushed to GitHub
+- **Branch**: master — Phase 1+2+3+4+5+6+7 committed and pushed to GitHub
 - **Release**: v1.11.0 tag pushed and release built successfully
-- **Tests**: 394 Rust + 568 frontend = 962 total (all passing)
+- **Tests**: 402 Rust + 575 frontend = 977 total (all passing)
 - **DB schema**: v24 (29 tables — 23 original + 6 new AI tables, WAL mode, SQLite via rusqlite bundled)
 - **Design phase**: Complete — 11 design documents in `docs/ai-design/`
-- **Implementation plan**: Complete — 7 phases in `docs/ai-design/implementation_plan/`
+- **Implementation plan**: Complete — 13 phases in `docs/ai-design/implementation_plan/`
 - **Phase 1**: COMPLETE — Schema v24 + AES-256-GCM encryption (QA reviewed, all fixes applied)
 - **Phase 2**: COMPLETE — Provider refactor + SSE streaming (QA reviewed, all fixes applied)
 - **Phase 3**: COMPLETE — Models + CRUD + Memory Vault (QA reviewed, all fixes applied)
 - **Phase 4**: COMPLETE — Conversation Service + Core Commands (QA reviewed, all fixes applied)
 - **Phase 5**: COMPLETE — Frontend `/assistant` route + chat UI (QA reviewed, all fixes applied)
 - **Phase 6**: COMPLETE — Overlay assistant panel + cross-window sync (QA reviewed, all fixes applied)
-- **Next step**: Begin Phase 7 (Hidden Messages + Stale Conversation Reset)
+- **Phase 7**: COMPLETE — Hidden messages + stale conversation reset (QA reviewed, all fixes applied)
+- **Next step**: Begin Phase 8 (Backend Inactivity Timer)
+
+---
+
+## Phase 7 Completion Summary
+
+**Hidden Messages + Stale Conversation Reset** — completed 2026-02-27.
+
+### What Was Built
+- **Hidden message flag**: Auto-greeting prompts ("Introduce yourself...") are no longer persisted in the database — only the AI's response is stored. The `hidden` flag threads through the full pipeline: frontend hook → Tauri API → command → conversation service → CacheDb `store_message_pair`.
+- **Stale conversation reset**: If a user opens chat and the only content is a stale greeting (>24h old, no user messages), the conversation is silently discarded via `abandon_conversation` and a fresh one starts automatically.
+- **`abandon_conversation`**: New lightweight "end without compaction" — marks conversation ended, resets message count to 0, deletes all messages in a single transaction. Used for stale conversations with no meaningful user interaction.
+- **`check_conversation_stale`**: New Tauri command — checks `has_user_messages` + 24h age threshold in a single DB lock scope.
+- **Error-resilient stale check**: `loadAndGreet` effect wraps the stale check in try/catch — if the check fails, falls through to normal flow (load history + greeting).
+- **Ref-based effect optimization**: `isFirstConversation` and `onStaleReset` use refs to prevent unnecessary effect re-runs.
+- **15 new tests** (962 → 977 total): 8 Rust (store_message_pair skip, abandon, has_user_messages, get_conversation_started_at) + 7 frontend (stale reset flows, error paths, hidden flag forwarding)
+
+### Files Modified (13 files)
+| File | Change |
+|------|--------|
+| `src-tauri/src/services/cache_db.rs` | `store_message_pair` + `skip_user_message` param; new `abandon_conversation`, `has_user_messages`, `get_conversation_started_at` methods; 8 new tests |
+| `src-tauri/src/services/ai/conversation.rs` | `send_message_and_stream` + `skip_user_persist` param |
+| `src-tauri/src/commands/ai.rs` | `send_message` + `hidden` param; new `abandon_conversation` + `check_conversation_stale` commands |
+| `src-tauri/src/lib.rs` | Registered 2 new commands |
+| `src/services/tauri.ts` | `sendMessage` + `hidden` param; new `abandonConversation` + `checkConversationStale` methods |
+| `src/hooks/useConversation.ts` | Forwards `hidden` flag to API call |
+| `src/components/assistant/AssistantChat.tsx` | Stale check on mount, `onStaleReset` prop, ref-based effect deps, try/catch error recovery |
+| `src/components/assistant/AssistantView.tsx` | `handleStaleReset` callback |
+| `src/components/overlay/OverlayAssistant.tsx` | `handleStaleReset` callback with `mountedRef` guard |
+| `src/components/assistant/AssistantChat.test.tsx` | 3 new stale-reset tests + 1 error path test + updated greeting assertions |
+| `src/components/assistant/AssistantView.test.tsx` | 1 new stale reset test + updated mocks |
+| `src/components/overlay/OverlayAssistant.test.tsx` | 1 new stale reset test + updated mocks |
+| `src/hooks/useConversation.test.ts` | 1 new hidden flag test + updated assertions |
+
+### QA Fixes Applied
+1. **Effect dependency optimization (MEDIUM)**: Moved `isFirstConversation` and `onStaleReset` to refs synced each render — prevents unnecessary stale-check re-runs when props change identity
+2. **Error-resilient stale check (MEDIUM)**: Wrapped stale check in try/catch — if `checkConversationStale` or `abandonConversation` throws, falls through to normal load+greet flow
+3. **Data hygiene (LOW)**: `abandon_conversation` now resets `message_count = 0` on the conversation row
+4. **Test coverage (HIGH)**: Added stale-reset tests for AssistantView and OverlayAssistant, error path test for AssistantChat
+
+### Architecture Decisions
+- **Hidden flag is `Option<bool>`** at the command level — defaults to false, existing callers don't need to change
+- **`abandon_conversation` is a CacheDb method** (not on conversation service) — no compaction, no encryption key needed, just DB cleanup
+- **Stale check is a Tauri command** (not frontend-only) — single DB lock scope, no round-trip overhead
+- **Ref pattern for effect deps** — `onStaleReset` and `isFirstConversation` are stable across renders, preventing the stale-check effect from re-firing unnecessarily
 
 ---
 
@@ -323,7 +368,7 @@ The build is broken into 13 sequential phases in `docs/ai-design/implementation_
 | [4](ai-design/implementation_plan/phase-4-conversation-service.md) | Conversation service | Rust | **DONE** |
 | [5](ai-design/implementation_plan/phase-5-frontend-route.md) | `/assistant` route + chat UI | Frontend | **DONE** |
 | [6](ai-design/implementation_plan/phase-6-overlay-panel.md) | Overlay panel | Frontend | **DONE** |
-| [7](ai-design/implementation_plan/phase-7-hidden-messages-stale-reset.md) | Ephemeral greeting + stale conversation reset | Both | **NEXT** |
+| [7](ai-design/implementation_plan/phase-7-hidden-messages-stale-reset.md) | Ephemeral greeting + stale conversation reset | Both | **DONE** |
 | [8](ai-design/implementation_plan/phase-8-backend-inactivity-timer.md) | Backend tokio timer + frontend hook refactor | Both | |
 | [9](ai-design/implementation_plan/phase-9-ux-polish.md) | End button, journaling splash, game session context | Both | |
 | [10](ai-design/implementation_plan/phase-10-error-recovery.md) | Orphan recovery, compaction retry, clipboard failsafe | Both | |
