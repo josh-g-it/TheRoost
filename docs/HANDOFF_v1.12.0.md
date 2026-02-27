@@ -1,16 +1,16 @@
 # v1.12.0 Handoff — Conversational AI Assistant
 
 > Use this document to get up to speed at the start of a new session.
-> Last updated: 2026-02-27 — Phase 4 complete, ready for Phase 5.
+> Last updated: 2026-02-27 — Phase 5 complete, ready for Phase 6.
 
 ---
 
 ## Current State
 
 - **Version**: 1.11.0 (synced across `tauri.conf.json`, `package.json`, `Cargo.toml`)
-- **Branch**: master — Phase 1+2+3+4 committed and pushed to GitHub
+- **Branch**: master — Phase 1+2+3+4+5 committed and pushed to GitHub
 - **Release**: v1.11.0 tag pushed and release built successfully
-- **Tests**: 394 Rust + 478 frontend = 872 total (all passing)
+- **Tests**: 394 Rust + 544 frontend = 938 total (all passing)
 - **DB schema**: v24 (29 tables — 23 original + 6 new AI tables, WAL mode, SQLite via rusqlite bundled)
 - **Design phase**: Complete — 11 design documents in `docs/ai-design/`
 - **Implementation plan**: Complete — 7 phases in `docs/ai-design/implementation_plan/`
@@ -18,7 +18,75 @@
 - **Phase 2**: COMPLETE — Provider refactor + SSE streaming (QA reviewed, all fixes applied)
 - **Phase 3**: COMPLETE — Models + CRUD + Memory Vault (QA reviewed, all fixes applied)
 - **Phase 4**: COMPLETE — Conversation Service + Core Commands (QA reviewed, all fixes applied)
-- **Next step**: Begin Phase 5 (Frontend `/assistant` route + chat UI)
+- **Phase 5**: COMPLETE — Frontend `/assistant` route + chat UI (QA reviewed, all fixes applied)
+- **Next step**: Begin Phase 6 (Overlay panel) — but user wants retrospective on Phases 1-5 first
+
+---
+
+## Phase 5 Completion Summary
+
+**Frontend `/assistant` Route + Chat UI** — completed 2026-02-27.
+
+### What Was Built
+- **`/assistant` route**: Full page with avatar panel (colored initial circle, name, personality, status) + tabbed content (Chat, Memories, Journals, Avatar)
+- **Chat engine**: `AssistantChat.tsx` — streaming message display, markdown rendering (`react-markdown` + `remark-gfm`), speech recognition mic button, error/retry, auto-scroll
+- **3 custom hooks**: `useConversation` (streaming, message management, event listener), `useInactivityTimer` (1hr countdown, session-aware pause), `useSpeechRecognition` (Web Speech API)
+- **Sub-pages**: `AssistantMemories` (category filters, search, system memory protection), `AssistantJournals` (date-sorted, delete confirmation), `AssistantAvatars` (list/create/switch avatars, personality browser)
+- **First-run wizard**: `AssistantFirstRun` — automatic encryption key generation + avatar creation + personality picker
+- **Action/Review components**: `ActionConfirmation` (Tier 2 yes/no), `ReviewConfirmation` (star display + editable review text)
+- **Navigation**: "Assistant" added to sidebar right after Library (prominent position)
+- **66 new frontend tests** (478 → 544 total): 7 hook tests, 8 chat tests, 7 memories tests, 6 first-run tests, 6 view tests, 6 journals tests, 6 avatars tests + 13 streaming/speech/guard tests added during QA
+- **New dependencies**: `react-markdown` v10.1.0, `remark-gfm` v4.0.1
+
+### Files Created (27 new files)
+| File | Purpose |
+|------|---------|
+| `src/types/assistant.ts` | 9 TypeScript interfaces mirroring Rust types |
+| `src/utils/avatarColors.ts` | Shared avatar color utility (extracted from components) |
+| `src/hooks/useConversation.ts` | Chat engine hook (streaming, messages, retry) |
+| `src/hooks/useInactivityTimer.ts` | Countdown timer with session-aware pause |
+| `src/hooks/useSpeechRecognition.ts` | Web Speech API wrapper |
+| `src/components/assistant/AssistantView.tsx` + `.css` | Main `/assistant` route component |
+| `src/components/assistant/AssistantChat.tsx` + `.css` | Shared chat engine |
+| `src/components/assistant/AssistantMemories.tsx` + `.css` | Memory vault viewer |
+| `src/components/assistant/AssistantJournals.tsx` + `.css` | Journal/daily log viewer |
+| `src/components/assistant/AssistantAvatars.tsx` + `.css` | Avatar/personality management |
+| `src/components/assistant/AssistantFirstRun.tsx` + `.css` | First-time setup wizard |
+| `src/components/assistant/ActionConfirmation.tsx` + `.css` | Tier 2 action confirmation |
+| `src/components/assistant/ReviewConfirmation.tsx` + `.css` | Review confirmation card |
+| 9 test files | Tests for all hooks and components |
+
+### Files Modified
+| File | Change |
+|------|--------|
+| `src/App.tsx` | Added `/assistant` route with `RouteErrorFallback` |
+| `src/components/layout/IconRail.tsx` | Added "Assistant" nav item after Library |
+| `src/services/tauri.ts` | Added `assistantApi` namespace (20 commands) |
+| `src/test/factories.ts` | Added 5 AI factory functions |
+| `src/types/index.ts` | Added assistant type re-exports |
+| `src/types/settings.ts` | Added `aiPostSessionReviewEnabled` field |
+| `src/utils/icons.ts` | Added `"assistant"` icon in all 6 icon sets |
+| `package.json` | Added react-markdown, remark-gfm |
+
+### QA Fixes Applied
+1. **Timer infinite loop (HIGH)**: Inactivity timer fired `onTimeout` every second after reaching 0 — added `prev <= 0` guard
+2. **Streaming guard (HIGH)**: `sendMessage`/`retry` had no `isStreaming` guard at hook level — added `isStreamingRef` guards
+3. **Markdown link sanitization (MEDIUM)**: Added custom `components` prop to filter `javascript:`/`vbscript:`/`data:` URIs, add `target="_blank"`, disable image rendering
+4. **Timeout race guard (MEDIUM)**: Added `isEndingRef` to prevent multiple concurrent `endConversation` calls
+5. **Avatar switch cleanup (MEDIUM)**: Added `endConversation` call before switching avatars
+6. **Error handling (MEDIUM)**: Converted `handleFirstRunComplete` from unhandled `.then()` chains to `async/await` with try/catch
+7. **StarRating scale (LOW)**: Fixed `ReviewConfirmation` to use `stars * 2` for the 0-10 scale
+8. **Message clearing (LOW)**: Clear messages/error/streamText when `conversationId` changes
+9. **DRY (LOW)**: Extracted `AVATAR_COLORS`/`getAvatarColor` to shared `avatarColors.ts` utility
+10. **Input limit (LOW)**: Added `maxLength={10000}` to chat input
+11. **Test coverage (HIGH)**: Fixed streaming tests (captured listen callback), speech recognition tests (captured instances), added AssistantJournals + AssistantAvatars test files
+
+### Architecture Decisions
+- **"Assistant" nav position**: Right after Library — prominent placement as a primary feature
+- **Avatar panel (Phase 5)**: Colored initial circle with name/personality/status — sprite maps deferred to v1.12.5
+- **Markdown rendering**: `react-markdown` + `remark-gfm` with custom link sanitization and disabled images
+- **First-run wizard**: Encryption is automatic (key never displayed to user) — simplified to just avatar creation + personality selection
+- **Corrected API signatures**: `sendMessage`, `endConversation`, `retryCompaction` all require `avatarId` (not in original plan)
 
 ---
 
