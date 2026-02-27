@@ -87,10 +87,10 @@ export const OVERLAY_PANELS: OverlayPanelDef[] = [
     icon: "assistant",
     defaultPosition: () => ({
       x: Math.round((window.innerWidth - sx(650)) / 2),
-      y: sy(880), // centered below command center (CC bottom ~860 + 20px gap)
+      y: sy(820), // centered below command center (CC bottom ~860 + 20px gap)
     }),
     defaultWidth: sx(650),
-    defaultHeight: sy(500),
+    defaultHeight: sy(620),
     resizable: true,
   },
 ];
