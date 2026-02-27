@@ -17,9 +17,7 @@ src-tauri/target/
 .claude/
 
 # Internal dev docs
-docs/audit/
-docs/Active_Phase.md
-docs/PHASE_*_*.md
+docs/
 PLAN-*.md
 
 # Tauri auto-generated schemas (regenerated on build)
