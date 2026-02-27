@@ -1,0 +1,267 @@
+/* ── Assistant Chat ───────────────────────────────────────────── */
+.assistant-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.assistant-chat--compact {
+  max-height: 400px;
+}
+
+/* ── Message List ────────────────────────────────────────────── */
+.assistant-chat__messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.assistant-chat__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 3rem 1rem;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  flex: 1;
+}
+
+.assistant-chat__empty p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+/* ── Message Bubbles ─────────────────────────────────────────── */
+.assistant-chat__message {
+  max-width: 80%;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.assistant-chat__message--user {
+  align-self: flex-end;
+  background: var(--color-accent-primary);
+  color: var(--color-text-on-accent, #fff);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.assistant-chat__message--assistant {
+  align-self: flex-start;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+.assistant-chat__message--system {
+  align-self: center;
+  background: none;
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+  font-style: italic;
+  padding: 0.35rem 0.65rem;
+}
+
+/* ── Markdown in assistant messages ──────────────────────────── */
+.assistant-chat__message--assistant p {
+  margin: 0 0 0.5em;
+}
+
+.assistant-chat__message--assistant p:last-child {
+  margin-bottom: 0;
+}
+
+.assistant-chat__message--assistant code {
+  background: var(--color-bg-hover);
+  padding: 0.1em 0.3em;
+  border-radius: var(--radius-sm);
+  font-size: 0.8em;
+}
+
+.assistant-chat__message--assistant pre {
+  background: var(--color-bg-primary);
+  padding: 0.75rem;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.assistant-chat__message--assistant pre code {
+  background: none;
+  padding: 0;
+}
+
+.assistant-chat__message--assistant ul,
+.assistant-chat__message--assistant ol {
+  margin: 0.25em 0 0.5em;
+  padding-left: 1.5em;
+}
+
+.assistant-chat__message--assistant li {
+  margin: 0.15em 0;
+}
+
+/* ── Streaming Bubble ────────────────────────────────────────── */
+.assistant-chat__streaming {
+  align-self: flex-start;
+  max-width: 80%;
+  padding: 0.65rem 0.85rem;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.assistant-chat__streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--color-accent-primary);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ── Error Bar ───────────────────────────────────────────────── */
+.assistant-chat__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  background: color-mix(in srgb, var(--color-danger, #ef4444) 10%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-danger, #ef4444) 30%, transparent);
+  font-size: 0.8rem;
+  color: var(--color-danger, #ef4444);
+}
+
+.assistant-chat__error-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-chat__retry-btn {
+  padding: 0.3rem 0.65rem;
+  background: none;
+  border: 1px solid var(--color-danger, #ef4444);
+  border-radius: var(--radius-sm);
+  color: var(--color-danger, #ef4444);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 0.5rem;
+  transition:
+    background var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.assistant-chat__retry-btn:hover {
+  background: color-mix(in srgb, var(--color-danger, #ef4444) 15%, transparent);
+}
+
+/* ── Input Bar ───────────────────────────────────────────────── */
+.assistant-chat__input-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-secondary);
+}
+
+.assistant-chat__input {
+  flex: 1;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.assistant-chat__input:focus {
+  border-color: var(--color-accent-primary);
+}
+
+.assistant-chat__input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.assistant-chat__send-btn,
+.assistant-chat__mic-btn,
+.assistant-chat__end-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.assistant-chat__send-btn {
+  background: var(--color-accent-primary);
+  color: var(--color-text-on-accent, #fff);
+}
+
+.assistant-chat__send-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.assistant-chat__send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.assistant-chat__mic-btn {
+  background: none;
+  color: var(--color-text-tertiary);
+}
+
+.assistant-chat__mic-btn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.assistant-chat__mic-btn--active {
+  color: var(--color-danger, #ef4444);
+}
+
+.assistant-chat__end-btn {
+  background: none;
+  color: var(--color-text-tertiary);
+}
+
+.assistant-chat__end-btn:hover {
+  color: var(--color-danger, #ef4444);
+  background: color-mix(in srgb, var(--color-danger, #ef4444) 10%, transparent);
+}

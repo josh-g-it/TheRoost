@@ -1,0 +1,220 @@
+/* ── Assistant Memories ───────────────────────────────────────── */
+.assistant-memories {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.assistant-memories__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  flex-wrap: wrap;
+}
+
+.assistant-memories__search {
+  flex: 1;
+  min-width: 150px;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.4rem 0.65rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.assistant-memories__search:focus {
+  border-color: var(--color-accent-primary);
+}
+
+.assistant-memories__search::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+/* ── Category Chips ──────────────────────────────────────────── */
+.assistant-memories__chips {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.assistant-memories__chip {
+  padding: 0.25rem 0.6rem;
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.assistant-memories__chip:hover {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-border);
+}
+
+.assistant-memories__chip--active {
+  background: color-mix(in srgb, var(--color-accent-primary) 15%, transparent);
+  color: var(--color-accent-primary);
+  border-color: var(--color-accent-primary);
+}
+
+/* ── Memory List ─────────────────────────────────────────────── */
+.assistant-memories__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.assistant-memories__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 3rem 1rem;
+  color: var(--color-text-tertiary);
+  text-align: center;
+}
+
+.assistant-memories__empty p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+/* ── Memory Card ─────────────────────────────────────────────── */
+.memory-card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  transition: border-color var(--transition-fast);
+}
+
+.memory-card:hover {
+  border-color: var(--color-border);
+}
+
+.memory-card--system {
+  border-left: 3px solid var(--color-accent-primary);
+}
+
+.memory-card__content {
+  font-size: 0.8rem;
+  color: var(--color-text-primary);
+  line-height: 1.4;
+  margin: 0 0 0.5rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.memory-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.memory-card__category {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent-primary) 12%, transparent);
+  color: var(--color-accent-primary);
+}
+
+.memory-card__importance {
+  font-size: 0.65rem;
+  color: var(--color-text-tertiary);
+}
+
+.memory-card__date {
+  font-size: 0.65rem;
+  color: var(--color-text-tertiary);
+  margin-left: auto;
+}
+
+.memory-card__delete {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  margin-left: 0.5rem;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.memory-card__delete:hover {
+  color: var(--color-danger, #ef4444);
+  background: color-mix(in srgb, var(--color-danger, #ef4444) 10%, transparent);
+}
+
+/* ── Delete Confirmation ─────────────────────────────────────── */
+.memory-card__confirm {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.memory-card__confirm-text {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.memory-card__confirm-yes,
+.memory-card__confirm-no {
+  padding: 3px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.memory-card__confirm-yes {
+  background: var(--color-danger, #ef4444);
+  color: #fff;
+}
+
+.memory-card__confirm-yes:hover {
+  opacity: 0.85;
+}
+
+.memory-card__confirm-no {
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+}
+
+.memory-card__confirm-no:hover {
+  background: var(--color-border-subtle);
+}

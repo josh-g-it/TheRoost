@@ -54,4 +54,5 @@ export interface AppSettings {
   cloudAiContextScope?: string;
   cloudAiExcludedGames?: string[];
   cloudAiIncludedGames?: string[];
+  aiPostSessionReviewEnabled?: boolean;
 }

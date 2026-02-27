@@ -1,0 +1,102 @@
+/* ── Assistant First Run ──────────────────────────────────────── */
+.assistant-first-run {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 2rem;
+  gap: 1.5rem;
+  text-align: center;
+}
+
+.assistant-first-run__icon {
+  color: var(--color-accent-primary);
+}
+
+.assistant-first-run__title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.assistant-first-run__subtitle {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.assistant-first-run__status {
+  font-size: 0.8rem;
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+/* ── Form ────────────────────────────────────────────────────── */
+.assistant-first-run__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 360px;
+  text-align: left;
+}
+
+.assistant-first-run__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.assistant-first-run__input,
+.assistant-first-run__select {
+  width: 100%;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.assistant-first-run__input:focus,
+.assistant-first-run__select:focus {
+  border-color: var(--color-accent-primary);
+}
+
+.assistant-first-run__submit {
+  align-self: center;
+  padding: 0.55rem 1.5rem;
+  background: var(--color-accent-primary);
+  color: var(--color-text-on-accent, #fff);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.assistant-first-run__submit:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.assistant-first-run__submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.assistant-first-run__error {
+  font-size: 0.8rem;
+  color: var(--color-danger, #ef4444);
+  text-align: center;
+}

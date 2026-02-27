@@ -112,6 +112,17 @@ export type {
   CloudProvider,
   CloudAiUsage,
 } from "./ai";
+export type {
+  AiPersonality,
+  AiAvatar,
+  AiConversation,
+  AiMessage,
+  AiMemory,
+  AiDailyLog,
+  StreamChunk,
+  ActionSuggestion,
+  ReviewConfirmationData,
+} from "./assistant";
 export type { UpdateInfo } from "./updater";
 export type {
   RecapData,

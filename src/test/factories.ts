@@ -4,6 +4,11 @@ import type {
   LibraryFilters,
   GameSession,
   RecapData,
+  AiAvatar,
+  AiMessage,
+  AiMemory,
+  AiPersonality,
+  AiDailyLog,
 } from "../types";
 import type { ShelfConfig } from "../types/shelf";
 import { DEFAULT_SHELF_FILTERS } from "../types/shelf";
@@ -163,4 +168,84 @@ export function makeInstallProgress(
 /** Convert a date string like "2026-02-18" to a Unix timestamp at noon. */
 export function ts(dateStr: string): number {
   return Math.floor(new Date(dateStr + "T12:00:00").getTime() / 1000);
+}
+
+export function makeAiAvatar(id: string, overrides?: Partial<AiAvatar>): AiAvatar {
+  return {
+    id,
+    name: `Avatar ${id}`,
+    personalityId: "p1",
+    imagePath: null,
+    isActive: true,
+    createdAt: "2026-02-27T12:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeAiMessage(
+  id: string,
+  conversationId: string,
+  overrides?: Partial<AiMessage>,
+): AiMessage {
+  return {
+    id,
+    conversationId,
+    role: "user",
+    content: `Message ${id}`,
+    createdAt: "2026-02-27T12:00:00Z",
+    tokenEstimate: 10,
+    ...overrides,
+  };
+}
+
+export function makeAiMemory(
+  id: string,
+  avatarId: string,
+  overrides?: Partial<AiMemory>,
+): AiMemory {
+  return {
+    id,
+    avatarId,
+    conversationId: null,
+    content: `Memory ${id}`,
+    importance: 5,
+    category: "general",
+    isSystem: false,
+    createdAt: "2026-02-27T12:00:00Z",
+    lastReferenced: null,
+    supersededBy: null,
+    active: true,
+    ...overrides,
+  };
+}
+
+export function makeAiPersonality(
+  id: string,
+  overrides?: Partial<AiPersonality>,
+): AiPersonality {
+  return {
+    id,
+    name: `Personality ${id}`,
+    promptText: "You are a helpful assistant.",
+    isBuiltin: true,
+    createdAt: "2026-02-27T12:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeAiDailyLog(
+  id: string,
+  avatarId: string,
+  conversationId: string,
+  overrides?: Partial<AiDailyLog>,
+): AiDailyLog {
+  return {
+    id,
+    avatarId,
+    conversationId,
+    logDate: "2026-02-27",
+    summary: `Journal entry ${id}`,
+    createdAt: "2026-02-27T12:00:00Z",
+    ...overrides,
+  };
 }

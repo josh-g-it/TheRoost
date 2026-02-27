@@ -13,6 +13,7 @@ import "./IconRail.css";
 
 const navItems: { path: string; label: string; icon: IconName }[] = [
   { path: "/library", label: "Library", icon: "library" },
+  { path: "/assistant", label: "Assistant", icon: "assistant" },
   { path: "/activity", label: "Activity", icon: "activity" },
   { path: "/profile", label: "Profile", icon: "profile" },
   { path: "/notes", label: "Notes", icon: "notes" },

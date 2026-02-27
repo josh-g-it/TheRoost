@@ -35,6 +35,11 @@ import type {
   UpdateInfo,
   RecapData,
   RecapSummary,
+  AiAvatar,
+  AiPersonality,
+  AiMessage,
+  AiMemory,
+  AiDailyLog,
 } from "../types";
 
 export const steamApi = {
@@ -455,4 +460,39 @@ export const steamInstallApi = {
   installGame: (sourceId: string) => invoke<void>("steam_install_game", { sourceId }),
   uninstallGame: (sourceId: string) => invoke<void>("steam_uninstall_game", { sourceId }),
   updateGame: (sourceId: string) => invoke<void>("steam_update_game", { sourceId }),
+};
+
+// ── AI Assistant ─────────────────────────────────────────────────
+
+export const assistantApi = {
+  startConversation: (avatarId: string) =>
+    invoke<string>("start_conversation", { avatarId }),
+  sendMessage: (conversationId: string, avatarId: string, message: string) =>
+    invoke<void>("send_message", { conversationId, avatarId, message }),
+  endConversation: (conversationId: string, avatarId: string) =>
+    invoke<void>("end_conversation", { conversationId, avatarId }),
+  getConversationHistory: (conversationId: string) =>
+    invoke<AiMessage[]>("get_conversation_history", { conversationId }),
+  retryCompaction: (conversationId: string, avatarId: string) =>
+    invoke<void>("retry_compaction", { conversationId, avatarId }),
+  listAvatars: () => invoke<AiAvatar[]>("list_avatars"),
+  getActiveAvatar: () => invoke<AiAvatar | null>("get_active_avatar"),
+  createAvatar: (name: string, personalityId: string) =>
+    invoke<AiAvatar>("create_avatar", { name, personalityId }),
+  switchAvatar: (avatarId: string) => invoke<void>("switch_avatar", { avatarId }),
+  listPersonalities: () => invoke<AiPersonality[]>("list_personalities"),
+  createPersonality: (name: string, promptText: string) =>
+    invoke<AiPersonality>("create_personality", { name, promptText }),
+  getMemories: (avatarId: string) => invoke<AiMemory[]>("get_memories", { avatarId }),
+  deleteMemory: (memoryId: string) => invoke<void>("delete_memory", { memoryId }),
+  getJournal: (avatarId: string) => invoke<AiDailyLog[]>("get_journal", { avatarId }),
+  deleteJournalEntry: (entryId: string) =>
+    invoke<void>("delete_journal_entry", { entryId }),
+  getMemoryContext: (avatarId: string) =>
+    invoke<string>("get_memory_context", { avatarId }),
+  generateEncryptionKey: () => invoke<void>("generate_encryption_key"),
+  checkEncryptionKeyExists: () => invoke<boolean>("check_encryption_key_exists"),
+  wipeAiMemory: () => invoke<void>("wipe_ai_memory"),
+  checkPostSessionReview: (gameId: string, durationMinutes: number) =>
+    invoke<boolean>("check_post_session_review", { gameId, durationMinutes }),
 };

@@ -15,6 +15,7 @@ import { ProfileView } from "./components/profile/ProfileView";
 import { NotesView } from "./components/notes/NotesView";
 import { NewsView } from "./components/news/NewsView";
 import { StorageView } from "./components/storage/StorageView";
+import { AssistantView } from "./components/assistant/AssistantView";
 
 const router = createBrowserRouter([
   {
@@ -24,6 +25,11 @@ const router = createBrowserRouter([
       {
         path: "/library",
         element: <LibraryView />,
+        errorElement: <RouteErrorFallback />,
+      },
+      {
+        path: "/assistant",
+        element: <AssistantView />,
         errorElement: <RouteErrorFallback />,
       },
       {

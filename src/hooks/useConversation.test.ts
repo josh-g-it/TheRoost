@@ -1,0 +1,324 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { renderHook, act } from "@testing-library/react";
+import { useConversation } from "./useConversation";
+import type { StreamChunk } from "../types";
+
+let streamCallback: ((event: { payload: StreamChunk }) => void) | null = null;
+const mockUnlisten = vi.fn();
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(
+    (eventName: string, callback: (event: { payload: StreamChunk }) => void) => {
+      if (eventName === "ai-stream-chunk") {
+        streamCallback = callback;
+      }
+      return Promise.resolve(mockUnlisten);
+    },
+  ),
+}));
+
+const mockSendMessage = vi.fn();
+const mockEndConversation = vi.fn();
+const mockGetConversationHistory = vi.fn();
+
+vi.mock("../services/tauri", () => ({
+  assistantApi: {
+    sendMessage: (...args: unknown[]) => mockSendMessage(...args),
+    endConversation: (...args: unknown[]) => mockEndConversation(...args),
+    getConversationHistory: (...args: unknown[]) => mockGetConversationHistory(...args),
+  },
+}));
+
+describe("useConversation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    streamCallback = null;
+    mockSendMessage.mockResolvedValue(undefined);
+    mockEndConversation.mockResolvedValue(undefined);
+    mockGetConversationHistory.mockResolvedValue([]);
+  });
+
+  it("starts with empty messages and not streaming", () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    expect(result.current.messages).toEqual([]);
+    expect(result.current.isStreaming).toBe(false);
+    expect(result.current.error).toBeNull();
+    expect(result.current.currentStreamText).toBe("");
+  });
+
+  it("sendMessage calls API with correct params and adds user message", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    await act(async () => {
+      await result.current.sendMessage("Hello there");
+    });
+
+    expect(mockSendMessage).toHaveBeenCalledWith("c1", "a1", "Hello there");
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].role).toBe("user");
+    expect(result.current.messages[0].content).toBe("Hello there");
+  });
+
+  it("sets isStreaming to true after sendMessage", async () => {
+    mockSendMessage.mockReturnValue(new Promise(() => {}));
+
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    act(() => {
+      result.current.sendMessage("Hello");
+    });
+
+    expect(result.current.isStreaming).toBe(true);
+  });
+
+  it("sets error on API failure", async () => {
+    mockSendMessage.mockRejectedValue({ message: "Network error" });
+
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    await act(async () => {
+      await result.current.sendMessage("Hello");
+    });
+
+    expect(result.current.error).toBe("Network error");
+    expect(result.current.isStreaming).toBe(false);
+  });
+
+  it("endConversation calls API with correct params", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    await act(async () => {
+      await result.current.endConversation();
+    });
+
+    expect(mockEndConversation).toHaveBeenCalledWith("c1", "a1");
+  });
+
+  it("loadHistory fetches and sets messages", async () => {
+    const historyMessages = [
+      {
+        id: "m1",
+        conversationId: "c1",
+        role: "user" as const,
+        content: "Hi",
+        createdAt: "2026-02-27T12:00:00Z",
+        tokenEstimate: 1,
+      },
+      {
+        id: "m2",
+        conversationId: "c1",
+        role: "assistant" as const,
+        content: "Hello!",
+        createdAt: "2026-02-27T12:01:00Z",
+        tokenEstimate: 2,
+      },
+    ];
+    mockGetConversationHistory.mockResolvedValue(historyMessages);
+
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    await act(async () => {
+      await result.current.loadHistory("c1");
+    });
+
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages[0].content).toBe("Hi");
+    expect(result.current.messages[1].content).toBe("Hello!");
+  });
+
+  it("retry re-sends the last user message", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    // Wait for listen to register
+    await act(async () => {});
+
+    await act(async () => {
+      await result.current.sendMessage("Hello");
+    });
+
+    // Complete the streaming cycle with a final chunk so isStreaming resets
+    act(() => {
+      streamCallback!({
+        payload: { conversationId: "c1", text: "Response", isFinal: true },
+      });
+    });
+
+    expect(result.current.isStreaming).toBe(false);
+    mockSendMessage.mockClear();
+
+    await act(async () => {
+      await result.current.retry();
+    });
+
+    expect(mockSendMessage).toHaveBeenCalledWith("c1", "a1", "Hello");
+  });
+
+  it("guards sendMessage while streaming", async () => {
+    mockSendMessage.mockReturnValue(new Promise(() => {}));
+
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    // Start first message (streaming starts)
+    act(() => {
+      result.current.sendMessage("First");
+    });
+
+    expect(result.current.isStreaming).toBe(true);
+    mockSendMessage.mockClear();
+
+    // Second call should be guarded
+    await act(async () => {
+      await result.current.sendMessage("Second");
+    });
+
+    expect(mockSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("guards retry while streaming", async () => {
+    mockSendMessage.mockReturnValueOnce(Promise.resolve());
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    // Send initial message
+    await act(async () => {
+      await result.current.sendMessage("Hello");
+    });
+
+    // Start a second message to enter streaming state
+    mockSendMessage.mockReturnValue(new Promise(() => {}));
+    act(() => {
+      result.current.sendMessage("Second");
+    });
+
+    expect(result.current.isStreaming).toBe(true);
+    mockSendMessage.mockClear();
+
+    // Retry should be guarded
+    await act(async () => {
+      await result.current.retry();
+    });
+
+    expect(mockSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("accumulates streaming text from non-final chunks", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    // Wait for effect to register listen callback
+    await act(async () => {});
+
+    expect(streamCallback).not.toBeNull();
+
+    // Send a message to start streaming
+    await act(async () => {
+      await result.current.sendMessage("Hello");
+    });
+
+    // Fire non-final chunks
+    act(() => {
+      streamCallback!({
+        payload: { conversationId: "c1", text: "Hello ", isFinal: false },
+      });
+    });
+
+    expect(result.current.currentStreamText).toBe("Hello ");
+
+    act(() => {
+      streamCallback!({
+        payload: { conversationId: "c1", text: "world", isFinal: false },
+      });
+    });
+
+    expect(result.current.currentStreamText).toBe("Hello world");
+  });
+
+  it("adds assistant message on final chunk and resets streaming", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    await act(async () => {});
+
+    // Send a message to start streaming
+    await act(async () => {
+      await result.current.sendMessage("Hello");
+    });
+
+    expect(result.current.isStreaming).toBe(true);
+
+    // Fire a non-final chunk
+    act(() => {
+      streamCallback!({ payload: { conversationId: "c1", text: "Hi ", isFinal: false } });
+    });
+
+    // Fire the final chunk
+    act(() => {
+      streamCallback!({
+        payload: { conversationId: "c1", text: "there!", isFinal: true },
+      });
+    });
+
+    expect(result.current.isStreaming).toBe(false);
+    expect(result.current.currentStreamText).toBe("");
+    // Messages should have: user message + assistant message
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages[1].role).toBe("assistant");
+    expect(result.current.messages[1].content).toBe("Hi there!");
+  });
+
+  it("ignores chunks with wrong conversationId", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    await act(async () => {});
+
+    // Send a message to start streaming
+    await act(async () => {
+      await result.current.sendMessage("Hello");
+    });
+
+    // Fire a chunk with wrong conversationId
+    act(() => {
+      streamCallback!({
+        payload: { conversationId: "c-other", text: "Wrong!", isFinal: false },
+      });
+    });
+
+    expect(result.current.currentStreamText).toBe("");
+  });
+
+  it("calls unlisten on unmount", async () => {
+    const { unmount } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    await act(async () => {});
+
+    unmount();
+
+    // The unlisten promise resolves to the mock fn, which then gets called
+    await act(async () => {});
+    expect(mockUnlisten).toHaveBeenCalled();
+  });
+});

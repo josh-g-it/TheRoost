@@ -1,0 +1,53 @@
+/* ── Action Confirmation ──────────────────────────────────────── */
+.action-confirmation {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.action-confirmation__description {
+  font-size: 0.85rem;
+  color: var(--color-text-primary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.action-confirmation__actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.action-confirmation__btn {
+  padding: 0.4rem 0.85rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.action-confirmation__btn--confirm {
+  background: var(--color-accent-primary);
+  color: var(--color-text-on-accent, #fff);
+}
+
+.action-confirmation__btn--confirm:hover {
+  opacity: 0.9;
+}
+
+.action-confirmation__btn--deny {
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+}
+
+.action-confirmation__btn--deny:hover {
+  background: var(--color-border-subtle);
+}
