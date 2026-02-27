@@ -2,11 +2,12 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+use chrono;
 use rusqlite::{params, Connection};
 use uuid::Uuid;
 
 use crate::models::achievement::GameAchievement;
-use crate::models::assistant::{AiAvatar, AiPersonality};
+use crate::models::assistant::{AiAvatar, AiConversation, AiPersonality};
 use crate::models::media_bookmark::MediaBookmark;
 use crate::models::metadata::{
     CategoryInfo, GenreInfo, ScreenshotInfo, SteamTagInfo, StoreMetadata,
@@ -122,6 +123,17 @@ pub struct AiDailyLogRow {
     pub log_date: String,
     pub summary: String,
     pub created_at: String,
+}
+
+/// Raw DB row for ai_messages — content is still encrypted.
+#[derive(Debug, Clone)]
+pub struct AiMessageRow {
+    pub id: String,
+    pub conversation_id: String,
+    pub role: String,
+    pub content: String,
+    pub created_at: String,
+    pub token_estimate: u32,
 }
 
 pub struct CacheDb {
@@ -3412,7 +3424,6 @@ impl CacheDb {
     // ── AI Memory CRUD (raw — content is encrypted) ─────────────────
 
     /// Get active system memories for an avatar (ordered by creation date).
-    #[allow(dead_code)]
     pub fn get_active_system_memories_raw(
         &self,
         avatar_id: &str,
@@ -3445,7 +3456,6 @@ impl CacheDb {
     }
 
     /// Get active vault (non-system) memories for an avatar, ordered by importance DESC.
-    #[allow(dead_code)]
     pub fn get_active_vault_memories_raw(
         &self,
         avatar_id: &str,
@@ -3480,7 +3490,6 @@ impl CacheDb {
     }
 
     /// Get high-importance memories from OTHER avatars (for cross-avatar sharing).
-    #[allow(dead_code)]
     pub fn get_cross_avatar_memories_raw(
         &self,
         avatar_id: &str,
@@ -3615,7 +3624,6 @@ impl CacheDb {
     }
 
     /// Soft-delete a batch of memories in a single transaction (used by pruning).
-    #[allow(dead_code)]
     pub fn soft_delete_memories_batch(&self, ids: &[String]) -> Result<(), AppError> {
         let tx = self.conn.unchecked_transaction()?;
         for id in ids {
@@ -3628,7 +3636,6 @@ impl CacheDb {
     }
 
     /// Count active non-system memories for an avatar.
-    #[allow(dead_code)]
     pub fn count_active_vault_memories(&self, avatar_id: &str) -> Result<u32, AppError> {
         let count: u32 = self.conn.query_row(
             "SELECT COUNT(*) FROM ai_memories WHERE avatar_id = ?1 AND active = 1 AND is_system = 0",
@@ -3639,7 +3646,6 @@ impl CacheDb {
     }
 
     /// Get IDs of the lowest-importance active vault memories (for pruning).
-    #[allow(dead_code)]
     pub fn get_lowest_importance_memories(
         &self,
         avatar_id: &str,
@@ -3683,7 +3689,6 @@ impl CacheDb {
     }
 
     /// Get recent journal entries for an avatar, newest first, with a limit.
-    #[allow(dead_code)]
     pub fn get_recent_journal_raw(
         &self,
         avatar_id: &str,
@@ -3736,6 +3741,200 @@ impl CacheDb {
         Ok(())
     }
 
+    // ── AI Conversation CRUD ───────────────────────────────────────────
+
+    /// Get the active (un-ended) conversation for an avatar.
+    pub fn get_active_conversation(
+        &self,
+        avatar_id: &str,
+    ) -> Result<Option<AiConversation>, AppError> {
+        let result = self.conn.query_row(
+            "SELECT id, avatar_id, started_at, ended_at, summary, message_count, compacted
+             FROM ai_conversations
+             WHERE avatar_id = ?1 AND ended_at IS NULL
+             ORDER BY started_at DESC
+             LIMIT 1",
+            params![avatar_id],
+            |row| {
+                Ok(AiConversation {
+                    id: row.get(0)?,
+                    avatar_id: row.get(1)?,
+                    started_at: row.get(2)?,
+                    ended_at: row.get(3)?,
+                    summary: row.get(4)?,
+                    message_count: row.get(5)?,
+                    compacted: row.get::<_, i32>(6)? != 0,
+                })
+            },
+        );
+        match result {
+            Ok(conv) => Ok(Some(conv)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(AppError::Database(e)),
+        }
+    }
+
+    /// Create a new conversation with a generated UUID.
+    pub fn create_ai_conversation(&self, avatar_id: &str) -> Result<AiConversation, AppError> {
+        let id = Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO ai_conversations (id, avatar_id, started_at, message_count, compacted)
+             VALUES (?1, ?2, datetime('now'), 0, 0)",
+            params![id, avatar_id],
+        )?;
+        let started_at: String = self.conn.query_row(
+            "SELECT started_at FROM ai_conversations WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        Ok(AiConversation {
+            id,
+            avatar_id: avatar_id.to_string(),
+            started_at,
+            ended_at: None,
+            summary: None,
+            message_count: 0,
+            compacted: false,
+        })
+    }
+
+    /// Set ended_at on a conversation (no compaction).
+    pub fn end_ai_conversation(&self, conversation_id: &str) -> Result<(), AppError> {
+        self.conn.execute(
+            "UPDATE ai_conversations SET ended_at = datetime('now') WHERE id = ?1",
+            params![conversation_id],
+        )?;
+        Ok(())
+    }
+
+    /// Mark conversation as fully compacted with encrypted summary.
+    #[allow(dead_code)]
+    pub fn complete_ai_conversation(
+        &self,
+        conversation_id: &str,
+        summary_encrypted: &str,
+    ) -> Result<(), AppError> {
+        self.conn.execute(
+            "UPDATE ai_conversations
+             SET ended_at = COALESCE(ended_at, datetime('now')),
+                 summary = ?2,
+                 compacted = 1
+             WHERE id = ?1",
+            params![conversation_id, summary_encrypted],
+        )?;
+        Ok(())
+    }
+
+    /// Insert a message. Content should be pre-encrypted.
+    #[allow(dead_code)]
+    pub fn insert_ai_message(
+        &self,
+        conversation_id: &str,
+        role: &str,
+        content_encrypted: &str,
+        token_estimate: u32,
+    ) -> Result<String, AppError> {
+        let id = Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO ai_messages (id, conversation_id, role, content, created_at, token_estimate)
+             VALUES (?1, ?2, ?3, ?4, datetime('now'), ?5)",
+            params![id, conversation_id, role, content_encrypted, token_estimate],
+        )?;
+        Ok(id)
+    }
+
+    /// Get all messages for a conversation, ordered chronologically. Content is encrypted.
+    pub fn get_ai_messages_raw(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Vec<AiMessageRow>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, conversation_id, role, content, created_at, token_estimate
+             FROM ai_messages
+             WHERE conversation_id = ?1
+             ORDER BY created_at ASC",
+        )?;
+        let rows = stmt
+            .query_map(params![conversation_id], |row| {
+                Ok(AiMessageRow {
+                    id: row.get(0)?,
+                    conversation_id: row.get(1)?,
+                    role: row.get(2)?,
+                    content: row.get(3)?,
+                    created_at: row.get(4)?,
+                    token_estimate: row.get(5)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Update message_count for a conversation.
+    #[allow(dead_code)]
+    pub fn update_ai_conversation_message_count(
+        &self,
+        conversation_id: &str,
+        count: u32,
+    ) -> Result<(), AppError> {
+        self.conn.execute(
+            "UPDATE ai_conversations SET message_count = ?2 WHERE id = ?1",
+            params![conversation_id, count],
+        )?;
+        Ok(())
+    }
+
+    /// Delete all messages for a conversation.
+    #[allow(dead_code)]
+    pub fn delete_ai_messages_for_conversation(
+        &self,
+        conversation_id: &str,
+    ) -> Result<(), AppError> {
+        self.conn.execute(
+            "DELETE FROM ai_messages WHERE conversation_id = ?1",
+            params![conversation_id],
+        )?;
+        Ok(())
+    }
+
+    /// Delete specific messages by ID (for mid-session summarization).
+    #[allow(dead_code)]
+    pub fn delete_ai_messages_by_ids(&self, ids: &[String]) -> Result<(), AppError> {
+        let tx = self.conn.unchecked_transaction()?;
+        for id in ids {
+            tx.execute("DELETE FROM ai_messages WHERE id = ?1", params![id])?;
+        }
+        tx.commit().map_err(AppError::Database)
+    }
+
+    /// Find un-ended conversations (crash recovery).
+    #[allow(dead_code)]
+    pub fn get_orphaned_conversations(&self) -> Result<Vec<String>, AppError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM ai_conversations WHERE ended_at IS NULL AND compacted = 0")?;
+        let ids = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<String>, _>>()?;
+        Ok(ids)
+    }
+
+    /// Get personality prompt_text by ID.
+    pub fn get_personality_prompt(&self, personality_id: &str) -> Result<String, AppError> {
+        let result = self.conn.query_row(
+            "SELECT prompt_text FROM ai_personalities WHERE id = ?1",
+            params![personality_id],
+            |row| row.get(0),
+        );
+        match result {
+            Ok(prompt) => Ok(prompt),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound(format!(
+                "Personality not found: {}",
+                personality_id
+            ))),
+            Err(e) => Err(AppError::Database(e)),
+        }
+    }
+
     // ── AI Data Wipe ────────────────────────────────────────────────
 
     /// Wipe all AI conversation data (messages, journal, memories, conversations).
@@ -3766,6 +3965,128 @@ impl CacheDb {
             params![conversation_id, avatar_id],
         )?;
         Ok(())
+    }
+
+    /// Complete a compaction: insert journal, insert memories, supersede old memories,
+    /// mark conversation complete, and delete raw messages.
+    /// All operations are wrapped in a single transaction for atomicity.
+    pub fn complete_compaction(
+        &self,
+        conv_id: &str,
+        avatar_id: &str,
+        summary_encrypted: &str,
+        journal_entry_encrypted: &str,
+        memories: &[(String, u32, String)], // (encrypted_content, importance, category)
+        superseded_ids: &[String],
+    ) -> Result<(), AppError> {
+        let tx = self.conn.unchecked_transaction()?;
+
+        // Insert journal entry
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let journal_id = Uuid::new_v4().to_string();
+        tx.execute(
+            "INSERT INTO ai_daily_log (id, avatar_id, conversation_id, log_date, summary, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))",
+            params![journal_id, avatar_id, conv_id, today, journal_entry_encrypted],
+        )?;
+
+        // Insert new memories
+        for (encrypted_content, importance, category) in memories {
+            let mem_id = Uuid::new_v4().to_string();
+            tx.execute(
+                "INSERT INTO ai_memories (id, avatar_id, conversation_id, content, importance, category, is_system, active, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, 1, datetime('now'))",
+                params![mem_id, avatar_id, conv_id, encrypted_content, importance, category],
+            )?;
+        }
+
+        // Soft-delete superseded memories
+        for old_id in superseded_ids {
+            tx.execute(
+                "UPDATE ai_memories SET active = 0 WHERE id = ?1 AND is_system = 0",
+                params![old_id],
+            )?;
+        }
+
+        // Complete conversation with summary
+        tx.execute(
+            "UPDATE ai_conversations SET ended_at = COALESCE(ended_at, datetime('now')), summary = ?2, compacted = 1 WHERE id = ?1",
+            params![conv_id, summary_encrypted],
+        )?;
+
+        // Delete raw messages
+        tx.execute(
+            "DELETE FROM ai_messages WHERE conversation_id = ?1",
+            params![conv_id],
+        )?;
+
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Store a user message + assistant response pair and update message count.
+    /// Wrapped in a transaction for atomicity.
+    pub fn store_message_pair(
+        &self,
+        conversation_id: &str,
+        user_content_encrypted: &str,
+        user_token_estimate: u32,
+        assistant_content_encrypted: &str,
+        assistant_token_estimate: u32,
+    ) -> Result<(), AppError> {
+        let tx = self.conn.unchecked_transaction()?;
+
+        let user_id = Uuid::new_v4().to_string();
+        tx.execute(
+            "INSERT INTO ai_messages (id, conversation_id, role, content, created_at, token_estimate)
+             VALUES (?1, ?2, 'user', ?3, datetime('now'), ?4)",
+            params![user_id, conversation_id, user_content_encrypted, user_token_estimate],
+        )?;
+
+        let asst_id = Uuid::new_v4().to_string();
+        tx.execute(
+            "INSERT INTO ai_messages (id, conversation_id, role, content, created_at, token_estimate)
+             VALUES (?1, ?2, 'assistant', ?3, datetime('now'), ?4)",
+            params![asst_id, conversation_id, assistant_content_encrypted, assistant_token_estimate],
+        )?;
+
+        // Update message count
+        let count: u32 = tx.query_row(
+            "SELECT COUNT(*) FROM ai_messages WHERE conversation_id = ?1",
+            params![conversation_id],
+            |row| row.get(0),
+        )?;
+        tx.execute(
+            "UPDATE ai_conversations SET message_count = ?2 WHERE id = ?1",
+            params![conversation_id, count],
+        )?;
+
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Create a conversation with a specific timestamp. Test-only helper.
+    #[cfg(test)]
+    pub fn create_ai_conversation_with_timestamp(
+        &self,
+        avatar_id: &str,
+        started_at: &str,
+    ) -> Result<AiConversation, AppError> {
+        let id = Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO ai_conversations (id, avatar_id, started_at, message_count, compacted)
+             VALUES (?1, ?2, ?3, 0, 0)",
+            params![id, avatar_id, started_at],
+        )?;
+        Ok(AiConversation {
+            id,
+            avatar_id: avatar_id.to_string(),
+            started_at: started_at.to_string(),
+            ended_at: None,
+            summary: None,
+            message_count: 0,
+            compacted: false,
+        })
     }
 }
 
@@ -6546,5 +6867,175 @@ mod tests {
         // But avatars and personalities remain
         assert!(!db.list_ai_avatars().unwrap().is_empty());
         assert!(!db.list_ai_personalities().unwrap().is_empty());
+    }
+
+    // ── AI Conversation Tests ──────────────────────────────────────────
+
+    #[test]
+    fn test_get_active_conversation_returns_none_when_empty() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let result = db.get_active_conversation(&avatar.id).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_active_conversation_returns_none_after_ended() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+        db.end_ai_conversation(&conv.id).unwrap();
+        let result = db.get_active_conversation(&avatar.id).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_create_ai_conversation_fields() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+        assert!(!conv.id.is_empty());
+        assert_eq!(conv.avatar_id, avatar.id);
+        assert_eq!(conv.message_count, 0);
+        assert!(!conv.compacted);
+        assert!(conv.ended_at.is_none());
+        assert!(conv.summary.is_none());
+        assert!(!conv.started_at.is_empty());
+    }
+
+    #[test]
+    fn test_complete_ai_conversation_sets_fields() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+        db.complete_ai_conversation(&conv.id, "encrypted_summary")
+            .unwrap();
+        // Verify via get_active_conversation (should return None since it's now ended)
+        assert!(db.get_active_conversation(&avatar.id).unwrap().is_none());
+        // Verify the conversation was properly completed by checking orphaned
+        let orphans = db.get_orphaned_conversations().unwrap();
+        assert!(orphans.is_empty()); // Should not be orphaned since compacted=1
+    }
+
+    #[test]
+    fn test_complete_ai_conversation_preserves_ended_at() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+        // First end it
+        db.end_ai_conversation(&conv.id).unwrap();
+        // Then complete it (simulating retry_compaction)
+        db.complete_ai_conversation(&conv.id, "encrypted_summary")
+            .unwrap();
+        // Verify it's fully completed (not orphaned, not active)
+        assert!(db.get_active_conversation(&avatar.id).unwrap().is_none());
+        assert!(db.get_orphaned_conversations().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_delete_ai_messages_by_ids_selective() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+        let id1 = db.insert_ai_message(&conv.id, "user", "msg1", 10).unwrap();
+        let id2 = db
+            .insert_ai_message(&conv.id, "assistant", "msg2", 20)
+            .unwrap();
+        let id3 = db.insert_ai_message(&conv.id, "user", "msg3", 10).unwrap();
+        // Delete only first two
+        db.delete_ai_messages_by_ids(&[id1, id2]).unwrap();
+        let remaining = db.get_ai_messages_raw(&conv.id).unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].id, id3);
+    }
+
+    #[test]
+    fn test_get_personality_prompt_found() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        assert!(!personalities.is_empty());
+        let prompt = db.get_personality_prompt(&personalities[0].id).unwrap();
+        assert!(!prompt.is_empty());
+    }
+
+    #[test]
+    fn test_get_personality_prompt_not_found() {
+        let db = test_db();
+        let result = db.get_personality_prompt("nonexistent-id");
+        assert!(result.is_err());
+    }
+
+    // ── Transaction Method Tests ────────────────────────────────────────
+
+    #[test]
+    fn test_store_message_pair_atomic() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+
+        db.store_message_pair(&conv.id, "user_enc", 10, "asst_enc", 20)
+            .unwrap();
+
+        let msgs = db.get_ai_messages_raw(&conv.id).unwrap();
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0].role, "user");
+        assert_eq!(msgs[0].content, "user_enc");
+        assert_eq!(msgs[1].role, "assistant");
+        assert_eq!(msgs[1].content, "asst_enc");
+    }
+
+    #[test]
+    fn test_complete_compaction_atomic() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+
+        // Insert some messages first
+        db.insert_ai_message(&conv.id, "user", "msg1", 10).unwrap();
+        db.insert_ai_message(&conv.id, "assistant", "msg2", 20)
+            .unwrap();
+
+        // Insert a memory to supersede
+        let old_mem_id = db
+            .insert_ai_memory_raw(&avatar.id, "old_mem", 3, "general", None, false)
+            .unwrap();
+
+        let memories = vec![("new_mem_enc".to_string(), 7u32, "preference".to_string())];
+
+        db.complete_compaction(
+            &conv.id,
+            &avatar.id,
+            "summary_enc",
+            "journal_enc",
+            &memories,
+            &[old_mem_id.clone()],
+        )
+        .unwrap();
+
+        // Messages should be deleted
+        let msgs = db.get_ai_messages_raw(&conv.id).unwrap();
+        assert!(msgs.is_empty());
+
+        // Journal should exist
+        let journal = db.get_ai_journal_raw(&avatar.id).unwrap();
+        assert_eq!(journal.len(), 1);
+        assert_eq!(journal[0].summary, "journal_enc");
+
+        // New memory should exist
+        let active_mems = db.get_active_vault_memories_raw(&avatar.id, 50).unwrap();
+        assert_eq!(active_mems.len(), 1);
+        assert_eq!(active_mems[0].content, "new_mem_enc");
+
+        // Conversation should be completed (not active, not orphaned)
+        assert!(db.get_active_conversation(&avatar.id).unwrap().is_none());
+        assert!(db.get_orphaned_conversations().unwrap().is_empty());
     }
 }

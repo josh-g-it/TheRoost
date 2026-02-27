@@ -1,4 +1,5 @@
 /// Gemini-specific configuration constants.
+#[allow(dead_code)]
 pub struct GeminiConfig {
     pub model: &'static str,
     pub tts_model: &'static str,

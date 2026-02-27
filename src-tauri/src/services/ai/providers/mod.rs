@@ -4,7 +4,6 @@ pub mod gemini_config;
 use super::cloud_provider::CloudProviderApi;
 
 /// Provider factory — returns the appropriate provider by name string.
-#[allow(dead_code)]
 pub fn get_provider(provider_name: &str) -> Box<dyn CloudProviderApi> {
     match provider_name {
         "gemini" => Box::new(gemini::GeminiProvider),

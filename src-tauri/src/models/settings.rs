@@ -145,6 +145,8 @@ pub struct AppSettings {
     pub cloud_ai_excluded_games: Vec<String>,
     #[serde(default)]
     pub cloud_ai_included_games: Vec<String>,
+    #[serde(default)]
+    pub ai_post_session_review_enabled: bool,
 }
 
 impl Default for AppSettings {
@@ -176,6 +178,7 @@ impl Default for AppSettings {
             cloud_ai_context_scope: default_cloud_ai_context_scope(),
             cloud_ai_excluded_games: Vec::new(),
             cloud_ai_included_games: Vec::new(),
+            ai_post_session_review_enabled: false,
         }
     }
 }

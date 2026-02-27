@@ -1,10 +1,11 @@
 use tauri::State;
 
 use crate::models::ai::{CloudAiUsage, CloudProvider, ResolvedIntent};
-use crate::models::assistant::{AiAvatar, AiDailyLog, AiMemory, AiPersonality};
+use crate::models::assistant::{AiAvatar, AiDailyLog, AiMemory, AiMessage, AiPersonality};
 use crate::services::ai::cloud_config::CloudConfigHandle;
 use crate::services::ai::cloud_resolver::CloudResolver;
 use crate::services::ai::context_builder;
+use crate::services::ai::conversation;
 use crate::services::ai::encryption;
 use crate::services::ai::memory;
 use crate::services::ai::orchestrator::AiOrchestrator;
@@ -338,6 +339,199 @@ pub fn generate_encryption_key() -> Result<(), AppError> {
 #[tauri::command]
 pub fn check_encryption_key_exists() -> Result<bool, AppError> {
     encryption::has_encryption_key()
+}
+
+// ── Conversation Commands ────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn start_conversation(
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<String, AppError> {
+    let db_guard = db.lock_or_err("DB")?;
+    conversation::start_or_resume(&db_guard, &avatar_id)
+}
+
+#[tauri::command]
+pub async fn send_message(
+    conversation_id: String,
+    avatar_id: String,
+    message: String,
+    db: State<'_, CacheDbHandle>,
+    cloud: State<'_, CloudConfigHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), AppError> {
+    // Validate message
+    let message = message.trim().to_string();
+    if message.is_empty() {
+        return Err(AppError::Validation("Message cannot be empty".into()));
+    }
+    if message.len() > 10_000 {
+        return Err(AppError::Validation(
+            "Message exceeds maximum length of 10,000 characters".into(),
+        ));
+    }
+
+    // Check daily limit
+    {
+        let mut config = cloud.lock_or_err("CloudConfig")?;
+        config.maybe_reset_daily();
+        if !config.can_request() {
+            return Err(AppError::StoreApi("Daily AI request limit reached".into()));
+        }
+    }
+
+    let settings = settings_store::load_settings(&app_handle)?;
+    let key = encryption::load_encryption_key()?;
+
+    conversation::send_message_and_stream(
+        &db,
+        &conversation_id,
+        &avatar_id,
+        &message,
+        &app_handle,
+        &key,
+        &settings,
+    )
+    .await?;
+
+    // Record usage
+    {
+        let mut config = cloud.lock_or_err("CloudConfig")?;
+        config.record_request();
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn end_conversation(
+    conversation_id: String,
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+    cloud: State<'_, CloudConfigHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), AppError> {
+    let settings = settings_store::load_settings(&app_handle)?;
+    let key = encryption::load_encryption_key()?;
+
+    let compacted =
+        conversation::end_conversation(&db, &conversation_id, &avatar_id, &key, &settings).await?;
+
+    if compacted {
+        let mut config = cloud.lock_or_err("CloudConfig")?;
+        config.record_request();
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_conversation_history(
+    conversation_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<Vec<AiMessage>, AppError> {
+    let key = encryption::load_encryption_key()?;
+    let db_guard = db.lock_or_err("DB")?;
+    let rows = db_guard.get_ai_messages_raw(&conversation_id)?;
+    let mut messages = Vec::with_capacity(rows.len());
+    for row in rows {
+        let content = encryption::decrypt_field(&row.content, &key)?;
+        messages.push(AiMessage {
+            id: row.id,
+            conversation_id: row.conversation_id,
+            role: row.role,
+            content,
+            created_at: row.created_at,
+            token_estimate: row.token_estimate,
+        });
+    }
+    Ok(messages)
+}
+
+#[tauri::command]
+pub async fn retry_compaction(
+    conversation_id: String,
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+    cloud: State<'_, CloudConfigHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), AppError> {
+    // Verify conversation still has messages (compaction hasn't already completed)
+    {
+        let db_guard = db.lock_or_err("DB")?;
+        let msgs = db_guard.get_ai_messages_raw(&conversation_id)?;
+        if msgs.is_empty() {
+            return Err(AppError::Validation(
+                "Conversation has no messages — compaction may have already completed".into(),
+            ));
+        }
+    }
+
+    let settings = settings_store::load_settings(&app_handle)?;
+    let key = encryption::load_encryption_key()?;
+
+    let compacted =
+        conversation::end_conversation(&db, &conversation_id, &avatar_id, &key, &settings).await?;
+
+    if compacted {
+        let mut config = cloud.lock_or_err("CloudConfig")?;
+        config.record_request();
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_memory_context(
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<String, AppError> {
+    let key = encryption::load_encryption_key()?;
+    let db_guard = db.lock_or_err("DB")?;
+    let system_mems = memory::load_system_memories(&db_guard, &avatar_id, &key)?;
+    let vault_mems = memory::load_vault_memories(&db_guard, &avatar_id, &key, 50)?;
+    let cross_mems = memory::load_cross_avatar_memories(&db_guard, &avatar_id, &key, 20)?;
+    let journal = memory::load_recent_journal(&db_guard, &avatar_id, &key, 7)?;
+    Ok(memory::format_memory_context(
+        &system_mems,
+        &vault_mems,
+        &cross_mems,
+        &journal,
+    ))
+}
+
+#[tauri::command]
+pub fn check_post_session_review(
+    game_id: String,
+    duration_minutes: u32,
+    db: State<'_, CacheDbHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<bool, AppError> {
+    // 1. Check setting
+    let settings = settings_store::load_settings(&app_handle)?;
+    if !settings.ai_post_session_review_enabled {
+        return Ok(false);
+    }
+    // 2. Check duration
+    if duration_minutes < 30 {
+        return Ok(false);
+    }
+    // 3. Check game has no existing review + active avatar (single lock scope)
+    {
+        let db_guard = db.lock_or_err("DB")?;
+        if db_guard.get_game_rating(&game_id)?.is_some() {
+            return Ok(false); // Already rated
+        }
+        if db_guard.get_active_ai_avatar()?.is_none() {
+            return Ok(false);
+        }
+    }
+    let has_key = credential_store::load_cloud_key(&settings.cloud_ai_provider)?;
+    if has_key.is_none() {
+        return Ok(false);
+    }
+    Ok(true)
 }
 
 // ── Nuclear Wipe ────────────────────────────────────────────────────

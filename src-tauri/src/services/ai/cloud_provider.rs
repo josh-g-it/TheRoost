@@ -33,7 +33,6 @@ pub struct StreamChunk {
 }
 
 /// Trait for cloud AI providers.
-#[allow(dead_code)]
 pub trait CloudProviderApi: Send + Sync {
     /// Single-shot query (for compaction, TTS, summarization).
     fn send_query(

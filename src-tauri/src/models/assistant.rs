@@ -21,7 +21,6 @@ pub struct AiAvatar {
     pub created_at: String,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiConversation {
@@ -34,7 +33,6 @@ pub struct AiConversation {
     pub compacted: bool,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiMessage {
@@ -74,7 +72,6 @@ pub struct AiDailyLog {
 }
 
 /// Structured output from the compaction prompt (internal, not sent to frontend)
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompactionResult {
@@ -83,7 +80,6 @@ pub struct CompactionResult {
     pub superseded_memories: Vec<String>,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompactionMemory {

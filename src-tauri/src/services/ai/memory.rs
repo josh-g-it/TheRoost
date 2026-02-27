@@ -4,7 +4,6 @@ use crate::services::cache_db::{AiMemoryRow, CacheDb};
 use crate::utils::error::AppError;
 
 /// Load active system memories (decrypted) for an avatar.
-#[allow(dead_code)]
 pub fn load_system_memories(
     db: &CacheDb,
     avatar_id: &str,
@@ -15,7 +14,6 @@ pub fn load_system_memories(
 }
 
 /// Load top vault memories (decrypted) by importance.
-#[allow(dead_code)]
 pub fn load_vault_memories(
     db: &CacheDb,
     avatar_id: &str,
@@ -27,7 +25,6 @@ pub fn load_vault_memories(
 }
 
 /// Load cross-avatar memories (decrypted) — returns (memory, avatar_name) pairs.
-#[allow(dead_code)]
 pub fn load_cross_avatar_memories(
     db: &CacheDb,
     avatar_id: &str,
@@ -44,7 +41,6 @@ pub fn load_cross_avatar_memories(
 }
 
 /// Load recent journal entries (decrypted).
-#[allow(dead_code)]
 pub fn load_recent_journal(
     db: &CacheDb,
     avatar_id: &str,
@@ -68,7 +64,6 @@ pub fn load_recent_journal(
 }
 
 /// Format all memory data into the Layer 3 context string for the AI prompt.
-#[allow(dead_code)]
 pub fn format_memory_context(
     system: &[AiMemory],
     vault: &[AiMemory],
@@ -136,7 +131,6 @@ pub fn insert_memory(
 
 /// Prune vault if active non-system memories exceed 100.
 /// Returns the number of memories pruned.
-#[allow(dead_code)]
 pub fn prune_vault_if_needed(db: &CacheDb, avatar_id: &str) -> Result<u32, AppError> {
     let count = db.count_active_vault_memories(avatar_id)?;
     if count <= 100 {
@@ -193,7 +187,6 @@ pub fn insert_journal_entry(
 
 // ── Internal helpers ────────────────────────────────────────────────
 
-#[allow(dead_code)]
 fn rows_to_memories(rows: Vec<AiMemoryRow>, key: &[u8; 32]) -> Result<Vec<AiMemory>, AppError> {
     let mut memories = Vec::with_capacity(rows.len());
     for row in rows {
@@ -203,7 +196,6 @@ fn rows_to_memories(rows: Vec<AiMemoryRow>, key: &[u8; 32]) -> Result<Vec<AiMemo
     Ok(memories)
 }
 
-#[allow(dead_code)]
 fn row_to_memory(row: AiMemoryRow, decrypted_content: String) -> AiMemory {
     AiMemory {
         id: row.id,
