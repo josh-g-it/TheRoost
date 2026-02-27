@@ -358,6 +358,10 @@ All design decisions have been made and documented in `docs/ai-design/`:
 10. Multi-provider modular — Gemini now, others slot in later
 11. Post-session review via toast notification (opt-in, standing system prompt instruction)
 12. No special "injected" message flag — review prompts are normal assistant messages
+13. TTS and voice selection deferred to v1.12.5 (avatar overhaul) — not part of v1.12.0
+14. Pre-built voices: 4 feminine + 2 masculine, color-named (Coral, Azure, Sage, Violet, Amber, Slate)
+15. Written reviews (`review_text` from `game_ratings`) to be included in AI context (Phase 7)
+16. Active game session context (current game, session start, duration) for AI messages (Phase 7)
 
 ---
 
