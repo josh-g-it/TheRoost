@@ -4033,15 +4033,18 @@ impl CacheDb {
         user_token_estimate: u32,
         assistant_content_encrypted: &str,
         assistant_token_estimate: u32,
+        skip_user_message: bool,
     ) -> Result<(), AppError> {
         let tx = self.conn.unchecked_transaction()?;
 
-        let user_id = Uuid::new_v4().to_string();
-        tx.execute(
-            "INSERT INTO ai_messages (id, conversation_id, role, content, created_at, token_estimate)
-             VALUES (?1, ?2, 'user', ?3, datetime('now'), ?4)",
-            params![user_id, conversation_id, user_content_encrypted, user_token_estimate],
-        )?;
+        if !skip_user_message {
+            let user_id = Uuid::new_v4().to_string();
+            tx.execute(
+                "INSERT INTO ai_messages (id, conversation_id, role, content, created_at, token_estimate)
+                 VALUES (?1, ?2, 'user', ?3, datetime('now'), ?4)",
+                params![user_id, conversation_id, user_content_encrypted, user_token_estimate],
+            )?;
+        }
 
         let asst_id = Uuid::new_v4().to_string();
         tx.execute(
@@ -4087,6 +4090,42 @@ impl CacheDb {
             message_count: 0,
             compacted: false,
         })
+    }
+
+    /// Abandon a conversation: set ended_at and delete all its messages.
+    pub fn abandon_conversation(&self, conversation_id: &str) -> Result<(), AppError> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "UPDATE ai_conversations SET ended_at = datetime('now'), message_count = 0 WHERE id = ?1 AND ended_at IS NULL",
+            params![conversation_id],
+        )?;
+        tx.execute(
+            "DELETE FROM ai_messages WHERE conversation_id = ?1",
+            params![conversation_id],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Check whether a conversation has any user messages.
+    pub fn has_user_messages(&self, conversation_id: &str) -> Result<bool, AppError> {
+        let count: u32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM ai_messages WHERE conversation_id = ?1 AND role = 'user'",
+            params![conversation_id],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    /// Get the started_at timestamp of a conversation.
+    pub fn get_conversation_started_at(&self, conversation_id: &str) -> Result<String, AppError> {
+        self.conn
+            .query_row(
+                "SELECT started_at FROM ai_conversations WHERE id = ?1",
+                params![conversation_id],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(|_| AppError::NotFound("Conversation not found".into()))
     }
 }
 
@@ -6980,7 +7019,7 @@ mod tests {
         let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
-        db.store_message_pair(&conv.id, "user_enc", 10, "asst_enc", 20)
+        db.store_message_pair(&conv.id, "user_enc", 10, "asst_enc", 20, false)
             .unwrap();
 
         let msgs = db.get_ai_messages_raw(&conv.id).unwrap();
@@ -7037,5 +7076,146 @@ mod tests {
         // Conversation should be completed (not active, not orphaned)
         assert!(db.get_active_conversation(&avatar.id).unwrap().is_none());
         assert!(db.get_orphaned_conversations().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_store_message_pair_skip_user() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+
+        db.store_message_pair(&conv.id, "user_enc", 10, "asst_enc", 20, true)
+            .unwrap();
+
+        let msgs = db.get_ai_messages_raw(&conv.id).unwrap();
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].role, "assistant");
+        assert_eq!(msgs[0].content, "asst_enc");
+
+        // message_count should be 1
+        let active = db.get_active_conversation(&avatar.id).unwrap().unwrap();
+        assert_eq!(active.message_count, 1);
+    }
+
+    #[test]
+    fn test_abandon_conversation() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv1 = db.create_ai_conversation(&avatar.id).unwrap();
+        let conv2 = db.create_ai_conversation(&avatar.id).unwrap();
+
+        // Insert messages in both conversations
+        db.insert_ai_message(&conv1.id, "user", "msg1", 5).unwrap();
+        db.insert_ai_message(&conv1.id, "assistant", "msg2", 5)
+            .unwrap();
+        db.insert_ai_message(&conv2.id, "user", "msg3", 5).unwrap();
+
+        // Set message_count on conv1 so we can verify it gets reset
+        db.update_ai_conversation_message_count(&conv1.id, 2)
+            .unwrap();
+
+        db.abandon_conversation(&conv1.id).unwrap();
+
+        // conv1 messages should be deleted
+        let msgs1 = db.get_ai_messages_raw(&conv1.id).unwrap();
+        assert!(msgs1.is_empty());
+
+        // conv1 message_count should be reset to 0
+        let conv1_count: u32 = db
+            .conn
+            .query_row(
+                "SELECT message_count FROM ai_conversations WHERE id = ?1",
+                params![conv1.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(conv1_count, 0);
+
+        // conv2 messages should be unaffected
+        let msgs2 = db.get_ai_messages_raw(&conv2.id).unwrap();
+        assert_eq!(msgs2.len(), 1);
+        assert_eq!(msgs2[0].content, "msg3");
+
+        // conv1 should no longer be active (ended_at is set)
+        // It was already not the "active" one since conv2 was created after, but verify ended_at
+        let active = db.get_active_conversation(&avatar.id).unwrap();
+        // conv2 should still be active
+        assert!(active.is_some());
+        assert_eq!(active.unwrap().id, conv2.id);
+    }
+
+    #[test]
+    fn test_abandon_conversation_already_ended() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+
+        // End it first
+        db.end_ai_conversation(&conv.id).unwrap();
+
+        // Abandon should be a no-op (no error)
+        db.abandon_conversation(&conv.id).unwrap();
+    }
+
+    #[test]
+    fn test_has_user_messages_empty() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+
+        assert!(!db.has_user_messages(&conv.id).unwrap());
+    }
+
+    #[test]
+    fn test_has_user_messages_assistant_only() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+
+        db.insert_ai_message(&conv.id, "assistant", "hello", 5)
+            .unwrap();
+
+        assert!(!db.has_user_messages(&conv.id).unwrap());
+    }
+
+    #[test]
+    fn test_has_user_messages_with_user() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+
+        db.insert_ai_message(&conv.id, "user", "hi", 2).unwrap();
+
+        assert!(db.has_user_messages(&conv.id).unwrap());
+    }
+
+    #[test]
+    fn test_get_conversation_started_at() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+
+        let started_at = db.get_conversation_started_at(&conv.id).unwrap();
+        assert!(!started_at.is_empty());
+        // Should be a valid datetime string
+        chrono::NaiveDateTime::parse_from_str(&started_at, "%Y-%m-%d %H:%M:%S").unwrap();
+    }
+
+    #[test]
+    fn test_get_conversation_started_at_not_found() {
+        let db = test_db();
+        let result = db.get_conversation_started_at("nonexistent-id");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::NotFound(msg) => assert!(msg.contains("Conversation not found")),
+            other => panic!("Expected NotFound, got: {:?}", other),
+        }
     }
 }

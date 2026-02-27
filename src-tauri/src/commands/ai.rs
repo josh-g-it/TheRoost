@@ -378,6 +378,7 @@ pub async fn send_message(
     conversation_id: String,
     avatar_id: String,
     message: String,
+    hidden: Option<bool>,
     db: State<'_, CacheDbHandle>,
     cloud: State<'_, CloudConfigHandle>,
     app_handle: tauri::AppHandle,
@@ -392,6 +393,8 @@ pub async fn send_message(
             "Message exceeds maximum length of 10,000 characters".into(),
         ));
     }
+
+    let skip_user_persist = hidden.unwrap_or(false);
 
     // Check daily limit
     {
@@ -413,6 +416,7 @@ pub async fn send_message(
         &app_handle,
         &key,
         &settings,
+        skip_user_persist,
     )
     .await?;
 
@@ -423,6 +427,33 @@ pub async fn send_message(
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub fn abandon_conversation(
+    conversation_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<(), AppError> {
+    let db_guard = db.lock_or_err("DB")?;
+    db_guard.abandon_conversation(&conversation_id)
+}
+
+#[tauri::command]
+pub fn check_conversation_stale(
+    conversation_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<bool, AppError> {
+    let db_guard = db.lock_or_err("DB")?;
+    if db_guard.has_user_messages(&conversation_id)? {
+        return Ok(false);
+    }
+    let started_at = db_guard.get_conversation_started_at(&conversation_id)?;
+    let started = chrono::NaiveDateTime::parse_from_str(&started_at, "%Y-%m-%d %H:%M:%S")
+        .map_err(|e| AppError::Parse(format!("Invalid conversation timestamp: {}", e)))?;
+    let age = chrono::Utc::now()
+        .naive_utc()
+        .signed_duration_since(started);
+    Ok(age.num_hours() >= 24)
 }
 
 #[tauri::command]

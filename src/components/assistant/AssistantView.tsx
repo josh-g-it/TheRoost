@@ -118,6 +118,24 @@ export function AssistantView() {
     [],
   );
 
+  const handleStaleReset = useCallback(async () => {
+    if (!activeAvatar) return;
+    try {
+      const convId = await assistantApi.startConversation(activeAvatar.id);
+      setConversationId(convId);
+      setHasConversation(true);
+    } catch (err) {
+      logger.error(
+        "AssistantView",
+        "api",
+        "Failed to start fresh conversation after stale reset",
+        {
+          error: getErrorMessage(err),
+        },
+      );
+    }
+  }, [activeAvatar]);
+
   const handleConversationStart = useCallback(() => {
     resetTimer();
   }, [resetTimer]);
@@ -218,6 +236,7 @@ export function AssistantView() {
                 conversationId={conversationId}
                 onConversationStart={handleConversationStart}
                 isFirstConversation={isFirstConversation}
+                onStaleReset={handleStaleReset}
               />
             )}
             {activeTab === "memories" && <AssistantMemories avatarId={activeAvatar.id} />}

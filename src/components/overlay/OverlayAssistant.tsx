@@ -89,6 +89,18 @@ export function OverlayAssistant() {
     return () => window.removeEventListener("keydown", handler, true);
   }, [showMore]);
 
+  const handleStaleReset = useCallback(async () => {
+    if (!activeAvatar) return;
+    try {
+      const convId = await assistantApi.startConversation(activeAvatar.id);
+      if (mountedRef.current) {
+        setConversationId(convId);
+      }
+    } catch {
+      // Stale reset failed silently — next mount will retry
+    }
+  }, [activeAvatar]);
+
   const handleOpenFullAssistant = useCallback(() => {
     invoke("show_main_and_navigate", { route: "/assistant" }).catch(() => {});
   }, []);
@@ -164,6 +176,7 @@ export function OverlayAssistant() {
           hideEndButton
           avatarId={activeAvatar.id}
           conversationId={conversationId}
+          onStaleReset={handleStaleReset}
         />
       </div>
 

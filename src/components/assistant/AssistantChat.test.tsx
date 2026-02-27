@@ -10,12 +10,16 @@ vi.mock("@tauri-apps/api/event", () => ({
 const mockSendMessage = vi.fn();
 const mockEndConversation = vi.fn();
 const mockGetConversationHistory = vi.fn();
+const mockCheckConversationStale = vi.fn();
+const mockAbandonConversation = vi.fn();
 
 vi.mock("../../services/tauri", () => ({
   assistantApi: {
     sendMessage: (...args: unknown[]) => mockSendMessage(...args),
     endConversation: (...args: unknown[]) => mockEndConversation(...args),
     getConversationHistory: (...args: unknown[]) => mockGetConversationHistory(...args),
+    checkConversationStale: (...args: unknown[]) => mockCheckConversationStale(...args),
+    abandonConversation: (...args: unknown[]) => mockAbandonConversation(...args),
   },
 }));
 
@@ -40,6 +44,8 @@ describe("AssistantChat", () => {
     mockEndConversation.mockResolvedValue(undefined);
     // Return a non-empty history by default so auto-greeting doesn't fire
     mockGetConversationHistory.mockResolvedValue([existingMessage]);
+    mockCheckConversationStale.mockResolvedValue(false);
+    mockAbandonConversation.mockResolvedValue(undefined);
   });
 
   it("renders empty state with prompt text when no conversation", () => {
@@ -123,6 +129,7 @@ describe("AssistantChat", () => {
         "c1",
         "a1",
         expect.stringContaining("A new conversation has started"),
+        true,
       );
     });
   });
@@ -136,6 +143,7 @@ describe("AssistantChat", () => {
         "c1",
         "a1",
         expect.stringContaining("your very first conversation"),
+        true,
       );
     });
   });
@@ -163,5 +171,66 @@ describe("AssistantChat", () => {
       expect(screen.getByText("Server error")).toBeInTheDocument();
       expect(screen.getByText("Retry")).toBeInTheDocument();
     });
+  });
+
+  it("calls checkConversationStale on mount", async () => {
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+
+    await waitFor(() => {
+      expect(mockCheckConversationStale).toHaveBeenCalledWith("c1");
+    });
+  });
+
+  it("abandons stale conversation and calls onStaleReset", async () => {
+    mockCheckConversationStale.mockResolvedValue(true);
+    const onStaleReset = vi.fn();
+
+    render(
+      <AssistantChat avatarId="a1" conversationId="c1" onStaleReset={onStaleReset} />,
+    );
+
+    await waitFor(() => {
+      expect(mockAbandonConversation).toHaveBeenCalledWith("c1");
+    });
+    await waitFor(() => {
+      expect(onStaleReset).toHaveBeenCalled();
+    });
+    // Should not have loaded history or sent a greeting
+    expect(mockGetConversationHistory).not.toHaveBeenCalled();
+    expect(mockSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not abandon non-stale conversation", async () => {
+    mockCheckConversationStale.mockResolvedValue(false);
+
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+
+    await waitFor(() => {
+      expect(mockGetConversationHistory).toHaveBeenCalledWith("c1");
+    });
+    expect(mockAbandonConversation).not.toHaveBeenCalled();
+  });
+
+  it("falls through to normal flow when stale check throws", async () => {
+    mockCheckConversationStale.mockRejectedValue(new Error("DB error"));
+    mockGetConversationHistory.mockResolvedValue([]);
+
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+
+    // Should fall through to normal flow: loadHistory is called
+    await waitFor(() => {
+      expect(mockGetConversationHistory).toHaveBeenCalledWith("c1");
+    });
+    // Greeting should still be sent
+    await waitFor(() => {
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        "c1",
+        "a1",
+        expect.stringContaining("A new conversation has started"),
+        true,
+      );
+    });
+    // Component should not crash — input should be present
+    expect(screen.getByPlaceholderText("Type a message...")).toBeInTheDocument();
   });
 });

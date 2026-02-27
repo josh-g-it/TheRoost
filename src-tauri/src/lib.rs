@@ -173,6 +173,8 @@ pub fn run() {
             ai::wipe_ai_memory,
             ai::start_conversation,
             ai::send_message,
+            ai::abandon_conversation,
+            ai::check_conversation_stale,
             ai::end_conversation,
             ai::get_conversation_history,
             ai::retry_compaction,

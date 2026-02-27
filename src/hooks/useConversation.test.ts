@@ -61,7 +61,7 @@ describe("useConversation", () => {
       await result.current.sendMessage("Hello there");
     });
 
-    expect(mockSendMessage).toHaveBeenCalledWith("c1", "a1", "Hello there");
+    expect(mockSendMessage).toHaveBeenCalledWith("c1", "a1", "Hello there", undefined);
     expect(result.current.messages).toHaveLength(1);
     expect(result.current.messages[0].role).toBe("user");
     expect(result.current.messages[0].content).toBe("Hello there");
@@ -168,7 +168,7 @@ describe("useConversation", () => {
       await result.current.retry();
     });
 
-    expect(mockSendMessage).toHaveBeenCalledWith("c1", "a1", "Hello");
+    expect(mockSendMessage).toHaveBeenCalledWith("c1", "a1", "Hello", undefined);
   });
 
   it("guards sendMessage while streaming", async () => {
@@ -421,5 +421,19 @@ describe("useConversation", () => {
 
     // isEnded should be false because we triggered the end locally
     expect(result.current.isEnded).toBe(false);
+  });
+
+  it("sendMessage passes hidden=true to API when options.hidden is true", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    await act(async () => {
+      await result.current.sendMessage("Hello", { hidden: true });
+    });
+
+    expect(mockSendMessage).toHaveBeenCalledWith("c1", "a1", "Hello", true);
+    // Hidden messages should not add a user message to local state
+    expect(result.current.messages).toHaveLength(0);
   });
 });

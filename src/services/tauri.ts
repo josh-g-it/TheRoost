@@ -467,8 +467,16 @@ export const steamInstallApi = {
 export const assistantApi = {
   startConversation: (avatarId: string) =>
     invoke<string>("start_conversation", { avatarId }),
-  sendMessage: (conversationId: string, avatarId: string, message: string) =>
-    invoke<void>("send_message", { conversationId, avatarId, message }),
+  sendMessage: (
+    conversationId: string,
+    avatarId: string,
+    message: string,
+    hidden?: boolean,
+  ) => invoke<void>("send_message", { conversationId, avatarId, message, hidden }),
+  abandonConversation: (conversationId: string) =>
+    invoke<void>("abandon_conversation", { conversationId }),
+  checkConversationStale: (conversationId: string) =>
+    invoke<boolean>("check_conversation_stale", { conversationId }),
   endConversation: (conversationId: string, avatarId: string) =>
     invoke<void>("end_conversation", { conversationId, avatarId }),
   getConversationHistory: (conversationId: string) =>

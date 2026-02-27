@@ -130,7 +130,7 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
       setCurrentStreamText("");
 
       try {
-        await assistantApi.sendMessage(conversationId, avatarId, text);
+        await assistantApi.sendMessage(conversationId, avatarId, text, options?.hidden);
       } catch (err) {
         setIsStreaming(false);
         isStreamingRef.current = false;

@@ -4,6 +4,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useConversation } from "../../hooks/useConversation";
 import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
+import { assistantApi } from "../../services/tauri";
 import { AppIcon } from "../common/AppIcon";
 import "./AssistantChat.css";
 
@@ -14,6 +15,7 @@ interface AssistantChatProps {
   compact?: boolean;
   isFirstConversation?: boolean;
   hideEndButton?: boolean;
+  onStaleReset?: () => void;
 }
 
 export function AssistantChat({
@@ -23,6 +25,7 @@ export function AssistantChat({
   compact,
   isFirstConversation,
   hideEndButton,
+  onStaleReset,
 }: AssistantChatProps) {
   const {
     messages,
@@ -48,6 +51,10 @@ export function AssistantChat({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const introSentRef = useRef(false);
+  const isFirstConversationRef = useRef(isFirstConversation);
+  isFirstConversationRef.current = isFirstConversation;
+  const onStaleResetRef = useRef(onStaleReset);
+  onStaleResetRef.current = onStaleReset;
 
   useEffect(() => {
     introSentRef.current = false;
@@ -56,10 +63,23 @@ export function AssistantChat({
   useEffect(() => {
     if (!conversationId) return;
     async function loadAndGreet() {
+      // Step 1: Check staleness (with error recovery)
+      try {
+        const isStale = await assistantApi.checkConversationStale(conversationId!);
+        if (isStale) {
+          await assistantApi.abandonConversation(conversationId!);
+          onStaleResetRef.current?.();
+          return;
+        }
+      } catch {
+        // Stale check failed — fall through to normal flow
+      }
+
+      // Step 2: Normal flow — load history and optionally send greeting
       const history = await loadHistory(conversationId!);
       if (history.length === 0 && !introSentRef.current) {
         introSentRef.current = true;
-        const prompt = isFirstConversation
+        const prompt = isFirstConversationRef.current
           ? "This is your very first conversation with the user. They just created you. Introduce yourself warmly — tell them your name, ask what they'd like to be called, and ask how they prefer conversations (casual, detailed, brief). Be yourself and be curious."
           : "A new conversation has started. This message is sent automatically by the system, not by the user. Greet the user warmly as someone you already know. Keep it brief and natural — maybe reference something from your memories or just say hello and ask what's on their mind.";
         sendMessage(prompt, { hidden: true });

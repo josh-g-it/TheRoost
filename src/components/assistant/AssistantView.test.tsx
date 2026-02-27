@@ -14,6 +14,9 @@ const mockGetConversationHistory = vi.fn();
 const mockCheckEncryptionKeyExists = vi.fn();
 const mockListAvatars = vi.fn();
 const mockGenerateEncryptionKey = vi.fn();
+const mockSendMessage = vi.fn();
+const mockCheckConversationStale = vi.fn();
+const mockAbandonConversation = vi.fn();
 
 vi.mock("../../services/tauri", () => ({
   assistantApi: {
@@ -27,6 +30,9 @@ vi.mock("../../services/tauri", () => ({
     generateEncryptionKey: (...args: unknown[]) => mockGenerateEncryptionKey(...args),
     createAvatar: vi.fn(),
     switchAvatar: vi.fn(),
+    sendMessage: (...args: unknown[]) => mockSendMessage(...args),
+    checkConversationStale: (...args: unknown[]) => mockCheckConversationStale(...args),
+    abandonConversation: (...args: unknown[]) => mockAbandonConversation(...args),
   },
 }));
 
@@ -46,6 +52,9 @@ describe("AssistantView", () => {
     mockCheckEncryptionKeyExists.mockResolvedValue(true);
     mockListAvatars.mockResolvedValue([]);
     mockGenerateEncryptionKey.mockResolvedValue(undefined);
+    mockSendMessage.mockResolvedValue(undefined);
+    mockCheckConversationStale.mockResolvedValue(false);
+    mockAbandonConversation.mockResolvedValue(undefined);
   });
 
   it("shows first-run wizard when no active avatar", async () => {
@@ -119,6 +128,26 @@ describe("AssistantView", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Assistant")).toBeInTheDocument();
+    });
+  });
+
+  it("starts a fresh conversation after stale reset", async () => {
+    mockGetActiveAvatar.mockResolvedValue(
+      makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
+    );
+    // Only the first conversation is stale; the replacement is fresh
+    mockCheckConversationStale
+      .mockResolvedValueOnce(true) // conv-1 is stale
+      .mockResolvedValue(false); // conv-2 is fresh
+    // After stale reset, startConversation is called again for the fresh conversation
+    mockStartConversation
+      .mockResolvedValueOnce("conv-1") // initial mount
+      .mockResolvedValueOnce("conv-2"); // stale reset
+
+    render(<AssistantView />);
+
+    await waitFor(() => {
+      expect(mockStartConversation).toHaveBeenCalledTimes(2);
     });
   });
 });

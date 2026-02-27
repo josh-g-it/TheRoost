@@ -22,6 +22,8 @@ const mockStartConversation = vi.fn();
 const mockEndConversation = vi.fn();
 const mockGetConversationHistory = vi.fn();
 const mockSendMessage = vi.fn();
+const mockCheckConversationStale = vi.fn();
+const mockAbandonConversation = vi.fn();
 
 vi.mock("../../services/tauri", () => ({
   assistantApi: {
@@ -31,6 +33,8 @@ vi.mock("../../services/tauri", () => ({
     endConversation: (...args: unknown[]) => mockEndConversation(...args),
     getConversationHistory: (...args: unknown[]) => mockGetConversationHistory(...args),
     sendMessage: (...args: unknown[]) => mockSendMessage(...args),
+    checkConversationStale: (...args: unknown[]) => mockCheckConversationStale(...args),
+    abandonConversation: (...args: unknown[]) => mockAbandonConversation(...args),
   },
 }));
 
@@ -67,6 +71,8 @@ describe("OverlayAssistant", () => {
       },
     ]);
     mockSendMessage.mockResolvedValue(undefined);
+    mockCheckConversationStale.mockResolvedValue(false);
+    mockAbandonConversation.mockResolvedValue(undefined);
   });
 
   it("renders loading state initially", () => {
@@ -322,5 +328,23 @@ describe("OverlayAssistant", () => {
 
     const screenshotBtn = screen.getByText("Screenshot: Off");
     expect(screenshotBtn).toBeDisabled();
+  });
+
+  // B10: Stale reset starts a fresh conversation
+  it("starts a fresh conversation after stale reset", async () => {
+    // Only the first conversation is stale; the replacement is fresh
+    mockCheckConversationStale
+      .mockResolvedValueOnce(true) // conv-1 is stale
+      .mockResolvedValue(false); // conv-2 is fresh
+    // After stale reset, startConversation is called again for the fresh conversation
+    mockStartConversation
+      .mockResolvedValueOnce("conv-1") // initial mount
+      .mockResolvedValueOnce("conv-2"); // stale reset
+
+    render(<OverlayAssistant />);
+
+    await waitFor(() => {
+      expect(mockStartConversation).toHaveBeenCalledTimes(2);
+    });
   });
 });

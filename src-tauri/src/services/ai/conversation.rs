@@ -204,6 +204,7 @@ pub fn assemble_context(
 }
 
 /// The core send + stream function.
+#[allow(clippy::too_many_arguments)]
 pub async fn send_message_and_stream(
     db: &CacheDbHandle,
     conv_id: &str,
@@ -212,6 +213,7 @@ pub async fn send_message_and_stream(
     app_handle: &tauri::AppHandle,
     key: &[u8; 32],
     settings: &AppSettings,
+    skip_user_persist: bool,
 ) -> Result<(), AppError> {
     // Step 1: Build context (under lock)
     let (system_prompt, mut messages) = {
@@ -280,7 +282,14 @@ pub async fn send_message_and_stream(
 
     {
         let db_guard = db.lock_or_err("DB")?;
-        db_guard.store_message_pair(conv_id, &user_enc, user_tokens, &asst_enc, asst_tokens)?;
+        db_guard.store_message_pair(
+            conv_id,
+            &user_enc,
+            user_tokens,
+            &asst_enc,
+            asst_tokens,
+            skip_user_persist,
+        )?;
     }
 
     Ok(())

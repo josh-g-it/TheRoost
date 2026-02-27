@@ -20,7 +20,7 @@
 - **Phase 4**: COMPLETE — Conversation Service + Core Commands (QA reviewed, all fixes applied)
 - **Phase 5**: COMPLETE — Frontend `/assistant` route + chat UI (QA reviewed, all fixes applied)
 - **Phase 6**: COMPLETE — Overlay assistant panel + cross-window sync (QA reviewed, all fixes applied)
-- **Next step**: Begin Phase 7 (Polish + reviews)
+- **Next step**: Begin Phase 7 (Hidden Messages + Stale Conversation Reset)
 
 ---
 
@@ -313,19 +313,25 @@ This is the biggest feature yet — evolving the existing single-shot cloud AI i
 
 ## Implementation Plan (READ THIS FIRST)
 
-The build is broken into 7 sequential phases in `docs/ai-design/implementation_plan/`:
+The build is broken into 13 sequential phases in `docs/ai-design/implementation_plan/`. The original Phase 7 was split into Phases 7-13 for better scoping and detailed planning.
 
-| Phase | Focus | Layer | Key Deliverable |
-|-------|-------|-------|-----------------|
-| [1](ai-design/implementation_plan/phase-1-schema-encryption.md) | Schema v24 + encryption | Rust | 6 tables + AES-256-GCM encrypt/decrypt |
-| [2](ai-design/implementation_plan/phase-2-provider-streaming.md) | Provider refactor + streaming | Rust | `providers/` directory + Gemini SSE |
-| [3](ai-design/implementation_plan/phase-3-models-crud-memory.md) | Models + CRUD + memory vault | Rust | Domain types, avatar/personality/memory ops |
-| [4](ai-design/implementation_plan/phase-4-conversation-service.md) | Conversation service | Rust | Lifecycle, 4-layer context, compaction |
-| [5](ai-design/implementation_plan/phase-5-frontend-route.md) | `/assistant` route + chat UI | Frontend | Full chat page, hooks, first-run |
-| [6](ai-design/implementation_plan/phase-6-overlay-panel.md) | Overlay panel | Frontend | 6th FloatingPanel with compact chat |
-| [7](ai-design/implementation_plan/phase-7-polish-reviews.md) | Polish + reviews | Both | Toast notifications, settings, error recovery |
+| Phase | Focus | Layer | Status |
+|-------|-------|-------|--------|
+| [1](ai-design/implementation_plan/phase-1-schema-encryption.md) | Schema v24 + encryption | Rust | **DONE** |
+| [2](ai-design/implementation_plan/phase-2-provider-streaming.md) | Provider refactor + streaming | Rust | **DONE** |
+| [3](ai-design/implementation_plan/phase-3-models-crud-memory.md) | Models + CRUD + memory vault | Rust | **DONE** |
+| [4](ai-design/implementation_plan/phase-4-conversation-service.md) | Conversation service | Rust | **DONE** |
+| [5](ai-design/implementation_plan/phase-5-frontend-route.md) | `/assistant` route + chat UI | Frontend | **DONE** |
+| [6](ai-design/implementation_plan/phase-6-overlay-panel.md) | Overlay panel | Frontend | **DONE** |
+| [7](ai-design/implementation_plan/phase-7-hidden-messages-stale-reset.md) | Ephemeral greeting + stale conversation reset | Both | **NEXT** |
+| [8](ai-design/implementation_plan/phase-8-backend-inactivity-timer.md) | Backend tokio timer + frontend hook refactor | Both | |
+| [9](ai-design/implementation_plan/phase-9-ux-polish.md) | End button, journaling splash, game session context | Both | |
+| [10](ai-design/implementation_plan/phase-10-error-recovery.md) | Orphan recovery, compaction retry, clipboard failsafe | Both | |
+| [11](ai-design/implementation_plan/phase-11-avatar-data-management.md) | Delete avatar, per-avatar wipe, encryption key management | Both | |
+| [12](ai-design/implementation_plan/phase-12-post-session-reviews.md) | Native notifications, review trigger, context enrichment | Both | |
+| [13](ai-design/implementation_plan/phase-13-structured-action-execution.md) | Action delimiter, streaming parser, executor bridge | Both | **DISCUSSION** |
 
-Phases 1-4 are pure Rust. Phase 5 is the first frontend work. Phases 6 and 7 can be done in either order.
+Phases 1-4 are pure Rust. Phase 5 is the first frontend work. Phases 9-11 are independent of each other. Phase 13 requires design discussion before implementation.
 
 **Start with**: [implementation_plan/README.md](ai-design/implementation_plan/README.md) for the dependency graph and summary table.
 
@@ -413,13 +419,14 @@ All design decisions have been made and documented in `docs/ai-design/`:
 12. No special "injected" message flag — review prompts are normal assistant messages
 13. TTS and voice selection deferred to v1.12.5 (avatar overhaul) — not part of v1.12.0
 14. Pre-built voices: 4 feminine + 2 masculine, color-named (Coral, Azure, Sage, Violet, Amber, Slate)
-15. Written reviews (`review_text` from `game_ratings`) to be included in AI context (Phase 7)
-16. Active game session context (current game, session start, duration) for AI messages (Phase 7)
+15. Written reviews (`review_text` from `game_ratings`) to be included in AI context (Phase 12)
+16. Active game session context (current game, session start, duration) for AI messages (Phase 9)
 17. Auto-greeting prompt is ephemeral — not persisted in DB, only the AI's response is stored (Phase 7)
 18. Stale conversation auto-reset: if user doesn't respond within 24h, silently discard and start fresh — no compaction (Phase 7)
-19. Delete avatar feature: cascade-deletes all conversations, memories, and journals for that avatar (Phase 7)
-20. Per-avatar data wipe: clear all data for a specific avatar without deleting the avatar itself (Phase 7)
-21. Inactivity timer moves to Rust backend (tokio background task) — runs even when user isn't on chat page; frontend hook becomes display-only subscriber; settings toggle to enable/disable auto-end (Phase 7)
+19. Delete avatar feature: cascade-deletes all conversations, memories, and journals for that avatar (Phase 11)
+20. Per-avatar data wipe: clear all data for a specific avatar without deleting the avatar itself (Phase 11)
+21. Inactivity timer moves to Rust backend (tokio background task) — runs even when user isn't on chat page; frontend hook becomes display-only subscriber; settings toggle to enable/disable auto-end (Phase 8)
+22. Structured action execution uses delimiter approach (`---ACTIONS---`) to preserve streaming — design discussion required before Phase 13 implementation
 
 ---
 
