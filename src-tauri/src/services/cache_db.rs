@@ -6,6 +6,7 @@ use rusqlite::{params, Connection};
 use uuid::Uuid;
 
 use crate::models::achievement::GameAchievement;
+use crate::models::assistant::{AiAvatar, AiPersonality};
 use crate::models::media_bookmark::MediaBookmark;
 use crate::models::metadata::{
     CategoryInfo, GenreInfo, ScreenshotInfo, SteamTagInfo, StoreMetadata,
@@ -95,6 +96,33 @@ You are a relaxed friend who games to unwind, never to stress. You appreciate co
 exploration at a leisurely pace, and enjoying the journey over the destination. \
 You never pressure the player about backlogs or completion rates. \
 Your vibe is laid-back and comforting — like gaming on a rainy afternoon with no agenda.";
+
+/// Raw DB row for ai_memories — content is still encrypted.
+#[derive(Debug, Clone)]
+pub struct AiMemoryRow {
+    pub id: String,
+    pub avatar_id: String,
+    pub conversation_id: Option<String>,
+    pub content: String,
+    pub importance: u32,
+    pub category: String,
+    pub is_system: bool,
+    pub created_at: String,
+    pub last_referenced: Option<String>,
+    pub superseded_by: Option<String>,
+    pub active: bool,
+}
+
+/// Raw DB row for ai_daily_log — summary is still encrypted.
+#[derive(Debug, Clone)]
+pub struct AiDailyLogRow {
+    pub id: String,
+    pub avatar_id: String,
+    pub conversation_id: String,
+    pub log_date: String,
+    pub summary: String,
+    pub created_at: String,
+}
 
 pub struct CacheDb {
     conn: Connection,
@@ -3225,6 +3253,526 @@ impl CacheDb {
         self.conn = conn;
         Ok(())
     }
+
+    // ── AI Personality CRUD ─────────────────────────────────────────
+
+    /// List all AI personalities, built-in first then custom alphabetically.
+    pub fn list_ai_personalities(&self) -> Result<Vec<AiPersonality>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, prompt_text, is_builtin, created_at
+             FROM ai_personalities
+             ORDER BY is_builtin DESC, name ASC",
+        )?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(AiPersonality {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    prompt_text: row.get(2)?,
+                    is_builtin: row.get::<_, i32>(3)? != 0,
+                    created_at: row.get(4)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Create a custom AI personality.
+    pub fn create_ai_personality(
+        &self,
+        name: &str,
+        prompt_text: &str,
+    ) -> Result<AiPersonality, AppError> {
+        let id = Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO ai_personalities (id, name, prompt_text, is_builtin, created_at)
+             VALUES (?1, ?2, ?3, 0, datetime('now'))",
+            params![id, name, prompt_text],
+        )?;
+        let created_at: String = self.conn.query_row(
+            "SELECT created_at FROM ai_personalities WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        Ok(AiPersonality {
+            id,
+            name: name.to_string(),
+            prompt_text: prompt_text.to_string(),
+            is_builtin: false,
+            created_at,
+        })
+    }
+
+    // ── AI Avatar CRUD ──────────────────────────────────────────────
+
+    /// List all AI avatars, active first then by creation date.
+    pub fn list_ai_avatars(&self) -> Result<Vec<AiAvatar>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, personality_id, image_path, is_active, created_at
+             FROM ai_avatars
+             ORDER BY is_active DESC, created_at ASC",
+        )?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(AiAvatar {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    personality_id: row.get(2)?,
+                    image_path: row.get(3)?,
+                    is_active: row.get::<_, i32>(4)? != 0,
+                    created_at: row.get(5)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Get the currently active AI avatar, if any.
+    pub fn get_active_ai_avatar(&self) -> Result<Option<AiAvatar>, AppError> {
+        let result = self.conn.query_row(
+            "SELECT id, name, personality_id, image_path, is_active, created_at
+             FROM ai_avatars WHERE is_active = 1",
+            [],
+            |row| {
+                Ok(AiAvatar {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    personality_id: row.get(2)?,
+                    image_path: row.get(3)?,
+                    is_active: true,
+                    created_at: row.get(5)?,
+                })
+            },
+        );
+        match result {
+            Ok(avatar) => Ok(Some(avatar)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(AppError::Database(e)),
+        }
+    }
+
+    /// Create a new AI avatar linked to a personality.
+    pub fn create_ai_avatar(
+        &self,
+        name: &str,
+        personality_id: &str,
+    ) -> Result<AiAvatar, AppError> {
+        // Validate personality exists
+        let exists: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM ai_personalities WHERE id = ?1",
+                params![personality_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !exists {
+            return Err(AppError::NotFound(format!(
+                "Personality '{}' not found",
+                personality_id
+            )));
+        }
+
+        let id = Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO ai_avatars (id, name, personality_id, image_path, is_active, created_at)
+             VALUES (?1, ?2, ?3, NULL, 0, datetime('now'))",
+            params![id, name, personality_id],
+        )?;
+        let created_at: String = self.conn.query_row(
+            "SELECT created_at FROM ai_avatars WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        Ok(AiAvatar {
+            id,
+            name: name.to_string(),
+            personality_id: personality_id.to_string(),
+            image_path: None,
+            is_active: false,
+            created_at,
+        })
+    }
+
+    /// Switch the active avatar. Deactivates all, then activates the specified one.
+    pub fn switch_ai_avatar(&self, avatar_id: &str) -> Result<(), AppError> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("UPDATE ai_avatars SET is_active = 0", [])?;
+        let updated = tx.execute(
+            "UPDATE ai_avatars SET is_active = 1 WHERE id = ?1",
+            params![avatar_id],
+        )?;
+        if updated == 0 {
+            tx.rollback().ok();
+            return Err(AppError::NotFound(format!(
+                "Avatar '{}' not found",
+                avatar_id
+            )));
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    // ── AI Memory CRUD (raw — content is encrypted) ─────────────────
+
+    /// Get active system memories for an avatar (ordered by creation date).
+    #[allow(dead_code)]
+    pub fn get_active_system_memories_raw(
+        &self,
+        avatar_id: &str,
+    ) -> Result<Vec<AiMemoryRow>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, avatar_id, conversation_id, content, importance, category,
+                    is_system, created_at, last_referenced, superseded_by, active
+             FROM ai_memories
+             WHERE avatar_id = ?1 AND active = 1 AND is_system = 1
+             ORDER BY created_at ASC",
+        )?;
+        let rows = stmt
+            .query_map(params![avatar_id], |row| {
+                Ok(AiMemoryRow {
+                    id: row.get(0)?,
+                    avatar_id: row.get(1)?,
+                    conversation_id: row.get(2)?,
+                    content: row.get(3)?,
+                    importance: row.get(4)?,
+                    category: row.get(5)?,
+                    is_system: row.get::<_, i32>(6)? != 0,
+                    created_at: row.get(7)?,
+                    last_referenced: row.get(8)?,
+                    superseded_by: row.get(9)?,
+                    active: row.get::<_, i32>(10)? != 0,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Get active vault (non-system) memories for an avatar, ordered by importance DESC.
+    #[allow(dead_code)]
+    pub fn get_active_vault_memories_raw(
+        &self,
+        avatar_id: &str,
+        limit: u32,
+    ) -> Result<Vec<AiMemoryRow>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, avatar_id, conversation_id, content, importance, category,
+                    is_system, created_at, last_referenced, superseded_by, active
+             FROM ai_memories
+             WHERE avatar_id = ?1 AND active = 1 AND is_system = 0
+             ORDER BY importance DESC
+             LIMIT ?2",
+        )?;
+        let rows = stmt
+            .query_map(params![avatar_id, limit], |row| {
+                Ok(AiMemoryRow {
+                    id: row.get(0)?,
+                    avatar_id: row.get(1)?,
+                    conversation_id: row.get(2)?,
+                    content: row.get(3)?,
+                    importance: row.get(4)?,
+                    category: row.get(5)?,
+                    is_system: row.get::<_, i32>(6)? != 0,
+                    created_at: row.get(7)?,
+                    last_referenced: row.get(8)?,
+                    superseded_by: row.get(9)?,
+                    active: row.get::<_, i32>(10)? != 0,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Get high-importance memories from OTHER avatars (for cross-avatar sharing).
+    #[allow(dead_code)]
+    pub fn get_cross_avatar_memories_raw(
+        &self,
+        avatar_id: &str,
+        limit: u32,
+    ) -> Result<Vec<(AiMemoryRow, String)>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT m.id, m.avatar_id, m.conversation_id, m.content, m.importance, m.category,
+                    m.is_system, m.created_at, m.last_referenced, m.superseded_by, m.active,
+                    a.name
+             FROM ai_memories m
+             JOIN ai_avatars a ON m.avatar_id = a.id
+             WHERE m.avatar_id != ?1 AND m.active = 1 AND m.importance >= 6 AND m.is_system = 0
+             ORDER BY m.importance DESC
+             LIMIT ?2",
+        )?;
+        let rows = stmt
+            .query_map(params![avatar_id, limit], |row| {
+                let mem = AiMemoryRow {
+                    id: row.get(0)?,
+                    avatar_id: row.get(1)?,
+                    conversation_id: row.get(2)?,
+                    content: row.get(3)?,
+                    importance: row.get(4)?,
+                    category: row.get(5)?,
+                    is_system: row.get::<_, i32>(6)? != 0,
+                    created_at: row.get(7)?,
+                    last_referenced: row.get(8)?,
+                    superseded_by: row.get(9)?,
+                    active: row.get::<_, i32>(10)? != 0,
+                };
+                let avatar_name: String = row.get(11)?;
+                Ok((mem, avatar_name))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Get all active memories for an avatar (system + vault), ordered by importance DESC.
+    pub fn get_all_active_memories_raw(
+        &self,
+        avatar_id: &str,
+    ) -> Result<Vec<AiMemoryRow>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, avatar_id, conversation_id, content, importance, category,
+                    is_system, created_at, last_referenced, superseded_by, active
+             FROM ai_memories
+             WHERE avatar_id = ?1 AND active = 1
+             ORDER BY importance DESC",
+        )?;
+        let rows = stmt
+            .query_map(params![avatar_id], |row| {
+                Ok(AiMemoryRow {
+                    id: row.get(0)?,
+                    avatar_id: row.get(1)?,
+                    conversation_id: row.get(2)?,
+                    content: row.get(3)?,
+                    importance: row.get(4)?,
+                    category: row.get(5)?,
+                    is_system: row.get::<_, i32>(6)? != 0,
+                    created_at: row.get(7)?,
+                    last_referenced: row.get(8)?,
+                    superseded_by: row.get(9)?,
+                    active: row.get::<_, i32>(10)? != 0,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Insert a new AI memory (content should already be encrypted by the caller).
+    pub fn insert_ai_memory_raw(
+        &self,
+        avatar_id: &str,
+        content_encrypted: &str,
+        importance: u32,
+        category: &str,
+        conversation_id: Option<&str>,
+        is_system: bool,
+    ) -> Result<String, AppError> {
+        let id = Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO ai_memories (id, avatar_id, conversation_id, content, importance,
+             category, is_system, created_at, active)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'), 1)",
+            params![
+                id,
+                avatar_id,
+                conversation_id,
+                content_encrypted,
+                importance,
+                category,
+                is_system as i32
+            ],
+        )?;
+        Ok(id)
+    }
+
+    /// Mark a memory as superseded by a newer memory.
+    #[allow(dead_code)]
+    pub fn mark_memory_superseded(&self, old_id: &str, new_id: &str) -> Result<(), AppError> {
+        self.conn.execute(
+            "UPDATE ai_memories SET active = 0, superseded_by = ?1 WHERE id = ?2",
+            params![new_id, old_id],
+        )?;
+        Ok(())
+    }
+
+    /// Soft-delete a memory by marking it inactive.
+    /// Used internally by batch operations and tests; user-facing deletion
+    /// should go through `soft_delete_user_memory` which guards system memories.
+    #[allow(dead_code)]
+    pub fn soft_delete_memory(&self, memory_id: &str) -> Result<(), AppError> {
+        self.conn.execute(
+            "UPDATE ai_memories SET active = 0 WHERE id = ?1",
+            params![memory_id],
+        )?;
+        Ok(())
+    }
+
+    /// Soft-delete a user memory, guarding against system memory deletion.
+    pub fn soft_delete_user_memory(&self, memory_id: &str) -> Result<(), AppError> {
+        let updated = self.conn.execute(
+            "UPDATE ai_memories SET active = 0 WHERE id = ?1 AND is_system = 0",
+            params![memory_id],
+        )?;
+        if updated == 0 {
+            return Err(AppError::Validation(
+                "Memory not found or is a protected system memory".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Soft-delete a batch of memories in a single transaction (used by pruning).
+    #[allow(dead_code)]
+    pub fn soft_delete_memories_batch(&self, ids: &[String]) -> Result<(), AppError> {
+        let tx = self.conn.unchecked_transaction()?;
+        for id in ids {
+            tx.execute(
+                "UPDATE ai_memories SET active = 0 WHERE id = ?1",
+                params![id],
+            )?;
+        }
+        tx.commit().map_err(AppError::Database)
+    }
+
+    /// Count active non-system memories for an avatar.
+    #[allow(dead_code)]
+    pub fn count_active_vault_memories(&self, avatar_id: &str) -> Result<u32, AppError> {
+        let count: u32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM ai_memories WHERE avatar_id = ?1 AND active = 1 AND is_system = 0",
+            params![avatar_id],
+            |row| row.get(0),
+        )?;
+        Ok(count)
+    }
+
+    /// Get IDs of the lowest-importance active vault memories (for pruning).
+    #[allow(dead_code)]
+    pub fn get_lowest_importance_memories(
+        &self,
+        avatar_id: &str,
+        limit: u32,
+    ) -> Result<Vec<String>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id FROM ai_memories
+             WHERE avatar_id = ?1 AND active = 1 AND is_system = 0
+             ORDER BY importance ASC, created_at ASC
+             LIMIT ?2",
+        )?;
+        let ids = stmt
+            .query_map(params![avatar_id, limit], |row| row.get(0))?
+            .collect::<Result<Vec<String>, _>>()?;
+        Ok(ids)
+    }
+
+    // ── AI Journal CRUD (raw — summary is encrypted) ────────────────
+
+    /// Get all journal entries for an avatar, newest first.
+    pub fn get_ai_journal_raw(&self, avatar_id: &str) -> Result<Vec<AiDailyLogRow>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, avatar_id, conversation_id, log_date, summary, created_at
+             FROM ai_daily_log
+             WHERE avatar_id = ?1
+             ORDER BY log_date DESC",
+        )?;
+        let rows = stmt
+            .query_map(params![avatar_id], |row| {
+                Ok(AiDailyLogRow {
+                    id: row.get(0)?,
+                    avatar_id: row.get(1)?,
+                    conversation_id: row.get(2)?,
+                    log_date: row.get(3)?,
+                    summary: row.get(4)?,
+                    created_at: row.get(5)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Get recent journal entries for an avatar, newest first, with a limit.
+    #[allow(dead_code)]
+    pub fn get_recent_journal_raw(
+        &self,
+        avatar_id: &str,
+        limit: u32,
+    ) -> Result<Vec<AiDailyLogRow>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, avatar_id, conversation_id, log_date, summary, created_at
+             FROM ai_daily_log
+             WHERE avatar_id = ?1
+             ORDER BY log_date DESC
+             LIMIT ?2",
+        )?;
+        let rows = stmt
+            .query_map(params![avatar_id, limit], |row| {
+                Ok(AiDailyLogRow {
+                    id: row.get(0)?,
+                    avatar_id: row.get(1)?,
+                    conversation_id: row.get(2)?,
+                    log_date: row.get(3)?,
+                    summary: row.get(4)?,
+                    created_at: row.get(5)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Insert a new journal entry (summary should already be encrypted by the caller).
+    #[allow(dead_code)]
+    pub fn insert_ai_journal_raw(
+        &self,
+        avatar_id: &str,
+        conversation_id: &str,
+        log_date: &str,
+        summary_encrypted: &str,
+    ) -> Result<String, AppError> {
+        let id = Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO ai_daily_log (id, avatar_id, conversation_id, log_date, summary, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))",
+            params![id, avatar_id, conversation_id, log_date, summary_encrypted],
+        )?;
+        Ok(id)
+    }
+
+    /// Delete a journal entry by ID.
+    pub fn delete_ai_journal_entry(&self, entry_id: &str) -> Result<(), AppError> {
+        self.conn.execute(
+            "DELETE FROM ai_daily_log WHERE id = ?1",
+            params![entry_id],
+        )?;
+        Ok(())
+    }
+
+    // ── AI Data Wipe ────────────────────────────────────────────────
+
+    /// Wipe all AI conversation data (messages, journal, memories, conversations).
+    /// Keeps avatars and personalities intact.
+    pub fn wipe_ai_data(&self) -> Result<(), AppError> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM ai_messages", [])?;
+        tx.execute("DELETE FROM ai_daily_log", [])?;
+        tx.execute("DELETE FROM ai_memories", [])?;
+        tx.execute("DELETE FROM ai_conversations", [])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    // ── AI Conversation Stub (for FK constraints in tests/seeding) ──
+
+    /// Create a minimal conversation record. Used for FK constraints when inserting
+    /// journal entries or memories that reference a conversation.
+    #[allow(dead_code)]
+    pub fn create_ai_conversation_stub(
+        &self,
+        conversation_id: &str,
+        avatar_id: &str,
+    ) -> Result<(), AppError> {
+        self.conn.execute(
+            "INSERT INTO ai_conversations (id, avatar_id, started_at, message_count, compacted)
+             VALUES (?1, ?2, datetime('now'), 0, 0)",
+            params![conversation_id, avatar_id],
+        )?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -5762,5 +6310,262 @@ mod tests {
         assert_eq!(map.get("game-a"), Some(&1000));
         assert_eq!(map.get("game-b"), Some(&3000));
         assert!(map.get("game-c").is_none());
+    }
+
+    // ── AI Personality Tests ────────────────────────────────────────
+
+    #[test]
+    fn test_list_ai_personalities_returns_builtin() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        assert_eq!(personalities.len(), 6); // 6 built-in from v24 seed
+        assert!(personalities[0].is_builtin);
+    }
+
+    #[test]
+    fn test_create_ai_personality() {
+        let db = test_db();
+        let p = db
+            .create_ai_personality("Test Bot", "You are a test bot")
+            .unwrap();
+        assert_eq!(p.name, "Test Bot");
+        assert!(!p.is_builtin);
+        let all = db.list_ai_personalities().unwrap();
+        assert_eq!(all.len(), 7); // 6 builtin + 1 custom
+    }
+
+    // ── AI Avatar Tests ─────────────────────────────────────────────
+
+    #[test]
+    fn test_create_and_list_avatars() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let pid = &personalities[0].id;
+        let avatar = db.create_ai_avatar("TestAvatar", pid).unwrap();
+        assert_eq!(avatar.name, "TestAvatar");
+        assert!(!avatar.is_active);
+        let avatars = db.list_ai_avatars().unwrap();
+        assert_eq!(avatars.len(), 1);
+    }
+
+    #[test]
+    fn test_switch_avatar() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let pid = &personalities[0].id;
+        let a1 = db.create_ai_avatar("Avatar1", pid).unwrap();
+        let a2 = db.create_ai_avatar("Avatar2", pid).unwrap();
+
+        db.switch_ai_avatar(&a1.id).unwrap();
+        let active = db.get_active_ai_avatar().unwrap().unwrap();
+        assert_eq!(active.id, a1.id);
+
+        db.switch_ai_avatar(&a2.id).unwrap();
+        let active = db.get_active_ai_avatar().unwrap().unwrap();
+        assert_eq!(active.id, a2.id);
+    }
+
+    #[test]
+    fn test_get_active_avatar_none() {
+        let db = test_db();
+        assert!(db.get_active_ai_avatar().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_create_avatar_invalid_personality() {
+        let db = test_db();
+        let result = db.create_ai_avatar("Test", "nonexistent-id");
+        assert!(result.is_err());
+    }
+
+    // ── AI Memory Tests ─────────────────────────────────────────────
+
+    #[test]
+    fn test_insert_and_get_memories() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db
+            .create_ai_avatar("MemBot", &personalities[0].id)
+            .unwrap();
+
+        let id = db
+            .insert_ai_memory_raw(&avatar.id, "encrypted_content", 5, "general", None, false)
+            .unwrap();
+        assert!(!id.is_empty());
+
+        let memories = db.get_all_active_memories_raw(&avatar.id).unwrap();
+        assert_eq!(memories.len(), 1);
+        assert_eq!(memories[0].content, "encrypted_content");
+        assert_eq!(memories[0].importance, 5);
+    }
+
+    #[test]
+    fn test_soft_delete_memory() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db
+            .create_ai_avatar("DelBot", &personalities[0].id)
+            .unwrap();
+        let id = db
+            .insert_ai_memory_raw(&avatar.id, "content", 5, "general", None, false)
+            .unwrap();
+
+        db.soft_delete_memory(&id).unwrap();
+        let memories = db.get_all_active_memories_raw(&avatar.id).unwrap();
+        assert!(memories.is_empty());
+    }
+
+    #[test]
+    fn test_system_memories_separate_from_vault() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db
+            .create_ai_avatar("SysBot", &personalities[0].id)
+            .unwrap();
+
+        db.insert_ai_memory_raw(&avatar.id, "system_mem", 10, "system", None, true)
+            .unwrap();
+        db.insert_ai_memory_raw(&avatar.id, "regular_mem", 5, "general", None, false)
+            .unwrap();
+
+        let system = db.get_active_system_memories_raw(&avatar.id).unwrap();
+        assert_eq!(system.len(), 1);
+        assert!(system[0].is_system);
+
+        let vault = db.get_active_vault_memories_raw(&avatar.id, 50).unwrap();
+        assert_eq!(vault.len(), 1);
+        assert!(!vault[0].is_system);
+    }
+
+    #[test]
+    fn test_mark_memory_superseded() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db
+            .create_ai_avatar("SupBot", &personalities[0].id)
+            .unwrap();
+        let old_id = db
+            .insert_ai_memory_raw(&avatar.id, "old", 5, "general", None, false)
+            .unwrap();
+        let new_id = db
+            .insert_ai_memory_raw(&avatar.id, "new", 7, "general", None, false)
+            .unwrap();
+
+        db.mark_memory_superseded(&old_id, &new_id).unwrap();
+        let memories = db.get_all_active_memories_raw(&avatar.id).unwrap();
+        assert_eq!(memories.len(), 1);
+        assert_eq!(memories[0].id, new_id);
+    }
+
+    #[test]
+    fn test_count_active_vault_memories() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db
+            .create_ai_avatar("CountBot", &personalities[0].id)
+            .unwrap();
+
+        for i in 0..5 {
+            db.insert_ai_memory_raw(
+                &avatar.id,
+                &format!("mem_{}", i),
+                5,
+                "general",
+                None,
+                false,
+            )
+            .unwrap();
+        }
+        // System memory should NOT be counted
+        db.insert_ai_memory_raw(&avatar.id, "sys", 10, "system", None, true)
+            .unwrap();
+
+        assert_eq!(db.count_active_vault_memories(&avatar.id).unwrap(), 5);
+    }
+
+    #[test]
+    fn test_cross_avatar_memories() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let a1 = db
+            .create_ai_avatar("Avatar1", &personalities[0].id)
+            .unwrap();
+        let a2 = db
+            .create_ai_avatar("Avatar2", &personalities[0].id)
+            .unwrap();
+
+        // High importance memory on avatar2 — should be visible to avatar1
+        db.insert_ai_memory_raw(&a2.id, "shared_high", 8, "general", None, false)
+            .unwrap();
+        // Low importance — should NOT be visible
+        db.insert_ai_memory_raw(&a2.id, "shared_low", 3, "general", None, false)
+            .unwrap();
+
+        let cross = db.get_cross_avatar_memories_raw(&a1.id, 20).unwrap();
+        assert_eq!(cross.len(), 1);
+        assert_eq!(cross[0].1, "Avatar2");
+    }
+
+    // ── AI Journal Tests ────────────────────────────────────────────
+
+    #[test]
+    fn test_insert_and_get_journal() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db
+            .create_ai_avatar("JournalBot", &personalities[0].id)
+            .unwrap();
+        // Need a conversation for FK
+        db.create_ai_conversation_stub("conv-1", &avatar.id)
+            .unwrap();
+
+        let id = db
+            .insert_ai_journal_raw(&avatar.id, "conv-1", "2026-02-27", "encrypted_summary")
+            .unwrap();
+        assert!(!id.is_empty());
+
+        let entries = db.get_ai_journal_raw(&avatar.id).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].summary, "encrypted_summary");
+    }
+
+    #[test]
+    fn test_delete_journal_entry() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db
+            .create_ai_avatar("DelJBot", &personalities[0].id)
+            .unwrap();
+        db.create_ai_conversation_stub("conv-2", &avatar.id)
+            .unwrap();
+
+        let id = db
+            .insert_ai_journal_raw(&avatar.id, "conv-2", "2026-02-27", "summary")
+            .unwrap();
+        db.delete_ai_journal_entry(&id).unwrap();
+        let entries = db.get_ai_journal_raw(&avatar.id).unwrap();
+        assert!(entries.is_empty());
+    }
+
+    // ── Wipe Test ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_wipe_ai_data() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db
+            .create_ai_avatar("WipeBot", &personalities[0].id)
+            .unwrap();
+        db.insert_ai_memory_raw(&avatar.id, "mem", 5, "general", None, false)
+            .unwrap();
+
+        db.wipe_ai_data().unwrap();
+
+        // Memories gone
+        let memories = db.get_all_active_memories_raw(&avatar.id).unwrap();
+        assert!(memories.is_empty());
+        // But avatars and personalities remain
+        assert!(!db.list_ai_avatars().unwrap().is_empty());
+        assert!(!db.list_ai_personalities().unwrap().is_empty());
     }
 }

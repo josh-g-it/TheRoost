@@ -1,9 +1,12 @@
 use tauri::State;
 
 use crate::models::ai::{CloudAiUsage, CloudProvider, ResolvedIntent};
+use crate::models::assistant::{AiAvatar, AiDailyLog, AiMemory, AiPersonality};
 use crate::services::ai::cloud_config::CloudConfigHandle;
 use crate::services::ai::cloud_resolver::CloudResolver;
 use crate::services::ai::context_builder;
+use crate::services::ai::encryption;
+use crate::services::ai::memory;
 use crate::services::ai::orchestrator::AiOrchestrator;
 use crate::services::ai::pattern_matcher::PatternMatcher;
 use crate::services::cache_db::CacheDbHandle;
@@ -191,5 +194,177 @@ pub fn update_cloud_ai_settings(
         daily_limit = clamped_limit,
         "Cloud AI settings updated and persisted"
     );
+    Ok(())
+}
+
+// ── Personality Commands ────────────────────────────────────────────
+
+#[tauri::command]
+pub fn list_personalities(db: State<'_, CacheDbHandle>) -> Result<Vec<AiPersonality>, AppError> {
+    let db = db.lock_or_err("DB")?;
+    db.list_ai_personalities()
+}
+
+#[tauri::command]
+pub fn create_personality(
+    name: String,
+    prompt_text: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<AiPersonality, AppError> {
+    if name.trim().is_empty() {
+        return Err(AppError::Validation(
+            "Personality name cannot be empty".into(),
+        ));
+    }
+    let db = db.lock_or_err("DB")?;
+    db.create_ai_personality(&name, &prompt_text)
+}
+
+// ── Avatar Commands ─────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn list_avatars(db: State<'_, CacheDbHandle>) -> Result<Vec<AiAvatar>, AppError> {
+    let db = db.lock_or_err("DB")?;
+    db.list_ai_avatars()
+}
+
+#[tauri::command]
+pub fn get_active_avatar(db: State<'_, CacheDbHandle>) -> Result<Option<AiAvatar>, AppError> {
+    let db = db.lock_or_err("DB")?;
+    db.get_active_ai_avatar()
+}
+
+#[tauri::command]
+pub fn create_avatar(
+    name: String,
+    personality_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<AiAvatar, AppError> {
+    if name.trim().is_empty() {
+        return Err(AppError::Validation("Avatar name cannot be empty".into()));
+    }
+    let db = db.lock_or_err("DB")?;
+    db.create_ai_avatar(&name, &personality_id)
+}
+
+#[tauri::command]
+pub fn switch_avatar(avatar_id: String, db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
+    let db = db.lock_or_err("DB")?;
+    db.switch_ai_avatar(&avatar_id)
+}
+
+// ── Memory Commands ─────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_memories(
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<Vec<AiMemory>, AppError> {
+    let key = encryption::load_encryption_key()?;
+    let db = db.lock_or_err("DB")?;
+    let rows = db.get_all_active_memories_raw(&avatar_id)?;
+    let mut memories = Vec::with_capacity(rows.len());
+    for row in rows {
+        let content = encryption::decrypt_field(&row.content, &key)?;
+        memories.push(AiMemory {
+            id: row.id,
+            avatar_id: row.avatar_id,
+            conversation_id: row.conversation_id,
+            content,
+            importance: row.importance,
+            category: row.category,
+            is_system: row.is_system,
+            created_at: row.created_at,
+            last_referenced: row.last_referenced,
+            superseded_by: row.superseded_by,
+            active: row.active,
+        });
+    }
+    Ok(memories)
+}
+
+#[tauri::command]
+pub fn delete_memory(memory_id: String, db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
+    let db = db.lock_or_err("DB")?;
+    db.soft_delete_user_memory(&memory_id)
+}
+
+// ── Journal Commands ────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_journal(
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<Vec<AiDailyLog>, AppError> {
+    let key = encryption::load_encryption_key()?;
+    let db = db.lock_or_err("DB")?;
+    let rows = db.get_ai_journal_raw(&avatar_id)?;
+    let mut entries = Vec::with_capacity(rows.len());
+    for row in rows {
+        let summary = encryption::decrypt_field(&row.summary, &key)?;
+        entries.push(AiDailyLog {
+            id: row.id,
+            avatar_id: row.avatar_id,
+            conversation_id: row.conversation_id,
+            log_date: row.log_date,
+            summary,
+            created_at: row.created_at,
+        });
+    }
+    Ok(entries)
+}
+
+#[tauri::command]
+pub fn delete_journal_entry(
+    entry_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<(), AppError> {
+    let db = db.lock_or_err("DB")?;
+    db.delete_ai_journal_entry(&entry_id)
+}
+
+// ── Encryption Key Commands ─────────────────────────────────────────
+
+#[tauri::command]
+pub fn generate_encryption_key() -> Result<(), AppError> {
+    if encryption::has_encryption_key()? {
+        return Err(AppError::Encryption(
+            "Encryption key already exists".into(),
+        ));
+    }
+    let key = encryption::generate_aes_key();
+    encryption::store_encryption_key(&key)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn check_encryption_key_exists() -> Result<bool, AppError> {
+    encryption::has_encryption_key()
+}
+
+// ── Nuclear Wipe ────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn wipe_ai_memory(
+    db: State<'_, CacheDbHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), AppError> {
+    // Load key BEFORE lock (keyring I/O)
+    let key = encryption::load_encryption_key().ok();
+
+    // Load username from settings — no username field exists yet, fall back to "User"
+    let username = settings_store::load_settings(&app_handle)
+        .ok()
+        .and(None::<String>)
+        .unwrap_or_else(|| "User".to_string());
+
+    let db_guard = db.lock_or_err("DB")?;
+    db_guard.wipe_ai_data()?;
+    // Re-seed system memories for the active avatar if one exists
+    if let Some(avatar) = db_guard.get_active_ai_avatar()? {
+        if let Some(key) = &key {
+            memory::seed_system_memories(&db_guard, &avatar.id, &avatar.name, &username, key)?;
+        }
+    }
     Ok(())
 }

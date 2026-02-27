@@ -126,6 +126,7 @@ pub fn has_encryption_key() -> Result<bool, AppError> {
 
 /// Delete the AI encryption key from the credential manager.
 /// Treats a missing key as success (idempotent).
+#[allow(dead_code)]
 pub fn delete_encryption_key() -> Result<(), AppError> {
     let entry = keyring::Entry::new(SERVICE_NAME, ENCRYPTION_KEY_ACCOUNT)
         .map_err(|e| AppError::Credential(format!("Keyring init error: {e}")))?;

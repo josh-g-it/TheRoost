@@ -1,5 +1,6 @@
 pub mod achievement;
 pub mod ai;
+pub mod assistant;
 pub mod audio;
 pub mod friend;
 pub mod game;
