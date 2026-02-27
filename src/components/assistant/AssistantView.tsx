@@ -56,7 +56,7 @@ export function AssistantView() {
     }
   }, [conversationId, activeAvatar]);
 
-  const { remaining, isPaused, resetTimer } = useInactivityTimer({
+  const { remaining, isPaused, isActive, resetTimer } = useInactivityTimer({
     onTimeout: handleTimeout,
   });
 
@@ -173,7 +173,7 @@ export function AssistantView() {
             />
             {hasConversation ? "In conversation" : "Idle"}
           </div>
-          {hasConversation && (
+          {hasConversation && isActive && (
             <div className="assistant-view__timer">
               {isPaused
                 ? "Timer paused (game active)"

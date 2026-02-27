@@ -18,8 +18,10 @@ export function useInactivityTimer({
 }: UseInactivityTimerOptions) {
   const [remaining, setRemaining] = useState(timeoutSeconds);
   const [isPaused, setIsPaused] = useState(false);
+  const [isActive, setIsActive] = useState(false);
   const onTimeoutRef = useRef(onTimeout);
   const isPausedRef = useRef(isPaused);
+  const isActiveRef = useRef(false);
 
   useEffect(() => {
     onTimeoutRef.current = onTimeout;
@@ -30,8 +32,12 @@ export function useInactivityTimer({
   }, [isPaused]);
 
   useEffect(() => {
+    isActiveRef.current = isActive;
+  }, [isActive]);
+
+  useEffect(() => {
     const interval = setInterval(() => {
-      if (isPausedRef.current) return;
+      if (!isActiveRef.current || isPausedRef.current) return;
       setRemaining((prev) => {
         if (prev <= 0) return 0; // Already expired, no-op
         if (prev === 1) {
@@ -61,8 +67,9 @@ export function useInactivityTimer({
   }, [timeoutSeconds]);
 
   const resetTimer = useCallback(() => {
+    setIsActive(true);
     setRemaining(timeoutSeconds);
   }, [timeoutSeconds]);
 
-  return { remaining, isPaused, resetTimer };
+  return { remaining, isPaused, isActive, resetTimer };
 }
