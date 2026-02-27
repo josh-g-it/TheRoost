@@ -8,4 +8,6 @@ pub mod encryption;
 pub mod gemini_provider;
 pub mod orchestrator;
 pub mod pattern_matcher;
+#[allow(dead_code)]
+pub mod providers;
 pub mod types;
