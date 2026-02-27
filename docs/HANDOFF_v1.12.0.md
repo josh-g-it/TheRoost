@@ -1,16 +1,16 @@
 # v1.12.0 Handoff — Conversational AI Assistant
 
 > Use this document to get up to speed at the start of a new session.
-> Last updated: 2026-02-27 — Phase 5 complete, ready for Phase 6.
+> Last updated: 2026-02-27 — Phase 6 complete, ready for Phase 7.
 
 ---
 
 ## Current State
 
 - **Version**: 1.11.0 (synced across `tauri.conf.json`, `package.json`, `Cargo.toml`)
-- **Branch**: master — Phase 1+2+3+4+5 committed and pushed to GitHub
+- **Branch**: master — Phase 1+2+3+4+5+6 committed and pushed to GitHub
 - **Release**: v1.11.0 tag pushed and release built successfully
-- **Tests**: 394 Rust + 544 frontend = 938 total (all passing)
+- **Tests**: 394 Rust + 568 frontend = 962 total (all passing)
 - **DB schema**: v24 (29 tables — 23 original + 6 new AI tables, WAL mode, SQLite via rusqlite bundled)
 - **Design phase**: Complete — 11 design documents in `docs/ai-design/`
 - **Implementation plan**: Complete — 7 phases in `docs/ai-design/implementation_plan/`
@@ -19,7 +19,60 @@
 - **Phase 3**: COMPLETE — Models + CRUD + Memory Vault (QA reviewed, all fixes applied)
 - **Phase 4**: COMPLETE — Conversation Service + Core Commands (QA reviewed, all fixes applied)
 - **Phase 5**: COMPLETE — Frontend `/assistant` route + chat UI (QA reviewed, all fixes applied)
-- **Next step**: Begin Phase 6 (Overlay panel) — but user wants retrospective on Phases 1-5 first
+- **Phase 6**: COMPLETE — Overlay assistant panel + cross-window sync (QA reviewed, all fixes applied)
+- **Next step**: Begin Phase 7 (Polish + reviews)
+
+---
+
+## Phase 6 Completion Summary
+
+**Overlay Assistant Panel** — completed 2026-02-27.
+
+### What Was Built
+- **6th FloatingPanel**: Compact AI assistant in the overlay — avatar portrait (top 1/3) + chat (bottom 2/3) + controls bar
+- **3 render states**: Loading, no-avatar fallback ("Set up your assistant in the main window"), and active chat
+- **Panel positioning**: Centered horizontally, below the command center (CC raised 50px to keep balanced)
+- **"More" dropdown**: TTS/Screenshot placeholders (disabled, v1.12.5), End Conversation, Open Full Assistant
+- **Cross-window conversation sync**: Rust emits `ai-conversation-ended` event on end; both windows listen and reset state
+- **Shared conversation**: Both windows call `start_or_resume` and get the same `conversationId`; streaming chunks broadcast to both
+- **`hideEndButton` prop**: AssistantChat hides its own End button in compact mode (overlay controls handle ending)
+- **17 new OverlayAssistant tests + 3 useConversation sync tests** (548 → 568 total frontend)
+
+### Files Created (3 new files)
+| File | Purpose |
+|------|---------|
+| `src/components/overlay/OverlayAssistant.tsx` | Overlay assistant panel component |
+| `src/components/overlay/OverlayAssistant.css` | Compact flexbox layout styling |
+| `src/components/overlay/OverlayAssistant.test.tsx` | 17 tests (states, dropdown, sync, guards) |
+
+### Files Modified (9 files)
+| File | Change |
+|------|--------|
+| `src/OverlayApp.tsx` | Added import + IIFE rendering block for assistant panel |
+| `src/types/settings.ts` | Added `"assistant"` to `OverlayPanelId` union |
+| `src/components/overlay/overlayPanelRegistry.ts` | Added assistant panel entry + raised CC 50px |
+| `src/components/assistant/AssistantChat.css` | Replaced `max-height: 400px` with compact padding/gap rules |
+| `src/components/assistant/AssistantChat.tsx` | Added `hideEndButton` prop |
+| `src/components/assistant/AssistantView.tsx` | Added `ai-conversation-ended` event listener |
+| `src/hooks/useConversation.ts` | Added `isEnded` state + `ai-conversation-ended` listener + `isLocalEndRef` self-notification guard |
+| `src/hooks/useConversation.test.ts` | Added 3 conversation-ended sync tests |
+| `src-tauri/src/commands/ai.rs` | Emits `ai-conversation-ended` event after `end_conversation` succeeds |
+
+### QA Fixes Applied
+1. **Dual end-button conflict (HIGH)**: Added `hideEndButton` prop to AssistantChat — overlay controls are the sole End path
+2. **Unmount cleanup (HIGH)**: Added `mountedRef` to prevent state updates on unmounted component
+3. **Cross-window sync (HIGH)**: Rust emits `ai-conversation-ended`; both windows listen with `conversationId` filter; `isLocalEndRef` prevents self-notification
+4. **Double-click guard (MEDIUM)**: Added `isEndingRef` to prevent concurrent end-conversation calls
+5. **Non-null assertions (MEDIUM)**: Added explicit `if (!activeAvatar) return null` guard, removed 4 `!` assertions
+6. **Dead prop removed (MEDIUM)**: Removed unused `onHideOverlay` prop (YAGNI)
+7. **Type annotation (MEDIUM)**: Fixed `MouseEvent` → `Event` on pointerdown handler
+8. **Test coverage (HIGH)**: 20 new tests — error paths, state reset, dropdown behaviors, guards, sync events
+
+### Architecture Decisions
+- **No first-run in overlay** — if no avatar exists, directs user to main window
+- **"Open Full Assistant"** uses existing `show_main_and_navigate` Rust command (shows main, hides overlay, navigates — all in one)
+- **Cross-window known limitation**: If both windows are open simultaneously, user messages appear optimistically only in the sending window; streaming responses appear in both; full sync on reload via history load
+- **Panel defaults visible** — consistent with other content panels (except media-controls which defaults hidden)
 
 ---
 
