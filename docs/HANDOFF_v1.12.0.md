@@ -362,6 +362,11 @@ All design decisions have been made and documented in `docs/ai-design/`:
 14. Pre-built voices: 4 feminine + 2 masculine, color-named (Coral, Azure, Sage, Violet, Amber, Slate)
 15. Written reviews (`review_text` from `game_ratings`) to be included in AI context (Phase 7)
 16. Active game session context (current game, session start, duration) for AI messages (Phase 7)
+17. Auto-greeting prompt is ephemeral — not persisted in DB, only the AI's response is stored (Phase 7)
+18. Stale conversation auto-reset: if user doesn't respond within 24h, silently discard and start fresh — no compaction (Phase 7)
+19. Delete avatar feature: cascade-deletes all conversations, memories, and journals for that avatar (Phase 7)
+20. Per-avatar data wipe: clear all data for a specific avatar without deleting the avatar itself (Phase 7)
+21. Inactivity timer moves to Rust backend (tokio background task) — runs even when user isn't on chat page; frontend hook becomes display-only subscriber; settings toggle to enable/disable auto-end (Phase 7)
 
 ---
 
