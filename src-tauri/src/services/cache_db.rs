@@ -3352,11 +3352,7 @@ impl CacheDb {
     }
 
     /// Create a new AI avatar linked to a personality.
-    pub fn create_ai_avatar(
-        &self,
-        name: &str,
-        personality_id: &str,
-    ) -> Result<AiAvatar, AppError> {
+    pub fn create_ai_avatar(&self, name: &str, personality_id: &str) -> Result<AiAvatar, AppError> {
         // Validate personality exists
         let exists: bool = self
             .conn
@@ -3735,10 +3731,8 @@ impl CacheDb {
 
     /// Delete a journal entry by ID.
     pub fn delete_ai_journal_entry(&self, entry_id: &str) -> Result<(), AppError> {
-        self.conn.execute(
-            "DELETE FROM ai_daily_log WHERE id = ?1",
-            params![entry_id],
-        )?;
+        self.conn
+            .execute("DELETE FROM ai_daily_log WHERE id = ?1", params![entry_id])?;
         Ok(())
     }
 
@@ -6384,9 +6378,7 @@ mod tests {
     fn test_insert_and_get_memories() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db
-            .create_ai_avatar("MemBot", &personalities[0].id)
-            .unwrap();
+        let avatar = db.create_ai_avatar("MemBot", &personalities[0].id).unwrap();
 
         let id = db
             .insert_ai_memory_raw(&avatar.id, "encrypted_content", 5, "general", None, false)
@@ -6403,9 +6395,7 @@ mod tests {
     fn test_soft_delete_memory() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db
-            .create_ai_avatar("DelBot", &personalities[0].id)
-            .unwrap();
+        let avatar = db.create_ai_avatar("DelBot", &personalities[0].id).unwrap();
         let id = db
             .insert_ai_memory_raw(&avatar.id, "content", 5, "general", None, false)
             .unwrap();
@@ -6419,9 +6409,7 @@ mod tests {
     fn test_system_memories_separate_from_vault() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db
-            .create_ai_avatar("SysBot", &personalities[0].id)
-            .unwrap();
+        let avatar = db.create_ai_avatar("SysBot", &personalities[0].id).unwrap();
 
         db.insert_ai_memory_raw(&avatar.id, "system_mem", 10, "system", None, true)
             .unwrap();
@@ -6441,9 +6429,7 @@ mod tests {
     fn test_mark_memory_superseded() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db
-            .create_ai_avatar("SupBot", &personalities[0].id)
-            .unwrap();
+        let avatar = db.create_ai_avatar("SupBot", &personalities[0].id).unwrap();
         let old_id = db
             .insert_ai_memory_raw(&avatar.id, "old", 5, "general", None, false)
             .unwrap();
@@ -6466,15 +6452,8 @@ mod tests {
             .unwrap();
 
         for i in 0..5 {
-            db.insert_ai_memory_raw(
-                &avatar.id,
-                &format!("mem_{}", i),
-                5,
-                "general",
-                None,
-                false,
-            )
-            .unwrap();
+            db.insert_ai_memory_raw(&avatar.id, &format!("mem_{}", i), 5, "general", None, false)
+                .unwrap();
         }
         // System memory should NOT be counted
         db.insert_ai_memory_raw(&avatar.id, "sys", 10, "system", None, true)

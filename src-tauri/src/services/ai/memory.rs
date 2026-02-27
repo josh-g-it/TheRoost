@@ -124,7 +124,14 @@ pub fn insert_memory(
     key: &[u8; 32],
 ) -> Result<String, AppError> {
     let encrypted = encrypt_field(content, key)?;
-    db.insert_ai_memory_raw(avatar_id, &encrypted, importance, category, conversation_id, is_system)
+    db.insert_ai_memory_raw(
+        avatar_id,
+        &encrypted,
+        importance,
+        category,
+        conversation_id,
+        is_system,
+    )
 }
 
 /// Prune vault if active non-system memories exceed 100.
@@ -457,23 +464,23 @@ mod tests {
     fn test_load_cross_avatar_memories() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let a1 = db
-            .create_ai_avatar("Bot1", &personalities[0].id)
-            .unwrap();
-        let a2 = db
-            .create_ai_avatar("Bot2", &personalities[0].id)
-            .unwrap();
+        let a1 = db.create_ai_avatar("Bot1", &personalities[0].id).unwrap();
+        let a2 = db.create_ai_avatar("Bot2", &personalities[0].id).unwrap();
 
         // High-importance on a2
         insert_memory(
-            &db, &a2.id, "Shared fact", 8, "fact", None, false, &TEST_KEY,
+            &db,
+            &a2.id,
+            "Shared fact",
+            8,
+            "fact",
+            None,
+            false,
+            &TEST_KEY,
         )
         .unwrap();
         // Low-importance on a2 — should not appear
-        insert_memory(
-            &db, &a2.id, "Low fact", 3, "fact", None, false, &TEST_KEY,
-        )
-        .unwrap();
+        insert_memory(&db, &a2.id, "Low fact", 3, "fact", None, false, &TEST_KEY).unwrap();
 
         let cross = load_cross_avatar_memories(&db, &a1.id, &TEST_KEY, 20).unwrap();
         assert_eq!(cross.len(), 1);

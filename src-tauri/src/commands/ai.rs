@@ -328,9 +328,7 @@ pub fn delete_journal_entry(
 #[tauri::command]
 pub fn generate_encryption_key() -> Result<(), AppError> {
     if encryption::has_encryption_key()? {
-        return Err(AppError::Encryption(
-            "Encryption key already exists".into(),
-        ));
+        return Err(AppError::Encryption("Encryption key already exists".into()));
     }
     let key = encryption::generate_aes_key();
     encryption::store_encryption_key(&key)?;
