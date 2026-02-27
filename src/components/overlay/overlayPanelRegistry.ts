@@ -27,7 +27,7 @@ export const OVERLAY_PANELS: OverlayPanelDef[] = [
     icon: "search",
     defaultPosition: () => ({
       x: Math.round((window.innerWidth - sx(600)) / 2),
-      y: Math.round((window.innerHeight - sy(500)) / 2 - sy(60)),
+      y: Math.round((window.innerHeight - sy(500)) / 2 - sy(110)),
     }),
     defaultWidth: sx(600),
     defaultHeight: sy(500),
@@ -78,6 +78,18 @@ export const OVERLAY_PANELS: OverlayPanelDef[] = [
       y: sy(REF_H - BORDER - 500),
     }),
     defaultWidth: sx(500),
+    defaultHeight: sy(500),
+    resizable: true,
+  },
+  {
+    id: "assistant",
+    label: "Assistant",
+    icon: "assistant",
+    defaultPosition: () => ({
+      x: Math.round((window.innerWidth - sx(380)) / 2),
+      y: sy(880), // centered below command center (CC bottom ~860 + 20px gap)
+    }),
+    defaultWidth: sx(380),
     defaultHeight: sy(500),
     resizable: true,
   },

@@ -3,18 +3,20 @@ import { renderHook, act } from "@testing-library/react";
 import { useConversation } from "./useConversation";
 import type { StreamChunk } from "../types";
 
+type EventCallback = (event: { payload: unknown }) => void;
 let streamCallback: ((event: { payload: StreamChunk }) => void) | null = null;
+let conversationEndedCallback: ((event: { payload: string }) => void) | null = null;
 const mockUnlisten = vi.fn();
 
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn(
-    (eventName: string, callback: (event: { payload: StreamChunk }) => void) => {
-      if (eventName === "ai-stream-chunk") {
-        streamCallback = callback;
-      }
-      return Promise.resolve(mockUnlisten);
-    },
-  ),
+  listen: vi.fn((eventName: string, callback: EventCallback) => {
+    if (eventName === "ai-stream-chunk") {
+      streamCallback = callback as (event: { payload: StreamChunk }) => void;
+    } else if (eventName === "ai-conversation-ended") {
+      conversationEndedCallback = callback as (event: { payload: string }) => void;
+    }
+    return Promise.resolve(mockUnlisten);
+  }),
 }));
 
 const mockSendMessage = vi.fn();
@@ -33,6 +35,7 @@ describe("useConversation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     streamCallback = null;
+    conversationEndedCallback = null;
     mockSendMessage.mockResolvedValue(undefined);
     mockEndConversation.mockResolvedValue(undefined);
     mockGetConversationHistory.mockResolvedValue([]);
@@ -320,5 +323,103 @@ describe("useConversation", () => {
     // The unlisten promise resolves to the mock fn, which then gets called
     await act(async () => {});
     expect(mockUnlisten).toHaveBeenCalled();
+  });
+
+  // B10: Conversation-ended event sync
+  it("sets isEnded and clears messages when ai-conversation-ended event matches", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    // Wait for effects to register listen callbacks
+    await act(async () => {});
+
+    // Load some messages
+    const historyMessages = [
+      {
+        id: "m1",
+        conversationId: "c1",
+        role: "user" as const,
+        content: "Hi",
+        createdAt: "2026-02-27T12:00:00Z",
+        tokenEstimate: 1,
+      },
+    ];
+    mockGetConversationHistory.mockResolvedValue(historyMessages);
+    await act(async () => {
+      await result.current.loadHistory("c1");
+    });
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.isEnded).toBe(false);
+
+    // Fire the conversation-ended event matching our conversationId
+    expect(conversationEndedCallback).not.toBeNull();
+    act(() => {
+      conversationEndedCallback!({ payload: "c1" });
+    });
+
+    expect(result.current.isEnded).toBe(true);
+    expect(result.current.messages).toEqual([]);
+    expect(result.current.isStreaming).toBe(false);
+    expect(result.current.currentStreamText).toBe("");
+  });
+
+  it("ignores ai-conversation-ended event with wrong conversationId", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    // Wait for effects to register listen callbacks
+    await act(async () => {});
+
+    // Load some messages
+    const historyMessages = [
+      {
+        id: "m1",
+        conversationId: "c1",
+        role: "user" as const,
+        content: "Hi",
+        createdAt: "2026-02-27T12:00:00Z",
+        tokenEstimate: 1,
+      },
+    ];
+    mockGetConversationHistory.mockResolvedValue(historyMessages);
+    await act(async () => {
+      await result.current.loadHistory("c1");
+    });
+
+    expect(result.current.messages).toHaveLength(1);
+
+    // Fire event with wrong conversationId
+    act(() => {
+      conversationEndedCallback!({ payload: "c-other" });
+    });
+
+    // Messages should remain unchanged
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.isEnded).toBe(false);
+  });
+
+  it("does not trigger isEnded when local endConversation is called", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    // Wait for effects to register listen callbacks
+    await act(async () => {});
+
+    // Call endConversation locally — this sets isLocalEndRef to true
+    await act(async () => {
+      await result.current.endConversation();
+    });
+
+    // Simulate the event arriving (as it would from the backend)
+    act(() => {
+      conversationEndedCallback!({ payload: "c1" });
+    });
+
+    // isEnded should be false because we triggered the end locally
+    expect(result.current.isEnded).toBe(false);
   });
 });
