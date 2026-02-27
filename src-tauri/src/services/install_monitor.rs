@@ -31,8 +31,6 @@ pub fn derive_status(state_flags: u32) -> &'static str {
     } else if state_flags & 2 != 0 {
         // Bit 1: update required
         "update_required"
-    } else if state_flags == 0 {
-        "pending"
     } else {
         "pending"
     }
@@ -215,7 +213,6 @@ mod tests {
             bytes_to_download: 10_000_000_000,
             bytes_staged: 0,
             bytes_to_stage: 0,
-            size_on_disk: 0,
         };
         let p = compute_progress(&info);
         assert!((p - 0.5).abs() < f64::EPSILON);
@@ -231,7 +228,6 @@ mod tests {
             bytes_to_download: 0,
             bytes_staged: 3_000_000_000,
             bytes_to_stage: 10_000_000_000,
-            size_on_disk: 0,
         };
         let p = compute_progress(&info);
         assert!((p - 0.3).abs() < f64::EPSILON);
@@ -247,7 +243,6 @@ mod tests {
             bytes_to_download: 0,
             bytes_staged: 0,
             bytes_to_stage: 0,
-            size_on_disk: 0,
         };
         assert_eq!(compute_progress(&info), 0.0);
     }

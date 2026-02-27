@@ -268,7 +268,6 @@ pub struct ManifestProgressInfo {
     pub bytes_to_download: u64,
     pub bytes_staged: u64,
     pub bytes_to_stage: u64,
-    pub size_on_disk: u64,
 }
 
 /// Parse an appmanifest_*.acf file extracting download progress fields.
@@ -325,7 +324,6 @@ pub fn parse_app_manifest_progress_from_str(
         bytes_to_download: get_u64("BytesToDownload"),
         bytes_staged: get_u64("BytesStaged"),
         bytes_to_stage: get_u64("BytesToStage"),
-        size_on_disk: get_u64("SizeOnDisk"),
     })
 }
 
@@ -598,7 +596,6 @@ mod tests {
         assert_eq!(info.appid, 440);
         assert_eq!(info.name, "Team Fortress 2");
         assert_eq!(info.state_flags, 4);
-        assert_eq!(info.size_on_disk, 23456789012);
         assert_eq!(info.bytes_downloaded, 0);
         assert_eq!(info.bytes_to_download, 0);
     }
@@ -643,7 +640,6 @@ mod tests {
         assert_eq!(info.bytes_to_download, 0);
         assert_eq!(info.bytes_staged, 0);
         assert_eq!(info.bytes_to_stage, 0);
-        assert_eq!(info.size_on_disk, 0);
     }
 
     #[test]

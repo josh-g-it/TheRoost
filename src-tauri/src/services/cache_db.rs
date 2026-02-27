@@ -26,6 +26,9 @@ pub type OverlayGameRow = (String, String, String, String, Option<String>, u32);
 /// `(image_type, image_url, local_path, user_selected)` — game image record.
 pub type GameImageRow = (String, String, Option<String>, bool);
 
+/// `(game_id, name, source, source_id, install_path)` — installed game row for storage scanning.
+pub type InstalledGameRow = (String, String, String, String, String);
+
 /// `(game_id, source_id, name, install_path, description, launch_args)` — manual game row.
 pub type ManualGameRow = (
     String,
@@ -969,9 +972,7 @@ impl CacheDb {
 
     /// Get installed games with name, source, source_id for storage scanning.
     /// Returns (game_id, name, source, source_id, install_path).
-    pub fn get_installed_games_for_storage(
-        &self,
-    ) -> Result<Vec<(String, String, String, String, String)>, AppError> {
+    pub fn get_installed_games_for_storage(&self) -> Result<Vec<InstalledGameRow>, AppError> {
         let mut stmt = self.conn.prepare(
             "SELECT game_id, COALESCE(name, ''), source, COALESCE(source_id, ''), install_path \
              FROM games WHERE install_path IS NOT NULL",
