@@ -21,6 +21,10 @@ pub enum AppError {
     #[error("Database error: {0}")]
     Database(#[from] rusqlite::Error),
 
+    #[allow(dead_code)]
+    #[error("Encryption error: {0}")]
+    Encryption(String),
+
     #[error("Store API error: {0}")]
     StoreApi(String),
 
@@ -46,6 +50,7 @@ impl AppError {
             AppError::Database(_) => "DATABASE_ERROR",
             AppError::StoreApi(_) => "STORE_API_ERROR",
             AppError::Validation(_) => "VALIDATION_ERROR",
+            AppError::Encryption(_) => "ENCRYPTION_ERROR",
             AppError::LockPoisoned(_) => "LOCK_POISONED",
             AppError::Backup(_) => "BACKUP_ERROR",
         }

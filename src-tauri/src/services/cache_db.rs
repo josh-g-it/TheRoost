@@ -58,6 +58,44 @@ const ACHIEVEMENT_TTL_SECS: i64 = 24 * 60 * 60;
 /// News cache TTL: 1 hour in seconds.
 const NEWS_TTL_SECS: i64 = 60 * 60;
 
+// ── AI Personality Prompts ──────────────────────────────────────────
+
+const PERSONALITY_FRIENDLY_GUIDE: &str = "\
+You are an enthusiastic gaming companion who loves discovering new experiences with the player. \
+You celebrate their achievements, get genuinely excited about their gaming adventures, and always \
+look for the bright side. You ask thoughtful questions about what they enjoyed and why. \
+Your tone is warm, encouraging, and supportive — like a best friend who shares your passion for games.";
+
+const PERSONALITY_STOIC_ADVISOR: &str = "\
+You are a measured analyst who prefers facts and statistics over hype. You give thoughtful, \
+data-driven recommendations based on playtime patterns, genre preferences, and completion rates. \
+You are calm, precise, and occasionally dry — never dismissive, but always honest. \
+You value efficiency and help the player make informed decisions about what to play next.";
+
+const PERSONALITY_WITTY_COMPANION: &str = "\
+You are a sharp-tongued friend who expresses affection through humor and playful sarcasm. \
+You make pop-culture references, gentle roasts about gaming habits, and witty observations. \
+You are never mean-spirited — your humor comes from a place of genuine camaraderie. \
+You keep conversations lively and entertaining while still being genuinely helpful.";
+
+const PERSONALITY_LORE_SCHOLAR: &str = "\
+You are a passionate lore enthusiast who sees every game as a story worth exploring deeply. \
+You love discussing narratives, world-building, character arcs, and thematic connections between games. \
+You draw parallels between different game universes and recommend games based on storytelling quality. \
+Your knowledge runs deep and you treat gaming as an art form worthy of serious appreciation.";
+
+const PERSONALITY_COMPETITIVE_COACH: &str = "\
+You are a driven coach who thrives on pushing the player to new heights. You track achievements, \
+completion percentages, and challenge runs. You set goals, celebrate milestones, and provide \
+motivational nudges when the player has been away too long. \
+You are energetic, focused, and always looking for the next challenge to conquer together.";
+
+const PERSONALITY_CHILL_BUDDY: &str = "\
+You are a relaxed friend who games to unwind, never to stress. You appreciate cozy games, \
+exploration at a leisurely pace, and enjoying the journey over the destination. \
+You never pressure the player about backlogs or completion rates. \
+Your vibe is laid-back and comforting — like gaming on a rainy afternoon with no agenda.";
+
 pub struct CacheDb {
     conn: Connection,
 }
@@ -159,6 +197,9 @@ impl CacheDb {
         }
         if current < 23 {
             self.apply_v23()?;
+        }
+        if current < 24 {
+            self.apply_v24()?;
         }
 
         // Repair: restore any entries invalidated by cache invalidation (cached_at = 0).
@@ -704,6 +745,142 @@ impl CacheDb {
             INSERT OR REPLACE INTO schema_version (version, applied_at)
                 VALUES (23, datetime('now'));",
         )?;
+        Ok(())
+    }
+
+    fn apply_v24(&self) -> Result<(), AppError> {
+        let tx = self.conn.unchecked_transaction()?;
+
+        // Phase A: DDL — Create 6 tables + 4 indexes
+        tx.execute_batch(
+            "CREATE TABLE IF NOT EXISTS ai_personalities (
+                id              TEXT PRIMARY KEY,
+                name            TEXT NOT NULL,
+                prompt_text     TEXT NOT NULL,
+                is_builtin      INTEGER DEFAULT 0,
+                created_at      TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS ai_avatars (
+                id              TEXT PRIMARY KEY,
+                name            TEXT NOT NULL,
+                personality_id  TEXT NOT NULL,
+                image_path      TEXT,
+                is_active       INTEGER DEFAULT 0,
+                created_at      TEXT NOT NULL,
+                FOREIGN KEY (personality_id) REFERENCES ai_personalities(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS ai_conversations (
+                id              TEXT PRIMARY KEY,
+                avatar_id       TEXT NOT NULL,
+                started_at      TEXT NOT NULL,
+                ended_at        TEXT,
+                summary         TEXT,
+                message_count   INTEGER DEFAULT 0,
+                compacted       INTEGER DEFAULT 0,
+                FOREIGN KEY (avatar_id) REFERENCES ai_avatars(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS ai_messages (
+                id              TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                role            TEXT NOT NULL,
+                content         TEXT NOT NULL,
+                created_at      TEXT NOT NULL,
+                token_estimate  INTEGER DEFAULT 0,
+                FOREIGN KEY (conversation_id) REFERENCES ai_conversations(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS ai_memories (
+                id              TEXT PRIMARY KEY,
+                avatar_id       TEXT NOT NULL,
+                conversation_id TEXT,
+                content         TEXT NOT NULL,
+                importance      INTEGER NOT NULL,
+                category        TEXT DEFAULT 'general',
+                is_system       INTEGER DEFAULT 0,
+                created_at      TEXT NOT NULL,
+                last_referenced TEXT,
+                superseded_by   TEXT,
+                active          INTEGER DEFAULT 1,
+                FOREIGN KEY (avatar_id) REFERENCES ai_avatars(id) ON DELETE CASCADE,
+                FOREIGN KEY (conversation_id) REFERENCES ai_conversations(id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS ai_daily_log (
+                id              TEXT PRIMARY KEY,
+                avatar_id       TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                log_date        TEXT NOT NULL,
+                summary         TEXT NOT NULL,
+                created_at      TEXT NOT NULL,
+                FOREIGN KEY (avatar_id) REFERENCES ai_avatars(id) ON DELETE CASCADE,
+                FOREIGN KEY (conversation_id) REFERENCES ai_conversations(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_ai_conversations_avatar
+                ON ai_conversations(avatar_id, started_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_ai_messages_conv
+                ON ai_messages(conversation_id, created_at);
+
+            CREATE INDEX IF NOT EXISTS idx_ai_memories_active
+                ON ai_memories(avatar_id, active, importance DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_ai_daily_log_avatar_date
+                ON ai_daily_log(avatar_id, log_date DESC);",
+        )?;
+
+        // Phase B: Seed built-in personalities with parameterized queries
+        let personalities: &[(&str, &str, &str)] = &[
+            (
+                "a1b2c3d4-0001-4000-8000-000000000001",
+                "Friendly Guide",
+                PERSONALITY_FRIENDLY_GUIDE,
+            ),
+            (
+                "a1b2c3d4-0002-4000-8000-000000000002",
+                "Stoic Advisor",
+                PERSONALITY_STOIC_ADVISOR,
+            ),
+            (
+                "a1b2c3d4-0003-4000-8000-000000000003",
+                "Witty Companion",
+                PERSONALITY_WITTY_COMPANION,
+            ),
+            (
+                "a1b2c3d4-0004-4000-8000-000000000004",
+                "Lore Scholar",
+                PERSONALITY_LORE_SCHOLAR,
+            ),
+            (
+                "a1b2c3d4-0005-4000-8000-000000000005",
+                "Competitive Coach",
+                PERSONALITY_COMPETITIVE_COACH,
+            ),
+            (
+                "a1b2c3d4-0006-4000-8000-000000000006",
+                "Chill Buddy",
+                PERSONALITY_CHILL_BUDDY,
+            ),
+        ];
+
+        for (id, name, prompt) in personalities {
+            tx.execute(
+                "INSERT OR IGNORE INTO ai_personalities (id, name, prompt_text, is_builtin, created_at)
+                 VALUES (?1, ?2, ?3, 1, datetime('now'))",
+                rusqlite::params![id, name, prompt],
+            )?;
+        }
+
+        // Version stamp last — if anything above fails, the transaction rolls back
+        tx.execute_batch(
+            "INSERT OR REPLACE INTO schema_version (version, applied_at)
+                VALUES (24, datetime('now'));",
+        )?;
+
+        tx.commit()?;
         Ok(())
     }
 
@@ -3131,6 +3308,12 @@ mod tests {
             "saved_filters",
             "game_notes",
             "game_ratings",
+            "ai_personalities",
+            "ai_avatars",
+            "ai_conversations",
+            "ai_messages",
+            "ai_memories",
+            "ai_daily_log",
         ];
         for table in &expected {
             assert!(
@@ -3143,7 +3326,7 @@ mod tests {
     }
 
     #[test]
-    fn test_schema_version_is_22() {
+    fn test_schema_version_current() {
         let db = test_db();
         let version: u32 = db
             .conn
@@ -3151,7 +3334,245 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 23);
+        assert_eq!(version, 24);
+    }
+
+    #[test]
+    fn test_ai_personalities_seeded() {
+        let db = test_db();
+        let count: u32 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM ai_personalities WHERE is_builtin = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 6, "Expected 6 built-in personalities");
+    }
+
+    #[test]
+    fn test_ai_schema_idempotent() {
+        let db = test_db();
+        // init_schema was already called by test_db() → CacheDb::new()
+        // Call it again to verify idempotency
+        db.init_schema().unwrap();
+        let count: u32 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM ai_personalities WHERE is_builtin = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            count, 6,
+            "Idempotent: still exactly 6 built-in personalities"
+        );
+        let version: u32 = db
+            .conn
+            .query_row("SELECT MAX(version) FROM schema_version", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 24);
+    }
+
+    #[test]
+    fn test_ai_indexes_exist() {
+        let db = test_db();
+        let mut stmt = db
+            .conn
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_ai_%'")
+            .unwrap();
+        let indexes: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<String>, _>>()
+            .unwrap();
+        let expected = [
+            "idx_ai_conversations_avatar",
+            "idx_ai_messages_conv",
+            "idx_ai_memories_active",
+            "idx_ai_daily_log_avatar_date",
+        ];
+        for idx in &expected {
+            assert!(
+                indexes.contains(&idx.to_string()),
+                "Missing index: {}. Found: {:?}",
+                idx,
+                indexes
+            );
+        }
+    }
+
+    #[test]
+    fn test_ai_personality_records_complete() {
+        let db = test_db();
+
+        let expected: &[(&str, &str)] = &[
+            ("a1b2c3d4-0001-4000-8000-000000000001", "Friendly Guide"),
+            ("a1b2c3d4-0002-4000-8000-000000000002", "Stoic Advisor"),
+            ("a1b2c3d4-0003-4000-8000-000000000003", "Witty Companion"),
+            ("a1b2c3d4-0004-4000-8000-000000000004", "Lore Scholar"),
+            ("a1b2c3d4-0005-4000-8000-000000000005", "Competitive Coach"),
+            ("a1b2c3d4-0006-4000-8000-000000000006", "Chill Buddy"),
+        ];
+
+        for (expected_id, expected_name) in expected {
+            let row: (String, String, i32, String) = db
+                .conn
+                .query_row(
+                    "SELECT name, prompt_text, is_builtin, created_at FROM ai_personalities WHERE id = ?1",
+                    rusqlite::params![expected_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                )
+                .unwrap_or_else(|_| panic!("Missing personality: {} ({})", expected_name, expected_id));
+
+            assert_eq!(
+                row.0, *expected_name,
+                "Name mismatch for ID {}",
+                expected_id
+            );
+            assert!(
+                !row.1.is_empty(),
+                "prompt_text should be non-empty for '{}'",
+                expected_name
+            );
+            assert_eq!(row.2, 1, "is_builtin should be 1 for '{}'", expected_name);
+            assert!(
+                !row.3.is_empty(),
+                "created_at should be non-null for '{}'",
+                expected_name
+            );
+        }
+    }
+
+    #[test]
+    fn test_ai_avatar_fk_rejects_invalid_personality() {
+        let db = test_db();
+
+        let result = db.conn.execute(
+            "INSERT INTO ai_avatars (id, name, personality_id, is_active, created_at)
+             VALUES ('avatar-1', 'Test Avatar', 'nonexistent-personality-id', 0, datetime('now'))",
+            [],
+        );
+        assert!(
+            result.is_err(),
+            "Should reject avatar with non-existent personality_id"
+        );
+    }
+
+    #[test]
+    fn test_ai_cascade_delete_avatar_removes_conversations() {
+        let db = test_db();
+
+        db.conn.execute(
+            "INSERT INTO ai_avatars (id, name, personality_id, is_active, created_at)
+             VALUES ('avatar-1', 'Avatar', 'a1b2c3d4-0001-4000-8000-000000000001', 1, datetime('now'))",
+            [],
+        ).unwrap();
+
+        db.conn
+            .execute(
+                "INSERT INTO ai_conversations (id, avatar_id, started_at, message_count, compacted)
+             VALUES ('conv-1', 'avatar-1', datetime('now'), 0, 0)",
+                [],
+            )
+            .unwrap();
+
+        let count: u32 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM ai_conversations WHERE avatar_id = 'avatar-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+
+        db.conn
+            .execute("DELETE FROM ai_avatars WHERE id = 'avatar-1'", [])
+            .unwrap();
+
+        let count: u32 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM ai_conversations WHERE id = 'conv-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            count, 0,
+            "Conversation should be cascade-deleted with avatar"
+        );
+    }
+
+    #[test]
+    fn test_ai_memory_conversation_set_null_on_delete() {
+        let db = test_db();
+
+        db.conn.execute(
+            "INSERT INTO ai_avatars (id, name, personality_id, is_active, created_at)
+             VALUES ('avatar-1', 'Avatar', 'a1b2c3d4-0001-4000-8000-000000000001', 1, datetime('now'))",
+            [],
+        ).unwrap();
+
+        db.conn
+            .execute(
+                "INSERT INTO ai_conversations (id, avatar_id, started_at, message_count, compacted)
+             VALUES ('conv-1', 'avatar-1', datetime('now'), 0, 0)",
+                [],
+            )
+            .unwrap();
+
+        db.conn.execute(
+            "INSERT INTO ai_memories (id, avatar_id, conversation_id, content, importance, category, is_system, created_at, active)
+             VALUES ('mem-1', 'avatar-1', 'conv-1', 'Extracted fact', 3, 'general', 0, datetime('now'), 1)",
+            [],
+        ).unwrap();
+
+        let conv_id: Option<String> = db
+            .conn
+            .query_row(
+                "SELECT conversation_id FROM ai_memories WHERE id = 'mem-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(conv_id, Some("conv-1".to_string()));
+
+        db.conn
+            .execute("DELETE FROM ai_conversations WHERE id = 'conv-1'", [])
+            .unwrap();
+
+        let conv_id: Option<String> = db
+            .conn
+            .query_row(
+                "SELECT conversation_id FROM ai_memories WHERE id = 'mem-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            conv_id.is_none(),
+            "conversation_id should be SET NULL after conversation delete, got: {:?}",
+            conv_id
+        );
+
+        let count: u32 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM ai_memories WHERE id = 'mem-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            count, 1,
+            "Memory should survive conversation deletion (SET NULL, not CASCADE)"
+        );
     }
 
     // ── Store Metadata ──────────────────────────────────────────────
