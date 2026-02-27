@@ -308,7 +308,7 @@ export function OverlayApp() {
             x: saved.x,
             y: saved.y,
             width: saved.width ?? panel.defaultWidth,
-            height: saved.height ?? 400,
+            height: saved.height ?? panel.defaultHeight,
           });
         } else {
           const def = panel.defaultPosition();
@@ -316,7 +316,7 @@ export function OverlayApp() {
             x: def.x,
             y: def.y,
             width: panel.defaultWidth,
-            height: 400,
+            height: panel.defaultHeight,
           });
         }
       }
@@ -409,7 +409,7 @@ export function OverlayApp() {
             resizable
             minWidth={300}
             minHeight={200}
-            defaultHeight={gnSaved?.height ?? 420}
+            defaultHeight={gnSaved?.height ?? gnDef.defaultHeight}
             otherPanelRects={buildOtherRects("game-notes")}
           >
             <OverlayGameNotes activeSessions={activeSessions} games={games} />
@@ -437,7 +437,7 @@ export function OverlayApp() {
             resizable
             minWidth={360}
             minHeight={250}
-            defaultHeight={smSaved?.height ?? 340}
+            defaultHeight={smSaved?.height ?? smDef.defaultHeight}
             otherPanelRects={buildOtherRects("system-monitor")}
           >
             <OverlaySystemMonitor activeSessions={activeSessions} games={games} />
@@ -465,7 +465,7 @@ export function OverlayApp() {
             resizable
             minWidth={320}
             minHeight={240}
-            defaultHeight={mcSaved?.height ?? 380}
+            defaultHeight={mcSaved?.height ?? mcDef.defaultHeight}
             otherPanelRects={buildOtherRects("media-controls")}
           >
             <OverlayMediaControls />
@@ -493,7 +493,7 @@ export function OverlayApp() {
             resizable
             minWidth={320}
             minHeight={250}
-            defaultHeight={amSaved?.height ?? 500}
+            defaultHeight={amSaved?.height ?? amDef.defaultHeight}
             otherPanelRects={buildOtherRects("audio-mixer")}
           >
             <OverlayAudioMixer />

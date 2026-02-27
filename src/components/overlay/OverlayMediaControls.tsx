@@ -15,8 +15,8 @@ function formatSource(sourceAppId: string): string {
 
 // ── Carousel item sizing by distance from active ──────────────
 
-const ITEM_BOX = 42;
-const GAP = 10;
+const ITEM_BOX = 56;
+const GAP = 12;
 const STEP = ITEM_BOX + GAP;
 
 function getItemStyle(index: number, activeIndex: number): React.CSSProperties {
@@ -28,7 +28,7 @@ function getItemStyle(index: number, activeIndex: number): React.CSSProperties {
 
 function getFaviconSize(index: number, activeIndex: number): number {
   const distance = Math.abs(index - activeIndex);
-  return distance === 0 ? 32 : distance === 1 ? 24 : 18;
+  return distance === 0 ? 44 : distance === 1 ? 32 : 22;
 }
 
 // ── BookmarkFavicon with size prop ────────────────────────────
@@ -52,7 +52,7 @@ function BookmarkFavicon({
 
   if (bookmark.icon) {
     return (
-      <span className="media-carousel__emoji" style={{ fontSize: size * 0.75 }}>
+      <span className="media-carousel__emoji" style={{ fontSize: size * 0.85 }}>
         {bookmark.icon}
       </span>
     );
@@ -765,6 +765,13 @@ export function OverlayMediaControls() {
       <div className="overlay-media__hero">
         {hasSession ? (
           <>
+            {session?.thumbnailB64 && (
+              <img
+                className="overlay-media__cover-art"
+                src={`data:image/png;base64,${session.thumbnailB64}`}
+                alt="Cover art"
+              />
+            )}
             <div className="overlay-media__track">
               <span className="overlay-media__title">
                 {session?.title || "Unknown Track"}
@@ -789,7 +796,7 @@ export function OverlayMediaControls() {
                 onClick={handleSkipPrevious}
                 title="Previous"
               >
-                <AppIcon name="chevron-left" size={18} />
+                <AppIcon name="chevron-left" size={22} />
               </button>
               <button
                 className="overlay-media__btn overlay-media__btn--play"
@@ -797,7 +804,7 @@ export function OverlayMediaControls() {
                 onClick={handleTogglePlayPause}
                 title={isPlaying ? "Pause" : "Play"}
               >
-                <AppIcon name={isPlaying ? "pause" : "play"} size={22} />
+                <AppIcon name={isPlaying ? "pause" : "play"} size={26} />
               </button>
               <button
                 className="overlay-media__btn"
@@ -805,7 +812,7 @@ export function OverlayMediaControls() {
                 onClick={handleSkipNext}
                 title="Next"
               >
-                <AppIcon name="chevron-right" size={18} />
+                <AppIcon name="chevron-right" size={22} />
               </button>
             </div>
           </>

@@ -61,6 +61,7 @@ fn try_get_media_snapshot() -> Result<MediaSessionSnapshot, Box<dyn std::error::
         source_app_id,
         status,
         has_session: true,
+        thumbnail_b64: None,
     })
 }
 
@@ -110,6 +111,7 @@ fn empty_snapshot() -> MediaSessionSnapshot {
         source_app_id: String::new(),
         status: MediaPlaybackStatus::Closed,
         has_session: false,
+        thumbnail_b64: None,
     }
 }
 

@@ -28,6 +28,9 @@ pub struct MediaSessionSnapshot {
     pub status: MediaPlaybackStatus,
     /// Whether this is a valid/active session
     pub has_session: bool,
+    /// Base64-encoded thumbnail/cover art (None if unavailable)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thumbnail_b64: Option<String>,
 }
 
 #[cfg(test)]
@@ -43,6 +46,7 @@ mod tests {
             source_app_id: "spotify.exe".to_string(),
             status: MediaPlaybackStatus::Playing,
             has_session: true,
+            thumbnail_b64: None,
         };
         let json = serde_json::to_string(&snap).unwrap();
         assert!(json.contains("\"status\":\"playing\""));

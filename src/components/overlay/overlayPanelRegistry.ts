@@ -7,11 +7,18 @@ export interface OverlayPanelDef {
   icon: IconName;
   defaultPosition: () => { x: number; y: number };
   defaultWidth: number;
+  defaultHeight: number;
   resizable: boolean;
 }
 
-const EDGE_PAD = 48;
-const TOP_BAR = 60; // 44px window-manager bar + 16px gap
+// Reference design: 2560×1440 (1440p). Positions/sizes scale proportionally.
+const REF_W = 2560;
+const REF_H = 1440;
+const BORDER = 65; // default-position inset from screen edges
+
+/** Scale a reference-resolution value to the current viewport. */
+const sx = (v: number) => Math.round((v / REF_W) * window.innerWidth);
+const sy = (v: number) => Math.round((v / REF_H) * window.innerHeight);
 
 export const OVERLAY_PANELS: OverlayPanelDef[] = [
   {
@@ -19,10 +26,11 @@ export const OVERLAY_PANELS: OverlayPanelDef[] = [
     label: "Command Center",
     icon: "search",
     defaultPosition: () => ({
-      x: Math.round((window.innerWidth - 560) / 2),
-      y: Math.round((window.innerHeight - 400) / 2 - window.innerHeight * 0.06),
+      x: Math.round((window.innerWidth - sx(600)) / 2),
+      y: Math.round((window.innerHeight - sy(500)) / 2 - sy(60)),
     }),
-    defaultWidth: 560,
+    defaultWidth: sx(600),
+    defaultHeight: sy(500),
     resizable: false,
   },
   {
@@ -30,10 +38,11 @@ export const OVERLAY_PANELS: OverlayPanelDef[] = [
     label: "Game Notes",
     icon: "notes",
     defaultPosition: () => ({
-      x: Math.round(window.innerWidth - 440 - EDGE_PAD),
-      y: Math.round(window.innerHeight - 420 - EDGE_PAD),
+      x: sx(REF_W - BORDER - 600),
+      y: sy(REF_H - BORDER - 680),
     }),
-    defaultWidth: 440,
+    defaultWidth: sx(600),
+    defaultHeight: sy(680),
     resizable: true,
   },
   {
@@ -41,10 +50,11 @@ export const OVERLAY_PANELS: OverlayPanelDef[] = [
     label: "System Monitor",
     icon: "stats",
     defaultPosition: () => ({
-      x: EDGE_PAD,
-      y: TOP_BAR,
+      x: sx(BORDER),
+      y: sy(BORDER),
     }),
-    defaultWidth: 500,
+    defaultWidth: sx(650),
+    defaultHeight: sy(400),
     resizable: true,
   },
   {
@@ -52,10 +62,11 @@ export const OVERLAY_PANELS: OverlayPanelDef[] = [
     label: "Media Controls",
     icon: "music",
     defaultPosition: () => ({
-      x: Math.round(window.innerWidth - 400 - EDGE_PAD),
-      y: TOP_BAR,
+      x: sx(REF_W - BORDER - 500),
+      y: sy(BORDER),
     }),
-    defaultWidth: 400,
+    defaultWidth: sx(500),
+    defaultHeight: sy(550),
     resizable: true,
   },
   {
@@ -63,10 +74,11 @@ export const OVERLAY_PANELS: OverlayPanelDef[] = [
     label: "Audio Mixer",
     icon: "volume",
     defaultPosition: () => ({
-      x: EDGE_PAD,
-      y: Math.round(window.innerHeight - 500 - EDGE_PAD),
+      x: sx(BORDER),
+      y: sy(REF_H - BORDER - 500),
     }),
-    defaultWidth: 400,
+    defaultWidth: sx(500),
+    defaultHeight: sy(500),
     resizable: true,
   },
 ];

@@ -9,4 +9,5 @@ export interface MediaSessionSnapshot {
   sourceAppId: string;
   status: MediaPlaybackStatus;
   hasSession: boolean;
+  thumbnailB64?: string;
 }
