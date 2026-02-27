@@ -6,8 +6,18 @@
   overflow: hidden;
 }
 
-.assistant-chat--compact {
-  max-height: 400px;
+.assistant-chat--compact .assistant-chat__messages {
+  padding: 0.5rem;
+  gap: 0.5rem;
+}
+
+.assistant-chat--compact .assistant-chat__input-bar {
+  padding: 0.5rem 0.65rem;
+  gap: 0.35rem;
+}
+
+.assistant-chat--compact .assistant-chat__empty {
+  padding: 1.5rem 0.75rem;
 }
 
 /* ── Message List ────────────────────────────────────────────── */

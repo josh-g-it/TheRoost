@@ -16,7 +16,8 @@ export type OverlayPanelId =
   | "game-notes"
   | "system-monitor"
   | "media-controls"
-  | "audio-mixer";
+  | "audio-mixer"
+  | "assistant";
 
 export interface OverlayPanelPosition {
   x: number;

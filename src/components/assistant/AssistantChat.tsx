@@ -13,6 +13,7 @@ interface AssistantChatProps {
   onConversationStart?: () => void;
   compact?: boolean;
   isFirstConversation?: boolean;
+  hideEndButton?: boolean;
 }
 
 export function AssistantChat({
@@ -21,6 +22,7 @@ export function AssistantChat({
   onConversationStart,
   compact,
   isFirstConversation,
+  hideEndButton,
 }: AssistantChatProps) {
   const {
     messages,
@@ -188,7 +190,7 @@ export function AssistantChat({
         >
           <AppIcon name="chevron-right" size={16} />
         </button>
-        {conversationId && (
+        {conversationId && !hideEndButton && (
           <button
             className="assistant-chat__end-btn"
             onClick={endConversation}

@@ -1,0 +1,182 @@
+/* ── Overlay Assistant Panel ──────────────────────────────────── */
+.overlay-assistant {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Avatar Portrait Section (top 1/3) ───────────────────────── */
+.overlay-assistant__avatar-section {
+  flex: 0 0 33%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.overlay-assistant__avatar-circle {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #fff;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.overlay-assistant__avatar-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.overlay-assistant__avatar-personality {
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+}
+
+/* ── Chat Section (bottom 2/3) ───────────────────────────────── */
+.overlay-assistant__chat-section {
+  flex: 1 1 0%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Bottom Controls ─────────────────────────────────────────── */
+.overlay-assistant__controls {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--color-border-subtle);
+  position: relative;
+}
+
+.overlay-assistant__more-btn,
+.overlay-assistant__end-btn {
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.overlay-assistant__more-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.overlay-assistant__end-btn:hover {
+  background: color-mix(in srgb, var(--color-danger, #ef4444) 10%, transparent);
+  color: var(--color-danger, #ef4444);
+  border-color: var(--color-danger, #ef4444);
+}
+
+/* ── More Dropdown ───────────────────────────────────────────── */
+.overlay-assistant__dropdown {
+  position: absolute;
+  bottom: 100%;
+  right: 0.75rem;
+  margin-bottom: 4px;
+  min-width: 180px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  padding: 0.35rem 0;
+  z-index: 10;
+}
+
+.overlay-assistant__dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.75rem;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.overlay-assistant__dropdown-item:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.overlay-assistant__dropdown-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.overlay-assistant__dropdown-sep {
+  height: 1px;
+  margin: 0.25rem 0;
+  background: var(--color-border-subtle);
+}
+
+/* ── No-Avatar Fallback ──────────────────────────────────────── */
+.overlay-assistant__no-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  height: 100%;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--color-text-tertiary);
+}
+
+.overlay-assistant__no-avatar p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.overlay-assistant__open-btn {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--color-accent-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-primary);
+  color: var(--color-text-on-accent, #fff);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.overlay-assistant__open-btn:hover {
+  opacity: 0.9;
+}
+
+/* ── Loading ─────────────────────────────────────────────────── */
+.overlay-assistant__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-tertiary);
+  font-size: 0.85rem;
+}

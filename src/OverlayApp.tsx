@@ -20,6 +20,7 @@ import {
   useMediaSession,
 } from "./components/overlay/OverlayMediaControls";
 import { OverlayAudioMixer } from "./components/overlay/OverlayAudioMixer";
+import { OverlayAssistant } from "./components/overlay/OverlayAssistant";
 import type { MediaControlsMode } from "./types";
 import { FloatingPanel } from "./components/overlay/FloatingPanel";
 import { OverlayBackdrop } from "./components/overlay/OverlayBackdrop";
@@ -497,6 +498,34 @@ export function OverlayApp() {
             otherPanelRects={buildOtherRects("audio-mixer")}
           >
             <OverlayAudioMixer />
+          </FloatingPanel>
+        );
+      })()}
+      {(() => {
+        const astDef = OVERLAY_PANELS.find((p) => p.id === "assistant")!;
+        const astSaved = panelPositions["assistant"];
+        const astVisible = astSaved?.visible ?? true;
+        if (!astVisible) return null;
+        const astPosition = astSaved
+          ? { x: astSaved.x, y: astSaved.y }
+          : astDef.defaultPosition();
+        return (
+          <FloatingPanel
+            key={`assistant-${resetKeys["assistant"] ?? 0}`}
+            panelId="assistant"
+            title="Assistant"
+            defaultPosition={astPosition}
+            pinned={astSaved?.pinned}
+            onPositionChange={(pos) => handlePanelPositionChange("assistant", pos)}
+            onClose={() => handleHidePanel("assistant")}
+            width={astSaved?.width ?? astDef.defaultWidth}
+            resizable
+            minWidth={300}
+            minHeight={350}
+            defaultHeight={astSaved?.height ?? astDef.defaultHeight}
+            otherPanelRects={buildOtherRects("assistant")}
+          >
+            <OverlayAssistant />
           </FloatingPanel>
         );
       })()}

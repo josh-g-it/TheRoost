@@ -15,9 +15,11 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentStreamText, setCurrentStreamText] = useState("");
+  const [isEnded, setIsEnded] = useState(false);
   const lastUserMessageRef = useRef<string | null>(null);
   const isStreamingRef = useRef(false);
   const convIdRef = useRef(conversationId);
+  const isLocalEndRef = useRef(false);
 
   useEffect(() => {
     convIdRef.current = conversationId;
@@ -25,6 +27,7 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
     setMessages([]);
     setCurrentStreamText("");
     setError(null);
+    setIsEnded(false);
   }, [conversationId]);
 
   useEffect(() => {
@@ -55,6 +58,30 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
       } else {
         setCurrentStreamText((prev) => prev + chunk.text);
       }
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [conversationId]);
+
+  // Listen for cross-window conversation-ended events
+  useEffect(() => {
+    if (!conversationId) return;
+
+    const unlisten = listen<string>("ai-conversation-ended", (event) => {
+      const endedConvId = event.payload;
+      if (endedConvId !== convIdRef.current) return;
+      // Skip if we are the one who triggered the end
+      if (isLocalEndRef.current) {
+        isLocalEndRef.current = false;
+        return;
+      }
+      setMessages([]);
+      setCurrentStreamText("");
+      setIsStreaming(false);
+      isStreamingRef.current = false;
+      setIsEnded(true);
     });
 
     return () => {
@@ -131,10 +158,12 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
 
   const endConversation = useCallback(async () => {
     if (!conversationId) return;
+    isLocalEndRef.current = true;
     try {
       await assistantApi.endConversation(conversationId, avatarId);
       logger.info("useConversation", "api", "Conversation ended", { conversationId });
     } catch (err) {
+      isLocalEndRef.current = false;
       setError(getErrorMessage(err));
       logger.error("useConversation", "api", "Failed to end conversation", {
         error: getErrorMessage(err),
@@ -147,6 +176,7 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
     isStreaming,
     error,
     currentStreamText,
+    isEnded,
     sendMessage,
     retry,
     endConversation,

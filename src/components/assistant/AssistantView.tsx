@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import type { AiAvatar, AiPersonality } from "../../types";
 import { assistantApi } from "../../services/tauri";
 import { useInactivityTimer } from "../../hooks/useInactivityTimer";
@@ -83,6 +84,20 @@ export function AssistantView() {
     }
     load();
   }, []);
+
+  // Listen for cross-window conversation-ended events
+  useEffect(() => {
+    const unlisten = listen<string>("ai-conversation-ended", (event) => {
+      const endedConvId = event.payload;
+      if (endedConvId === conversationId) {
+        setConversationId(null);
+        setHasConversation(false);
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [conversationId]);
 
   const handleFirstRunComplete = useCallback(
     async (_avatarId: string, convId: string) => {

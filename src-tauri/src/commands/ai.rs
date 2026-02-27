@@ -1,4 +1,4 @@
-use tauri::State;
+use tauri::{Emitter, State};
 
 use crate::models::ai::{CloudAiUsage, CloudProvider, ResolvedIntent};
 use crate::models::assistant::{AiAvatar, AiDailyLog, AiMemory, AiMessage, AiPersonality};
@@ -443,6 +443,9 @@ pub async fn end_conversation(
         let mut config = cloud.lock_or_err("CloudConfig")?;
         config.record_request();
     }
+
+    // Notify all windows that this conversation has ended
+    let _ = app_handle.emit("ai-conversation-ended", &conversation_id);
 
     Ok(())
 }
