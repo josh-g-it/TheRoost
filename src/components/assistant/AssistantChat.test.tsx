@@ -25,15 +25,25 @@ vi.mock("../../store/settingsSlice", () => ({
 }));
 
 describe("AssistantChat", () => {
+  const existingMessage = {
+    id: "m0",
+    conversationId: "c1",
+    role: "assistant" as const,
+    content: "Hello! How can I help you today?",
+    createdAt: "2026-02-27T12:00:00Z",
+    tokenEstimate: 8,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockSendMessage.mockResolvedValue(undefined);
     mockEndConversation.mockResolvedValue(undefined);
-    mockGetConversationHistory.mockResolvedValue([]);
+    // Return a non-empty history by default so auto-greeting doesn't fire
+    mockGetConversationHistory.mockResolvedValue([existingMessage]);
   });
 
-  it("renders empty state with prompt text", () => {
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+  it("renders empty state with prompt text when no conversation", () => {
+    render(<AssistantChat avatarId="a1" conversationId={null} />);
     expect(
       screen.getByText("Start a conversation with your assistant."),
     ).toBeInTheDocument();
@@ -102,6 +112,28 @@ describe("AssistantChat", () => {
     await waitFor(() => {
       expect(screen.getByText("Existing message")).toBeInTheDocument();
     });
+  });
+
+  it("auto-sends greeting on new conversation with empty history", async () => {
+    mockGetConversationHistory.mockResolvedValue([]);
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+
+    await waitFor(() => {
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        "c1",
+        "a1",
+        "Hey there! I just activated you. Please introduce yourself!",
+      );
+    });
+  });
+
+  it("does not auto-send greeting when history exists", async () => {
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Hello! How can I help you today?")).toBeInTheDocument();
+    });
+    expect(mockSendMessage).not.toHaveBeenCalled();
   });
 
   it("shows error with retry button on failure", async () => {

@@ -62,7 +62,7 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
     };
   }, [conversationId]);
 
-  const loadHistory = useCallback(async (convId: string) => {
+  const loadHistory = useCallback(async (convId: string): Promise<AiMessage[]> => {
     try {
       const history = await assistantApi.getConversationHistory(convId);
       setMessages(history);
@@ -70,11 +70,13 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
         conversationId: convId,
         messageCount: history.length,
       });
+      return history;
     } catch (err) {
       logger.error("useConversation", "api", "Failed to load history", {
         error: getErrorMessage(err),
       });
       setError(getErrorMessage(err));
+      return [];
     }
   }, []);
 

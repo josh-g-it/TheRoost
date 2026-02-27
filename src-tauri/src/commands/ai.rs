@@ -240,12 +240,33 @@ pub fn create_avatar(
     name: String,
     personality_id: String,
     db: State<'_, CacheDbHandle>,
+    app_handle: tauri::AppHandle,
 ) -> Result<AiAvatar, AppError> {
     if name.trim().is_empty() {
         return Err(AppError::Validation("Avatar name cannot be empty".into()));
     }
+
+    // Load encryption key BEFORE DB lock (keyring I/O)
+    let key = encryption::load_encryption_key().ok();
+
+    // Load username from settings, fall back to "User"
+    let username = settings_store::load_settings(&app_handle)
+        .ok()
+        .and(None::<String>)
+        .unwrap_or_else(|| "User".to_string());
+
     let db = db.lock_or_err("DB")?;
-    db.create_ai_avatar(&name, &personality_id)
+    let avatar = db.create_ai_avatar(&name, &personality_id)?;
+
+    // Seed system memories if encryption key is available
+    if let Some(key) = &key {
+        if let Err(e) = memory::seed_system_memories(&db, &avatar.id, &avatar.name, &username, key)
+        {
+            tracing::warn!(error = %e, "Failed to seed system memories for new avatar — they will be seeded later");
+        }
+    }
+
+    Ok(avatar)
 }
 
 #[tauri::command]

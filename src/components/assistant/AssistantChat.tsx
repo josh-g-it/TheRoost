@@ -43,11 +43,23 @@ export function AssistantChat({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const introSentRef = useRef(false);
+
   useEffect(() => {
-    if (conversationId) {
-      loadHistory(conversationId);
+    introSentRef.current = false;
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    async function loadAndGreet() {
+      const history = await loadHistory(conversationId!);
+      if (history.length === 0 && !introSentRef.current) {
+        introSentRef.current = true;
+        sendMessage("Hey there! I just activated you. Please introduce yourself!");
+      }
     }
-  }, [conversationId, loadHistory]);
+    loadAndGreet();
+  }, [conversationId, loadHistory, sendMessage]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView?.({ behavior: "smooth" });
