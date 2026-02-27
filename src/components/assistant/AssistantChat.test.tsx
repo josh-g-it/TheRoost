@@ -122,7 +122,20 @@ describe("AssistantChat", () => {
       expect(mockSendMessage).toHaveBeenCalledWith(
         "c1",
         "a1",
-        "Hey there! I just activated you. Please introduce yourself!",
+        expect.stringContaining("A new conversation has started"),
+      );
+    });
+  });
+
+  it("auto-sends first-conversation greeting when isFirstConversation is true", async () => {
+    mockGetConversationHistory.mockResolvedValue([]);
+    render(<AssistantChat avatarId="a1" conversationId="c1" isFirstConversation />);
+
+    await waitFor(() => {
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        "c1",
+        "a1",
+        expect.stringContaining("your very first conversation"),
       );
     });
   });

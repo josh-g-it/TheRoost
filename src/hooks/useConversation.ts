@@ -81,21 +81,23 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
   }, []);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, options?: { hidden?: boolean }) => {
       if (!conversationId) return;
       if (isStreamingRef.current) return;
       setError(null);
       lastUserMessageRef.current = text;
 
-      const userMessage: AiMessage = {
-        id: crypto.randomUUID(),
-        conversationId,
-        role: "user",
-        content: text,
-        createdAt: new Date().toISOString(),
-        tokenEstimate: Math.ceil(text.length / 4),
-      };
-      setMessages((prev) => [...prev, userMessage]);
+      if (!options?.hidden) {
+        const userMessage: AiMessage = {
+          id: crypto.randomUUID(),
+          conversationId,
+          role: "user",
+          content: text,
+          createdAt: new Date().toISOString(),
+          tokenEstimate: Math.ceil(text.length / 4),
+        };
+        setMessages((prev) => [...prev, userMessage]);
+      }
       setIsStreaming(true);
       isStreamingRef.current = true;
       setCurrentStreamText("");

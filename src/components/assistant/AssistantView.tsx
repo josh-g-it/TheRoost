@@ -35,6 +35,7 @@ export function AssistantView() {
   const [activeTab, setActiveTab] = useState<TabId>("chat");
   const [isLoading, setIsLoading] = useState(true);
   const [hasConversation, setHasConversation] = useState(false);
+  const [isFirstConversation, setIsFirstConversation] = useState(false);
 
   const isEndingRef = useRef(false);
   const handleTimeout = useCallback(async () => {
@@ -90,6 +91,7 @@ export function AssistantView() {
         setActiveAvatar(avatar);
         setConversationId(convId);
         setHasConversation(true);
+        setIsFirstConversation(true);
         const personalityList = await assistantApi.listPersonalities();
         setPersonalities(personalityList);
       } catch (err) {
@@ -200,6 +202,7 @@ export function AssistantView() {
                 avatarId={activeAvatar.id}
                 conversationId={conversationId}
                 onConversationStart={handleConversationStart}
+                isFirstConversation={isFirstConversation}
               />
             )}
             {activeTab === "memories" && <AssistantMemories avatarId={activeAvatar.id} />}

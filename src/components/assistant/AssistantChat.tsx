@@ -12,6 +12,7 @@ interface AssistantChatProps {
   conversationId: string | null;
   onConversationStart?: () => void;
   compact?: boolean;
+  isFirstConversation?: boolean;
 }
 
 export function AssistantChat({
@@ -19,6 +20,7 @@ export function AssistantChat({
   conversationId,
   onConversationStart,
   compact,
+  isFirstConversation,
 }: AssistantChatProps) {
   const {
     messages,
@@ -55,7 +57,10 @@ export function AssistantChat({
       const history = await loadHistory(conversationId!);
       if (history.length === 0 && !introSentRef.current) {
         introSentRef.current = true;
-        sendMessage("Hey there! I just activated you. Please introduce yourself!");
+        const prompt = isFirstConversation
+          ? "This is your very first conversation with the user. They just created you. Introduce yourself warmly — tell them your name, ask what they'd like to be called, and ask how they prefer conversations (casual, detailed, brief). Be yourself and be curious."
+          : "A new conversation has started. This message is sent automatically by the system, not by the user. Greet the user warmly as someone you already know. Keep it brief and natural — maybe reference something from your memories or just say hello and ask what's on their mind.";
+        sendMessage(prompt, { hidden: true });
       }
     }
     loadAndGreet();
