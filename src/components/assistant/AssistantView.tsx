@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { AiAvatar, AiPersonality } from "../../types";
 import { assistantApi } from "../../services/tauri";
@@ -38,28 +38,9 @@ export function AssistantView() {
   const [hasConversation, setHasConversation] = useState(false);
   const [isFirstConversation, setIsFirstConversation] = useState(false);
 
-  const isEndingRef = useRef(false);
-  const handleTimeout = useCallback(async () => {
-    if (isEndingRef.current) return;
-    if (conversationId && activeAvatar) {
-      isEndingRef.current = true;
-      try {
-        await assistantApi.endConversation(conversationId, activeAvatar.id);
-        logger.info("AssistantView", "api", "Conversation ended due to inactivity");
-        setConversationId(null);
-        setHasConversation(false);
-      } catch (err) {
-        logger.error("AssistantView", "api", "Failed to end conversation on timeout", {
-          error: getErrorMessage(err),
-        });
-      } finally {
-        isEndingRef.current = false;
-      }
-    }
-  }, [conversationId, activeAvatar]);
-
   const { remaining, isPaused, isActive, resetTimer } = useInactivityTimer({
-    onTimeout: handleTimeout,
+    conversationId,
+    avatarId: activeAvatar?.id ?? null,
   });
 
   useEffect(() => {
@@ -144,6 +125,7 @@ export function AssistantView() {
     async (avatarId: string) => {
       try {
         // End current conversation before switching
+        // (endConversation already stops the timer internally via stop_timer)
         if (conversationId && activeAvatar) {
           await assistantApi.endConversation(conversationId, activeAvatar.id);
         }

@@ -503,4 +503,12 @@ export const assistantApi = {
   wipeAiMemory: () => invoke<void>("wipe_ai_memory"),
   checkPostSessionReview: (gameId: string, durationMinutes: number) =>
     invoke<boolean>("check_post_session_review", { gameId, durationMinutes }),
+  startConversationTimer: (conversationId: string, avatarId: string) =>
+    invoke<void>("start_conversation_timer", { conversationId, avatarId }),
+  stopConversationTimer: () => invoke<void>("stop_conversation_timer"),
+  resetConversationTimer: () => invoke<void>("reset_conversation_timer"),
+  getConversationTimerState: () =>
+    invoke<{ remainingSeconds: number; isPaused: boolean } | null>(
+      "get_conversation_timer_state",
+    ),
 };

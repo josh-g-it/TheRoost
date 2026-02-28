@@ -33,6 +33,10 @@ vi.mock("../../services/tauri", () => ({
     sendMessage: (...args: unknown[]) => mockSendMessage(...args),
     checkConversationStale: (...args: unknown[]) => mockCheckConversationStale(...args),
     abandonConversation: (...args: unknown[]) => mockAbandonConversation(...args),
+    startConversationTimer: vi.fn().mockResolvedValue(undefined),
+    stopConversationTimer: vi.fn().mockResolvedValue(undefined),
+    resetConversationTimer: vi.fn().mockResolvedValue(undefined),
+    getConversationTimerState: vi.fn().mockResolvedValue(null),
   },
 }));
 

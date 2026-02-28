@@ -13,6 +13,7 @@ use commands::{
 };
 use models::ai::CloudProvider;
 use services::ai::cloud_config::CloudConfig;
+use services::ai::conversation_timer::ConversationTimerState;
 use services::cache_db::CacheDb;
 use services::log_bridge::TauriLogLayer;
 use services::settings_store;
@@ -180,6 +181,10 @@ pub fn run() {
             ai::retry_compaction,
             ai::get_memory_context,
             ai::check_post_session_review,
+            ai::start_conversation_timer,
+            ai::stop_conversation_timer,
+            ai::reset_conversation_timer,
+            ai::get_conversation_timer_state,
             updater::check_for_update,
             updater::install_update,
             updater::get_app_version,
@@ -234,6 +239,10 @@ pub fn run() {
             );
             app.manage(Arc::new(Mutex::new(cloud_config)));
             tracing::info!("Cloud AI config initialized");
+
+            // Initialize conversation timer state
+            app.manage(Arc::new(Mutex::new(ConversationTimerState::default())));
+            tracing::info!("Conversation timer state initialized");
 
             // Spawn library sync background task (Steam API polling every 30 min)
             let sync_handle = app.handle().clone();

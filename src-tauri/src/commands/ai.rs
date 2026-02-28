@@ -1,4 +1,4 @@
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 
 use crate::models::ai::{CloudAiUsage, CloudProvider, ResolvedIntent};
 use crate::models::assistant::{AiAvatar, AiDailyLog, AiMemory, AiMessage, AiPersonality};
@@ -6,6 +6,7 @@ use crate::services::ai::cloud_config::CloudConfigHandle;
 use crate::services::ai::cloud_resolver::CloudResolver;
 use crate::services::ai::context_builder;
 use crate::services::ai::conversation;
+use crate::services::ai::conversation_timer::{self, ConversationTimerHandle, TimerTickPayload};
 use crate::services::ai::encryption;
 use crate::services::ai::memory;
 use crate::services::ai::orchestrator::AiOrchestrator;
@@ -426,6 +427,11 @@ pub async fn send_message(
         config.record_request();
     }
 
+    // Reset inactivity timer (safe: try_state returns None in tests)
+    if let Some(timer) = app_handle.try_state::<ConversationTimerHandle>() {
+        let _ = conversation_timer::reset_timer(&timer);
+    }
+
     Ok(())
 }
 
@@ -464,6 +470,11 @@ pub async fn end_conversation(
     cloud: State<'_, CloudConfigHandle>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), AppError> {
+    // Stop inactivity timer before ending conversation (safe: try_state returns None in tests)
+    if let Some(timer) = app_handle.try_state::<ConversationTimerHandle>() {
+        let _ = conversation_timer::stop_timer(&timer);
+    }
+
     let settings = settings_store::load_settings(&app_handle)?;
     let key = encryption::load_encryption_key()?;
 
@@ -614,4 +625,40 @@ pub fn wipe_ai_memory(
         }
     }
     Ok(())
+}
+
+// ── Conversation Timer Commands ─────────────────────────────────────
+
+#[tauri::command]
+pub fn start_conversation_timer(
+    conversation_id: String,
+    avatar_id: String,
+    timer: State<'_, ConversationTimerHandle>,
+    db: State<'_, CacheDbHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), AppError> {
+    // Check if auto-end is enabled in settings
+    let settings = settings_store::load_settings(&app_handle)?;
+    if !settings.ai_conversation_auto_end_enabled {
+        return Ok(());
+    }
+
+    conversation_timer::start_timer(&timer, &conversation_id, &avatar_id, &app_handle, &db)
+}
+
+#[tauri::command]
+pub fn stop_conversation_timer(timer: State<'_, ConversationTimerHandle>) -> Result<(), AppError> {
+    conversation_timer::stop_timer(&timer)
+}
+
+#[tauri::command]
+pub fn reset_conversation_timer(timer: State<'_, ConversationTimerHandle>) -> Result<(), AppError> {
+    conversation_timer::reset_timer(&timer)
+}
+
+#[tauri::command]
+pub fn get_conversation_timer_state(
+    timer: State<'_, ConversationTimerHandle>,
+) -> Result<Option<TimerTickPayload>, AppError> {
+    conversation_timer::get_timer_state(&timer)
 }

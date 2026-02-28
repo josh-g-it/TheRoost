@@ -4,6 +4,7 @@ pub mod cloud_provider;
 pub mod cloud_resolver;
 pub mod context_builder;
 pub mod conversation;
+pub mod conversation_timer;
 pub mod encryption;
 pub mod gemini_provider;
 pub mod memory;

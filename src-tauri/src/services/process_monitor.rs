@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use sysinfo::{Pid, ProcessesToUpdate, System};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 use crate::models::system_metrics::{ProcessMetrics, SystemMetricsSnapshot, SystemSample};
 use crate::services::cache_db::CacheDbHandle;
@@ -396,8 +396,17 @@ fn cleanup_stale_sessions(
         }
     } // db_guard dropped here
 
-    for payload in events {
+    for payload in &events {
         let _ = app_handle.emit("session-update", payload);
+    }
+
+    // Resume conversation timer if stale sessions were cleaned up and no games are running
+    if !events.is_empty() && running.is_empty() {
+        if let Some(timer) = app_handle
+            .try_state::<crate::services::ai::conversation_timer::ConversationTimerHandle>(
+        ) {
+            let _ = crate::services::ai::conversation_timer::resume_timer(&timer);
+        }
     }
 
     // Initialize active_games with what's currently running
@@ -547,6 +556,18 @@ fn scan_once(
         // Now safe to emit events — listeners can freely acquire the db lock
         for payload in events {
             let _ = app_handle.emit("session-update", payload);
+        }
+
+        // Pause/resume conversation timer based on game session transitions
+        if let Some(timer) = app_handle
+            .try_state::<crate::services::ai::conversation_timer::ConversationTimerHandle>(
+        ) {
+            if !started.is_empty() {
+                let _ = crate::services::ai::conversation_timer::pause_timer(&timer);
+            }
+            if !stopped.is_empty() && running.is_empty() {
+                let _ = crate::services::ai::conversation_timer::resume_timer(&timer);
+            }
         }
 
         // Refresh tray menu on a background task so we don't block this scan cycle.

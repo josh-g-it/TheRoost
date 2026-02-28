@@ -24,6 +24,9 @@ fn default_ui_scale() -> String {
 fn default_minimize_to_tray() -> bool {
     true
 }
+fn default_true() -> bool {
+    true
+}
 fn default_media_controls_mode() -> String {
     "dynamic".to_string()
 }
@@ -147,6 +150,8 @@ pub struct AppSettings {
     pub cloud_ai_included_games: Vec<String>,
     #[serde(default)]
     pub ai_post_session_review_enabled: bool,
+    #[serde(default = "default_true")]
+    pub ai_conversation_auto_end_enabled: bool,
 }
 
 impl Default for AppSettings {
@@ -179,6 +184,27 @@ impl Default for AppSettings {
             cloud_ai_excluded_games: Vec::new(),
             cloud_ai_included_games: Vec::new(),
             ai_post_session_review_enabled: false,
+            ai_conversation_auto_end_enabled: true,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ai_conversation_auto_end_enabled_defaults_to_true() {
+        // JSON with the field missing should default to true
+        let json = r#"{"steamApiKey":null,"steamId":null,"isFirstRun":true,"theme":"dark-gaming"}"#;
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+        assert!(settings.ai_conversation_auto_end_enabled);
+    }
+
+    #[test]
+    fn ai_conversation_auto_end_enabled_deserializes_false() {
+        let json = r#"{"steamApiKey":null,"steamId":null,"isFirstRun":true,"theme":"dark-gaming","aiConversationAutoEndEnabled":false}"#;
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+        assert!(!settings.ai_conversation_auto_end_enabled);
     }
 }

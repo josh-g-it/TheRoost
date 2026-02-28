@@ -1,75 +1,86 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { assistantApi } from "../services/tauri";
 
-const DEFAULT_TIMEOUT = 3600;
-
-interface SessionUpdatePayload {
-  type: "started" | "ended";
+interface TimerTickPayload {
+  remainingSeconds: number;
+  isPaused: boolean;
 }
 
 interface UseInactivityTimerOptions {
-  onTimeout: () => void;
-  timeoutSeconds?: number;
+  conversationId: string | null;
+  avatarId: string | null;
 }
 
 export function useInactivityTimer({
-  onTimeout,
-  timeoutSeconds = DEFAULT_TIMEOUT,
+  conversationId,
+  avatarId,
 }: UseInactivityTimerOptions) {
-  const [remaining, setRemaining] = useState(timeoutSeconds);
+  const [remaining, setRemaining] = useState(3600);
   const [isPaused, setIsPaused] = useState(false);
   const [isActive, setIsActive] = useState(false);
-  const onTimeoutRef = useRef(onTimeout);
-  const isPausedRef = useRef(isPaused);
-  const isActiveRef = useRef(false);
 
+  const conversationIdRef = useRef(conversationId);
   useEffect(() => {
-    onTimeoutRef.current = onTimeout;
-  }, [onTimeout]);
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
 
+  // Start timer when conversation starts, stop when it ends
   useEffect(() => {
-    isPausedRef.current = isPaused;
-  }, [isPaused]);
+    if (conversationId && avatarId) {
+      assistantApi.startConversationTimer(conversationId, avatarId).catch(() => {});
+      setIsActive(true);
 
+      // Load current state in case timer was already running
+      assistantApi
+        .getConversationTimerState()
+        .then((state) => {
+          if (state) {
+            setRemaining(state.remainingSeconds);
+            setIsPaused(state.isPaused);
+          }
+        })
+        .catch(() => {});
+    } else {
+      setIsActive(false);
+    }
+  }, [conversationId, avatarId]);
+
+  // Listen for tick events from backend
   useEffect(() => {
-    isActiveRef.current = isActive;
-  }, [isActive]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!isActiveRef.current || isPausedRef.current) return;
-      setRemaining((prev) => {
-        if (prev <= 0) return 0; // Already expired, no-op
-        if (prev === 1) {
-          onTimeoutRef.current();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const unlisten = listen<SessionUpdatePayload>("session-update", (event) => {
-      if (event.payload.type === "started") {
-        setIsPaused(true);
-      } else if (event.payload.type === "ended") {
-        setIsPaused(false);
-        setRemaining(timeoutSeconds);
-      }
+    const unlisten = listen<TimerTickPayload>("conversation-timer-tick", (event) => {
+      setRemaining(event.payload.remainingSeconds);
+      setIsPaused(event.payload.isPaused);
     });
 
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [timeoutSeconds]);
+  }, []);
 
+  // Listen for auto-ended events
+  useEffect(() => {
+    const unlisten = listen<{ conversationId: string }>(
+      "conversation-auto-ended",
+      (event) => {
+        if (event.payload.conversationId === conversationIdRef.current) {
+          setIsActive(false);
+          setRemaining(0);
+        }
+      },
+    );
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  // resetTimer now calls the backend
   const resetTimer = useCallback(() => {
+    assistantApi.resetConversationTimer().catch(() => {});
+    setRemaining(3600);
     setIsActive(true);
-    setRemaining(timeoutSeconds);
-  }, [timeoutSeconds]);
+  }, []);
 
   return { remaining, isPaused, isActive, resetTimer };
 }

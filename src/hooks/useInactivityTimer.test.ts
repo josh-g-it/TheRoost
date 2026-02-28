@@ -1,177 +1,203 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useInactivityTimer } from "./useInactivityTimer";
 
-let listenCallback: ((event: { payload: { type: string } }) => void) | null = null;
+// Capture listen callbacks by event name
+const listenCallbacks: Record<string, (event: unknown) => void> = {};
 
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn(
-    (eventName: string, callback: (event: { payload: { type: string } }) => void) => {
-      if (eventName === "session-update") {
-        listenCallback = callback;
-      }
-      return Promise.resolve(vi.fn());
-    },
-  ),
+  listen: vi.fn((eventName: string, callback: (event: unknown) => void) => {
+    listenCallbacks[eventName] = callback;
+    return Promise.resolve(vi.fn());
+  }),
+}));
+
+const mockStartConversationTimer = vi.fn().mockResolvedValue(undefined);
+const mockGetConversationTimerState = vi.fn().mockResolvedValue(null);
+const mockResetConversationTimer = vi.fn().mockResolvedValue(undefined);
+
+vi.mock("../services/tauri", () => ({
+  assistantApi: {
+    startConversationTimer: (...args: unknown[]) => mockStartConversationTimer(...args),
+    getConversationTimerState: (...args: unknown[]) =>
+      mockGetConversationTimerState(...args),
+    resetConversationTimer: (...args: unknown[]) => mockResetConversationTimer(...args),
+  },
 }));
 
 describe("useInactivityTimer", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
-    listenCallback = null;
+    vi.clearAllMocks();
+    Object.keys(listenCallbacks).forEach((key) => delete listenCallbacks[key]);
+    mockGetConversationTimerState.mockResolvedValue(null);
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("starts inactive and does not count down until resetTimer is called", () => {
-    const onTimeout = vi.fn();
-    const { result } = renderHook(() =>
-      useInactivityTimer({ onTimeout, timeoutSeconds: 60 }),
+  it("calls startConversationTimer on mount when conversationId and avatarId provided", () => {
+    renderHook(() =>
+      useInactivityTimer({
+        conversationId: "conv-1",
+        avatarId: "avatar-1",
+      }),
     );
 
-    expect(result.current.remaining).toBe(60);
-    expect(result.current.isActive).toBe(false);
-
-    // Timer should NOT count down while inactive
-    act(() => {
-      vi.advanceTimersByTime(5000);
-    });
-
-    expect(result.current.remaining).toBe(60);
+    expect(mockStartConversationTimer).toHaveBeenCalledWith("conv-1", "avatar-1");
   });
 
-  it("counts down after resetTimer activates it", () => {
-    const onTimeout = vi.fn();
-    const { result } = renderHook(() =>
-      useInactivityTimer({ onTimeout, timeoutSeconds: 10 }),
+  it("calls getConversationTimerState on mount to sync initial state", () => {
+    renderHook(() =>
+      useInactivityTimer({
+        conversationId: "conv-1",
+        avatarId: "avatar-1",
+      }),
     );
 
-    // Activate
-    act(() => {
-      result.current.resetTimer();
-    });
-
-    expect(result.current.isActive).toBe(true);
-
-    act(() => {
-      vi.advanceTimersByTime(3000);
-    });
-
-    expect(result.current.remaining).toBe(7);
+    expect(mockGetConversationTimerState).toHaveBeenCalled();
   });
 
-  it("fires callback when reaching zero", () => {
-    const onTimeout = vi.fn();
-    const { result } = renderHook(() =>
-      useInactivityTimer({ onTimeout, timeoutSeconds: 3 }),
+  it("does not call startConversationTimer when conversationId is null", () => {
+    renderHook(() =>
+      useInactivityTimer({
+        conversationId: null,
+        avatarId: "avatar-1",
+      }),
     );
 
-    // Activate timer first
-    act(() => {
-      result.current.resetTimer();
-    });
-
-    act(() => {
-      vi.advanceTimersByTime(3000);
-    });
-
-    expect(onTimeout).toHaveBeenCalledTimes(1);
+    expect(mockStartConversationTimer).not.toHaveBeenCalled();
   });
 
-  it("pauses on session-start event", () => {
-    const onTimeout = vi.fn();
+  it("updates remaining and isPaused from conversation-timer-tick events", () => {
     const { result } = renderHook(() =>
-      useInactivityTimer({ onTimeout, timeoutSeconds: 60 }),
+      useInactivityTimer({
+        conversationId: "conv-1",
+        avatarId: "avatar-1",
+      }),
     );
 
-    // Activate and let it count down
     act(() => {
-      result.current.resetTimer();
+      listenCallbacks["conversation-timer-tick"]?.({
+        payload: { remainingSeconds: 1234, isPaused: true },
+      });
     });
 
-    act(() => {
-      vi.advanceTimersByTime(2000);
-    });
-
-    expect(result.current.remaining).toBe(58);
-
-    act(() => {
-      listenCallback?.({ payload: { type: "started" } });
-    });
-
+    expect(result.current.remaining).toBe(1234);
     expect(result.current.isPaused).toBe(true);
-
-    act(() => {
-      vi.advanceTimersByTime(5000);
-    });
-
-    expect(result.current.remaining).toBe(58);
   });
 
-  it("resets and unpauses on session-end event", () => {
-    const onTimeout = vi.fn();
+  it("sets isActive to false on conversation-auto-ended matching conversationId", () => {
     const { result } = renderHook(() =>
-      useInactivityTimer({ onTimeout, timeoutSeconds: 60 }),
+      useInactivityTimer({
+        conversationId: "conv-1",
+        avatarId: "avatar-1",
+      }),
     );
 
-    // Activate
-    act(() => {
-      result.current.resetTimer();
-    });
+    // Should be active after mount with valid conversation
+    expect(result.current.isActive).toBe(true);
 
     act(() => {
-      vi.advanceTimersByTime(10000);
+      listenCallbacks["conversation-auto-ended"]?.({
+        payload: { conversationId: "conv-1" },
+      });
     });
 
-    act(() => {
-      listenCallback?.({ payload: { type: "started" } });
-    });
-
-    act(() => {
-      listenCallback?.({ payload: { type: "ended" } });
-    });
-
-    expect(result.current.isPaused).toBe(false);
-    expect(result.current.remaining).toBe(60);
+    expect(result.current.isActive).toBe(false);
+    expect(result.current.remaining).toBe(0);
   });
 
-  it("resetTimer resets remaining and activates the timer", () => {
-    const onTimeout = vi.fn();
+  it("ignores conversation-auto-ended for different conversationId", () => {
     const { result } = renderHook(() =>
-      useInactivityTimer({ onTimeout, timeoutSeconds: 60 }),
+      useInactivityTimer({
+        conversationId: "conv-1",
+        avatarId: "avatar-1",
+      }),
     );
 
-    // Activate and let some time pass
     act(() => {
-      result.current.resetTimer();
+      listenCallbacks["conversation-auto-ended"]?.({
+        payload: { conversationId: "conv-other" },
+      });
     });
 
-    act(() => {
-      vi.advanceTimersByTime(10000);
-    });
-
-    expect(result.current.remaining).toBe(50);
-
-    // Reset should restore to full timeout
-    act(() => {
-      result.current.resetTimer();
-    });
-
-    expect(result.current.remaining).toBe(60);
+    // Should still be active since the auto-ended was for a different conversation
     expect(result.current.isActive).toBe(true);
   });
 
-  it("does not fire timeout while inactive even after full duration", () => {
-    const onTimeout = vi.fn();
-    renderHook(() => useInactivityTimer({ onTimeout, timeoutSeconds: 3 }));
+  it("resetTimer calls resetConversationTimer API and sets remaining to 3600", () => {
+    const { result } = renderHook(() =>
+      useInactivityTimer({
+        conversationId: "conv-1",
+        avatarId: "avatar-1",
+      }),
+    );
 
-    // Never activate — advance well past the timeout
+    // Simulate some ticks reducing remaining
     act(() => {
-      vi.advanceTimersByTime(10000);
+      listenCallbacks["conversation-timer-tick"]?.({
+        payload: { remainingSeconds: 500, isPaused: false },
+      });
     });
 
-    expect(onTimeout).not.toHaveBeenCalled();
+    expect(result.current.remaining).toBe(500);
+
+    act(() => {
+      result.current.resetTimer();
+    });
+
+    expect(mockResetConversationTimer).toHaveBeenCalled();
+    expect(result.current.remaining).toBe(3600);
+    expect(result.current.isActive).toBe(true);
+  });
+
+  it("syncs initial state from getConversationTimerState when timer is already active", async () => {
+    mockGetConversationTimerState.mockResolvedValue({
+      remainingSeconds: 1800,
+      isPaused: true,
+    });
+
+    const { result } = renderHook(() =>
+      useInactivityTimer({
+        conversationId: "conv-1",
+        avatarId: "avatar-1",
+      }),
+    );
+
+    await vi.waitFor(() => {
+      expect(result.current.remaining).toBe(1800);
+      expect(result.current.isPaused).toBe(true);
+    });
+  });
+
+  it("does not call startConversationTimer when avatarId is null", () => {
+    renderHook(() =>
+      useInactivityTimer({
+        conversationId: "conv-1",
+        avatarId: null,
+      }),
+    );
+
+    expect(mockStartConversationTimer).not.toHaveBeenCalled();
+  });
+
+  it("calls startConversationTimer again when conversationId changes", () => {
+    const { rerender } = renderHook(
+      ({
+        conversationId,
+        avatarId,
+      }: {
+        conversationId: string | null;
+        avatarId: string | null;
+      }) => useInactivityTimer({ conversationId, avatarId }),
+      {
+        initialProps: { conversationId: "conv-1", avatarId: "avatar-1" },
+      },
+    );
+
+    expect(mockStartConversationTimer).toHaveBeenCalledWith("conv-1", "avatar-1");
+    expect(mockStartConversationTimer).toHaveBeenCalledTimes(1);
+
+    rerender({ conversationId: "conv-2", avatarId: "avatar-1" });
+
+    expect(mockStartConversationTimer).toHaveBeenCalledWith("conv-2", "avatar-1");
+    expect(mockStartConversationTimer).toHaveBeenCalledTimes(2);
   });
 });
