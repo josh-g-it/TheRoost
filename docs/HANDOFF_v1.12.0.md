@@ -1,16 +1,16 @@
 # v1.12.0 Handoff — Conversational AI Assistant
 
 > Use this document to get up to speed at the start of a new session.
-> Last updated: 2026-02-27 — Phase 8 complete, ready for Phase 9.
+> Last updated: 2026-02-27 — Phase 9 complete, ready for Phase 10.
 
 ---
 
 ## Current State
 
 - **Version**: 1.11.0 (synced across `tauri.conf.json`, `package.json`, `Cargo.toml`)
-- **Branch**: master — Phase 1+2+3+4+5+6+7+8 committed and pushed to GitHub
+- **Branch**: master — Phase 1+2+3+4+5+6+7+8+9 committed and pushed to GitHub
 - **Release**: v1.11.0 tag pushed and release built successfully
-- **Tests**: 418 Rust + 578 frontend = 996 total (all passing)
+- **Tests**: 426 Rust + 594 frontend = 1020 total (all passing)
 - **DB schema**: v24 (29 tables — 23 original + 6 new AI tables, WAL mode, SQLite via rusqlite bundled)
 - **Design phase**: Complete — 11 design documents in `docs/ai-design/`
 - **Implementation plan**: Complete — 13 phases in `docs/ai-design/implementation_plan/`
@@ -22,7 +22,62 @@
 - **Phase 6**: COMPLETE — Overlay assistant panel + cross-window sync (QA reviewed, all fixes applied)
 - **Phase 7**: COMPLETE — Hidden messages + stale conversation reset (QA reviewed, all fixes applied)
 - **Phase 8**: COMPLETE — Backend inactivity timer (QA reviewed, all fixes applied)
-- **Next step**: Begin Phase 9 (UX Polish)
+- **Phase 9**: COMPLETE — UX Polish (QA reviewed, all fixes applied)
+- **Next step**: Begin Phase 10 (Error Recovery)
+
+---
+
+## Phase 9 Completion Summary
+
+**UX Polish** — completed 2026-02-27.
+
+### What Was Built
+- **End button redesign**: Moved from input bar to a new top bar above messages with danger-styled background, text label "End Conversation", disabled during streaming.
+- **Journaling splash**: "Storing memories..." splash with pulsing icon and spinner replaces the chat area during compaction. Input bar and error bar hidden. 30-second timeout safety net prevents stuck splash if backend event emission fails.
+- **Active game session context**: New `get_active_game_session_context()` CacheDb method; Layer 3.5 in `assemble_context` injects "## Current Activity" section into AI system prompt when a game is running. Game name sanitized (newlines stripped, capped at 200 chars, quoted).
+- **Auto-end settings toggle**: Checkbox in Settings > Assistant tab for `aiConversationAutoEndEnabled` (defaults to true).
+- **Auto-restart after manual end**: When user manually ends a conversation, compaction runs, then a fresh conversation auto-starts with greeting. Uses structured `ConversationEndedPayload` event (`reason: "manual" | "timer"`) to distinguish manual vs timer auto-end. Timer auto-end does NOT restart.
+- **Settings reorganization**: New "Assistant" tab in Settings (after General); Cloud AI settings moved from Connections tab.
+- **`isCompacting` double-call guard**: `endConversation` in `useConversation` hook rejects concurrent calls when compaction is already in progress.
+- **24 new tests** (996 → 1020 total): 8 Rust (4 session context + 2 serialization + 2 assemble_context) + 16 frontend (5 isCompacting + 3 end button + 2 auto-restart + 2 error paths + 2 overlay + 1 isLocalEndRef + 1 compacting splash)
+
+### Files Modified (16 files)
+| File | Change |
+|------|--------|
+| `src-tauri/src/services/ai/conversation_timer.rs` | Added `ConversationEndedPayload` struct; updated timer auto-end emission; 2 serialization tests |
+| `src-tauri/src/commands/ai.rs` | Imported `ConversationEndedPayload`; updated manual end emission with `reason: "manual"` |
+| `src-tauri/src/services/cache_db.rs` | Added `get_active_game_session_context()` method + 4 tests |
+| `src-tauri/src/services/ai/conversation.rs` | Injected Layer 3.5 active game context (sanitized) + 2 tests |
+| `src/types/assistant.ts` | Added `ConversationEndedPayload` interface |
+| `src/types/index.ts` | Re-exported `ConversationEndedPayload` |
+| `src/hooks/useConversation.ts` | Added `isCompacting` state, double-call guard, 30s timeout safety, updated event payload type |
+| `src/hooks/useConversation.test.ts` | Updated payload types; 6 new tests |
+| `src/components/assistant/AssistantChat.tsx` | End button → top bar; compacting splash; hide input during compaction |
+| `src/components/assistant/AssistantChat.css` | New top bar, danger-styled end button, compacting splash + keyframes |
+| `src/components/assistant/AssistantChat.test.tsx` | 4 new tests |
+| `src/components/assistant/AssistantView.tsx` | Auto-restart on manual end via `ConversationEndedPayload` |
+| `src/components/assistant/AssistantView.test.tsx` | 3 new tests (auto-restart, error path, timer idle) |
+| `src/components/overlay/OverlayAssistant.tsx` | Auto-restart + removed direct `setConversationId(null)` from handleEndConversation |
+| `src/components/overlay/OverlayAssistant.test.tsx` | 3 new tests (auto-restart, error path, isEndingRef guard) |
+| `src/components/settings/SettingsView.tsx` | New "Assistant" tab; Cloud AI settings moved from Connections; auto-end toggle added |
+
+### QA Fixes Applied
+1. **Stuck isCompacting timeout (MEDIUM)**: Added 30s safety net in `endConversation` — if `conversationId` hasn't changed after API success, forces `isCompacting = false` and sets `isEnded = true`
+2. **Game name prompt injection (MEDIUM)**: Strips `\n`/`\r`, caps at 200 chars, wraps in quotes before injecting into AI system prompt
+3. **Double-call guard (MEDIUM)**: `endConversation` returns immediately if `isCompacting` is already true
+4. **Serialization tests (MEDIUM)**: `ConversationEndedPayload` and `AutoEndedPayload` camelCase serialization verified
+5. **isLocalEndRef reset test (HIGH)**: Verified ref resets after first skip, allowing subsequent cross-window events through
+6. **Auto-restart error paths (HIGH)**: Both AssistantView and OverlayAssistant tested for graceful degradation when `startConversation` fails during auto-restart
+7. **Compacting splash test (MEDIUM)**: Verified "Storing memories..." text, spinner, and hidden input/end button during compaction
+8. **isEndingRef guard test (MEDIUM)**: Verified double-click protection in OverlayAssistant's handleEndConversation
+
+### Architecture Decisions
+- **`ConversationEndedPayload` over separate events**: Single `ai-conversation-ended` event with `reason` field instead of separate events for manual/timer — simpler listener logic, single source of truth
+- **Auto-restart in parent components** (not in `useConversation` hook): AssistantView and OverlayAssistant handle the restart decision based on `reason`, since they own the `conversationId` state
+- **Greeting fires naturally after restart**: The `loadAndGreet` effect in AssistantChat already fires on `conversationId` change, so no special wiring needed for auto-greeting
+- **Overlay skips compacting splash**: The overlay calls `assistantApi.endConversation()` directly (not through the hook's `endConversation`), so `isCompacting` never triggers. This is acceptable — the overlay is compact and the transition is fast.
+- **Settings "Assistant" tab**: Cloud AI settings moved to dedicated tab (after General); Connections tab retains only Steam and SteamGridDB API key sections
+- **Section title renaming**: "Cloud AI (Experimental)" title kept for now. To rename: edit `SettingsView.tsx` line ~505 (`<h3 className="settings-view__section-title">Cloud AI (Experimental)</h3>`) — change the text content. Also update `<p className="settings-view__section-desc">` on line ~506 with a description matching the new title.
 
 ---
 
@@ -424,7 +479,7 @@ The build is broken into 13 sequential phases in `docs/ai-design/implementation_
 | [6](ai-design/implementation_plan/phase-6-overlay-panel.md) | Overlay panel | Frontend | **DONE** |
 | [7](ai-design/implementation_plan/phase-7-hidden-messages-stale-reset.md) | Ephemeral greeting + stale conversation reset | Both | **DONE** |
 | [8](ai-design/implementation_plan/phase-8-backend-inactivity-timer.md) | Backend tokio timer + frontend hook refactor | Both | **DONE** |
-| [9](ai-design/implementation_plan/phase-9-ux-polish.md) | End button, journaling splash, game session context, auto-end toggle | Both | |
+| [9](ai-design/implementation_plan/phase-9-ux-polish.md) | End button, journaling splash, game session context, auto-end toggle | Both | **DONE** |
 | [10](ai-design/implementation_plan/phase-10-error-recovery.md) | Orphan recovery, compaction retry, clipboard failsafe | Both | |
 | [11](ai-design/implementation_plan/phase-11-avatar-data-management.md) | Delete avatar, per-avatar wipe, encryption key management | Both | |
 | [12](ai-design/implementation_plan/phase-12-post-session-reviews.md) | Native notifications, review trigger, context enrichment | Both | |
@@ -567,7 +622,7 @@ All design decisions have been made and documented in `docs/ai-design/`:
 | Priority | File | Why |
 |----------|------|-----|
 | 1 | `docs/ai-design/implementation_plan/README.md` | Phase dependency graph + summary table |
-| 2 | `docs/ai-design/implementation_plan/phase-9-ux-polish.md` | **NEXT PHASE** — exact files, functions, and tests |
+| 2 | `docs/ai-design/implementation_plan/phase-10-error-recovery.md` | **NEXT PHASE** — exact files, functions, and tests |
 | 3 | `docs/ai-design/README.md` | Full architecture overview + all resolved decisions |
 | 4 | `docs/ai-design/03-conversation-lifecycle.md` | Start/resume/end, 4-layer context assembly, mid-session summarization |
 | 5 | `docs/ai-design/02-memory-system.md` | Memory vault, compaction, pruning — used by conversation end |
