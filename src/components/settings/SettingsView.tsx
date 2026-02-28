@@ -27,10 +27,17 @@ import type { IconSetId, FontFamilyId, UIScaleId } from "../../types/theme";
 import { SHORTCUT_OPTIONS } from "../../types";
 import "./SettingsView.css";
 
-type SettingsTabId = "general" | "connections" | "appearance" | "navigation" | "advanced";
+type SettingsTabId =
+  | "general"
+  | "assistant"
+  | "connections"
+  | "appearance"
+  | "navigation"
+  | "advanced";
 
 const SETTINGS_TABS: { id: SettingsTabId; label: string }[] = [
   { id: "general", label: "General" },
+  { id: "assistant", label: "Assistant" },
   { id: "connections", label: "Connections" },
   { id: "appearance", label: "Appearance" },
   { id: "navigation", label: "Navigation" },
@@ -488,7 +495,12 @@ export function SettingsView() {
               )}
             </div>
           </section>
+        </div>
 
+        {/* ── Assistant tab ──────────────────────────────────────── */}
+        <div
+          className={`settings-view__tab-panel ${activeTab === "assistant" ? "settings-view__tab-panel--active" : ""}`}
+        >
           <section className="settings-view__section">
             <h3 className="settings-view__section-title">Cloud AI (Experimental)</h3>
             <p className="settings-view__section-desc">
