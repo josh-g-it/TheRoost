@@ -1,14 +1,14 @@
 # v1.12.0 Handoff — Conversational AI Assistant
 
 > Use this document to get up to speed at the start of a new session.
-> Last updated: 2026-02-28 — Phase 12 complete, all 13 phases DONE.
+> Last updated: 2026-02-28 — Phase 12 complete, ready for Phase 13.
 
 ---
 
 ## Current State
 
 - **Version**: 1.11.0 (synced across `tauri.conf.json`, `package.json`, `Cargo.toml`)
-- **Branch**: master — All 13 phases committed and pushed to GitHub
+- **Branch**: master — Phases 1-12 committed and pushed to GitHub
 - **Release**: v1.11.0 tag pushed and release built successfully
 - **Tests**: 450 Rust + 633 frontend = 1083 total (all passing)
 - **DB schema**: v24 (29 tables — 23 original + 6 new AI tables, WAL mode, SQLite via rusqlite bundled)
@@ -26,7 +26,7 @@
 - **Phase 10**: COMPLETE — Error Recovery (QA reviewed, all fixes applied)
 - **Phase 11**: COMPLETE — Avatar & Data Management (QA reviewed, all fixes applied)
 - **Phase 12**: COMPLETE — Post-Session Reviews (QA reviewed, all fixes applied)
-- **All 13 phases DONE** — v1.12.0 feature-complete, ready for version bump and release
+- **Next step**: Begin Phase 13 (Structured Action Execution Pipeline)
 
 ---
 
@@ -544,11 +544,11 @@ The build is broken into 13 sequential phases in `docs/ai-design/implementation_
 | [8](ai-design/implementation_plan/phase-8-backend-inactivity-timer.md) | Backend tokio timer + frontend hook refactor | Both | **DONE** |
 | [9](ai-design/implementation_plan/phase-9-ux-polish.md) | End button, journaling splash, game session context, auto-end toggle | Both | **DONE** |
 | [10](ai-design/implementation_plan/phase-10-error-recovery.md) | Orphan recovery, compaction retry, clipboard failsafe | Both | **DONE** |
-| [11](ai-design/implementation_plan/phase-11-avatar-data-management.md) | Delete avatar, per-avatar wipe, encryption key management | Both | |
-| [12](ai-design/implementation_plan/phase-12-post-session-reviews.md) | Native notifications, review trigger, context enrichment | Both | |
-| [13](ai-design/implementation_plan/phase-13-structured-action-execution.md) | Action delimiter, streaming parser, executor bridge | Both | **DISCUSSION** |
+| [11](ai-design/implementation_plan/phase-11-avatar-data-management.md) | Delete avatar, per-avatar wipe, encryption key management | Both | **DONE** |
+| [12](ai-design/implementation_plan/phase-12-post-session-reviews.md) | Native notifications, review trigger, context enrichment | Both | **DONE** |
+| [13](ai-design/implementation_plan/phase-13-structured-action-execution.md) | Action delimiter, streaming parser, executor bridge | Both | **NEXT — requires design discussion** |
 
-Phases 1-4 are pure Rust. Phase 5 is the first frontend work. Phases 9-11 are independent of each other. Phase 13 requires design discussion before implementation.
+Phases 1-12 are DONE. Phase 13 requires a brainstorming session to define the specific commands and categorization before implementation.
 
 **Start with**: [implementation_plan/README.md](ai-design/implementation_plan/README.md) for the dependency graph and summary table.
 
@@ -685,7 +685,7 @@ All design decisions have been made and documented in `docs/ai-design/`:
 | Priority | File | Why |
 |----------|------|-----|
 | 1 | `docs/ai-design/implementation_plan/README.md` | Phase dependency graph + summary table |
-| 2 | `docs/ai-design/implementation_plan/phase-11-avatar-data-management.md` | **NEXT PHASE** — exact files, functions, and tests |
+| 2 | `docs/ai-design/implementation_plan/phase-13-structured-action-execution.md` | **NEXT PHASE** — action delimiter, streaming parser, executor bridge |
 | 3 | `docs/ai-design/README.md` | Full architecture overview + all resolved decisions |
 | 4 | `docs/ai-design/03-conversation-lifecycle.md` | Start/resume/end, 4-layer context assembly, mid-session summarization |
 | 5 | `docs/ai-design/02-memory-system.md` | Memory vault, compaction, pruning — used by conversation end |
