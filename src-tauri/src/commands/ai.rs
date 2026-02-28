@@ -319,8 +319,7 @@ pub fn delete_avatar(avatar_id: String, db: State<'_, CacheDbHandle>) -> Result<
         if let Some(active) = db_guard.get_active_ai_avatar()? {
             if active.id == avatar_id {
                 return Err(AppError::Validation(
-                    "Cannot delete the active avatar. Switch to a different avatar first."
-                        .into(),
+                    "Cannot delete the active avatar. Switch to a different avatar first.".into(),
                 ));
             }
         }
