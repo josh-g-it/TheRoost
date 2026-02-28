@@ -273,9 +273,21 @@
 }
 
 .settings-view__cloud-usage {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin: var(--space-xs) 0 0;
+}
+
+.settings-view__cloud-usage-remaining {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.settings-view__cloud-usage-detail {
   font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
-  margin: var(--space-xs) 0 0;
 }
 
 /* Context builder — search input override */

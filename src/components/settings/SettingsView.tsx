@@ -708,9 +708,15 @@ export function SettingsView() {
                 </div>
 
                 {cloudUsage && (
-                  <p className="settings-view__cloud-usage">
-                    Requests today: {cloudUsage.requestsToday} / {cloudUsage.dailyLimit}
-                  </p>
+                  <div className="settings-view__cloud-usage">
+                    <span className="settings-view__cloud-usage-remaining">
+                      {Math.max(0, cloudUsage.dailyLimit - cloudUsage.requestsToday)}{" "}
+                      remaining
+                    </span>
+                    <span className="settings-view__cloud-usage-detail">
+                      {cloudUsage.requestsToday} of {cloudUsage.dailyLimit} used today
+                    </span>
+                  </div>
                 )}
 
                 <div className="settings-view__field-row">
