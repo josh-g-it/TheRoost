@@ -7080,7 +7080,10 @@ mod tests {
             .unwrap();
         // Verify it's fully completed (not orphaned, not active)
         assert!(db.get_active_conversation(&avatar.id).unwrap().is_none());
-        assert!(db.get_orphaned_conversations(&avatar.id).unwrap().is_empty());
+        assert!(db
+            .get_orphaned_conversations(&avatar.id)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -7182,7 +7185,10 @@ mod tests {
 
         // Conversation should be completed (not active, not orphaned)
         assert!(db.get_active_conversation(&avatar.id).unwrap().is_none());
-        assert!(db.get_orphaned_conversations(&avatar.id).unwrap().is_empty());
+        assert!(db
+            .get_orphaned_conversations(&avatar.id)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
