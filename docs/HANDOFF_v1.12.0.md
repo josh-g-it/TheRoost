@@ -1,16 +1,16 @@
 # v1.12.0 Handoff — Conversational AI Assistant
 
 > Use this document to get up to speed at the start of a new session.
-> Last updated: 2026-02-27 — Phase 10 complete, ready for Phase 11.
+> Last updated: 2026-02-28 — Phase 12 complete, all 13 phases DONE.
 
 ---
 
 ## Current State
 
 - **Version**: 1.11.0 (synced across `tauri.conf.json`, `package.json`, `Cargo.toml`)
-- **Branch**: master — Phase 1+2+3+4+5+6+7+8+9+10 committed and pushed to GitHub
+- **Branch**: master — All 13 phases committed and pushed to GitHub
 - **Release**: v1.11.0 tag pushed and release built successfully
-- **Tests**: 436 Rust + 607 frontend = 1043 total (all passing)
+- **Tests**: 450 Rust + 633 frontend = 1083 total (all passing)
 - **DB schema**: v24 (29 tables — 23 original + 6 new AI tables, WAL mode, SQLite via rusqlite bundled)
 - **Design phase**: Complete — 11 design documents in `docs/ai-design/`
 - **Implementation plan**: Complete — 13 phases in `docs/ai-design/implementation_plan/`
@@ -24,7 +24,38 @@
 - **Phase 8**: COMPLETE — Backend inactivity timer (QA reviewed, all fixes applied)
 - **Phase 9**: COMPLETE — UX Polish (QA reviewed, all fixes applied)
 - **Phase 10**: COMPLETE — Error Recovery (QA reviewed, all fixes applied)
-- **Next step**: Begin Phase 11 (Personality Influence)
+- **Phase 11**: COMPLETE — Avatar & Data Management (QA reviewed, all fixes applied)
+- **Phase 12**: COMPLETE — Post-Session Reviews (QA reviewed, all fixes applied)
+- **All 13 phases DONE** — v1.12.0 feature-complete, ready for version bump and release
+
+---
+
+## Phase 12 Completion Summary
+
+**Post-Session Reviews** — completed 2026-02-28.
+
+### What was built
+- **Notification trigger**: Process monitor detects session end → desktop notification via `tauri-plugin-notification` (throttled 1/hour, 6 preconditions)
+- **Event pipeline**: `post-session-review` event → AppLayout listener → sessionStorage → navigate to `/assistant`
+- **Two-path review flow**: Fresh conversation gets injected local greeting; active conversation shows confirmation banner with "Yes, let's review" / "Not now"
+- **Review parser**: `reviewParser.ts` extracts X/5 rating + quoted text (straight & curly quotes) from AI responses
+- **ReviewConfirmation widget**: Shows parsed rating + review text with save/edit/skip; saves via `ratingsApi.saveGameRating`
+- **AI context enrichment**: `format_game_line` includes truncated review text (100 chars) in AI context
+- **Settings**: Toggle in Assistant tab (defaults off); prompt when Cloud AI first enabled
+
+### Files changed (17 files, +1292 -30)
+- **Rust**: `Cargo.toml` (notification dep), `lib.rs` (plugin), `capabilities/default.json`, `process_monitor.rs` (notification + event), `context_builder.rs` (review text in AI context)
+- **Frontend**: `AppLayout.tsx` (event listener), `AssistantView.tsx` (sessionStorage), `AssistantChat.tsx` (review flow), `AssistantChat.css` (banner styles), `ReviewConfirmation.tsx` (maxLength), `SettingsView.tsx` (toggle + prompt), `useConversation.ts` (injectMessage)
+- **New**: `reviewParser.ts`, `reviewParser.test.ts`
+- **Tests**: `AssistantChat.test.tsx` (+4 tests), `useConversation.test.ts` (+2 tests), `reviewParser.test.ts` (10 tests), `context_builder.rs` (+6 tests)
+
+### QA findings addressed
+- Curly/smart quote support in review parser
+- ReviewConfirmation only on last matching message (not all)
+- try/catch on save callback (graceful failure)
+- Textarea maxLength=2000
+- Byte→char fix for review truncation in Rust
+- Game name truncation (100 chars) in notification
 
 ---
 
