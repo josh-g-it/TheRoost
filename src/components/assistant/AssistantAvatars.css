@@ -34,12 +34,14 @@
 .avatar-item {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
   padding: 0.65rem 0.85rem;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   transition: border-color var(--transition-fast);
+  position: relative;
 }
 
 .avatar-item:hover {
@@ -110,6 +112,104 @@
 .avatar-item__switch-btn:hover {
   background: var(--color-accent-primary);
   color: var(--color-text-on-accent, #fff);
+}
+
+/* ── Avatar Action Buttons ─────────────────────────────────────── */
+.avatar-item__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.avatar-item__action-row {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.avatar-item__action-btn {
+  padding: 0.15rem 0.45rem;
+  background: transparent;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  transition:
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.avatar-item__action-btn:hover {
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.avatar-item__action-btn--delete:hover {
+  border-color: var(--color-danger, #e53e3e);
+  color: var(--color-danger, #e53e3e);
+  background: color-mix(in srgb, var(--color-danger, #e53e3e) 8%, transparent);
+}
+
+.avatar-item__action-btn--wipe:hover {
+  border-color: var(--color-warning, #d69e2e);
+  color: var(--color-warning, #d69e2e);
+}
+
+/* ── Confirmation Overlay ──────────────────────────────────────── */
+.avatar-item__confirm-overlay {
+  width: 100%;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-danger, #e53e3e);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.avatar-item__confirm-text {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.65rem;
+  line-height: 1.4;
+}
+
+.avatar-item__confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.avatar-item__confirm-btn {
+  padding: 0.35rem 0.65rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.avatar-item__confirm-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.avatar-item__confirm-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.avatar-item__confirm-btn--danger {
+  background: var(--color-danger, #e53e3e);
+  color: #fff;
 }
 
 /* ── Create Avatar Form ──────────────────────────────────────── */

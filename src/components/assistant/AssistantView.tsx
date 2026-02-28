@@ -193,6 +193,42 @@ export function AssistantView() {
     [conversationId, activeAvatar],
   );
 
+  const handleAvatarDeleted = useCallback(async () => {
+    try {
+      const avatar = await assistantApi.getActiveAvatar();
+      setActiveAvatar(avatar);
+    } catch (err) {
+      logger.error("AssistantView", "api", "Failed to refresh after avatar deletion", {
+        error: getErrorMessage(err),
+      });
+    }
+  }, []);
+
+  const handleAvatarDataWiped = useCallback(
+    async (avatarId: string) => {
+      // If the wiped avatar is the active one, the current conversation is stale
+      if (avatarId === activeAvatar?.id) {
+        // End the now-stale conversation gracefully (ignore errors — data is already gone)
+        if (conversationId) {
+          await assistantApi.endConversation(conversationId, avatarId).catch(() => {});
+        }
+        // Start a fresh conversation
+        try {
+          const convId = await assistantApi.startConversation(avatarId);
+          setConversationId(convId);
+          setHasConversation(true);
+        } catch (err) {
+          logger.error("AssistantView", "api", "Failed to restart after data wipe", {
+            error: getErrorMessage(err),
+          });
+          setConversationId(null);
+          setHasConversation(false);
+        }
+      }
+    },
+    [activeAvatar, conversationId],
+  );
+
   // Phase 10: Orphan banner handlers
   const handleOrphanResume = useCallback(() => {
     setOrphanedConvId(null);
@@ -405,6 +441,8 @@ export function AssistantView() {
               <AssistantAvatars
                 activeAvatarId={activeAvatar.id}
                 onAvatarSwitch={handleAvatarSwitch}
+                onAvatarDeleted={handleAvatarDeleted}
+                onAvatarDataWiped={handleAvatarDataWiped}
               />
             )}
           </div>

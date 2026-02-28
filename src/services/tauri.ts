@@ -506,8 +506,13 @@ export const assistantApi = {
     invoke<void>("delete_journal_entry", { entryId }),
   getMemoryContext: (avatarId: string) =>
     invoke<string>("get_memory_context", { avatarId }),
+  deleteAvatar: (avatarId: string) => invoke<void>("delete_avatar", { avatarId }),
+  wipeAvatarData: (avatarId: string) => invoke<void>("wipe_avatar_data", { avatarId }),
   generateEncryptionKey: () => invoke<void>("generate_encryption_key"),
   checkEncryptionKeyExists: () => invoke<boolean>("check_encryption_key_exists"),
+  importEncryptionKey: (keyBase64: string) =>
+    invoke<void>("import_encryption_key", { keyBase64 }),
+  exportEncryptionKey: () => invoke<string>("export_encryption_key"),
   wipeAiMemory: () => invoke<void>("wipe_ai_memory"),
   checkPostSessionReview: (gameId: string, durationMinutes: number) =>
     invoke<boolean>("check_post_session_review", { gameId, durationMinutes }),

@@ -4003,6 +4003,57 @@ impl CacheDb {
         Ok(())
     }
 
+    /// Hard delete an avatar and cascade to all related data.
+    /// FK cascades handle: ai_conversations → ai_messages (via conversation FK),
+    /// ai_memories (via avatar FK), ai_daily_log (via avatar FK).
+    /// We explicitly delete memories and daily_log first for clarity.
+    pub fn delete_ai_avatar(&self, avatar_id: &str) -> Result<(), AppError> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM ai_memories WHERE avatar_id = ?1",
+            params![avatar_id],
+        )?;
+        tx.execute(
+            "DELETE FROM ai_daily_log WHERE avatar_id = ?1",
+            params![avatar_id],
+        )?;
+        tx.execute(
+            "DELETE FROM ai_conversations WHERE avatar_id = ?1",
+            params![avatar_id],
+        )?;
+        tx.execute("DELETE FROM ai_avatars WHERE id = ?1", params![avatar_id])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Wipe all data for an avatar without deleting the avatar itself.
+    /// Deletes conversations (cascades to messages via FK), memories, and daily_log.
+    pub fn wipe_avatar_data(&self, avatar_id: &str) -> Result<(), AppError> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM ai_conversations WHERE avatar_id = ?1",
+            params![avatar_id],
+        )?;
+        tx.execute(
+            "DELETE FROM ai_memories WHERE avatar_id = ?1",
+            params![avatar_id],
+        )?;
+        tx.execute(
+            "DELETE FROM ai_daily_log WHERE avatar_id = ?1",
+            params![avatar_id],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Count the total number of avatars (active + inactive).
+    pub fn count_ai_avatars(&self) -> Result<u32, AppError> {
+        let count: u32 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM ai_avatars", [], |row| row.get(0))?;
+        Ok(count)
+    }
+
     // ── AI Conversation Stub (for FK constraints in tests/seeding) ──
 
     /// Create a minimal conversation record. Used for FK constraints when inserting
@@ -6588,7 +6639,7 @@ mod tests {
             total_minutes,
             total_sessions: 10,
             unique_games_played: 3,
-            avg_session_minutes: total_minutes / 10.max(1),
+            avg_session_minutes: total_minutes / 10,
             longest_session_minutes: 120,
             longest_session_game_id: "game-1".to_string(),
             longest_session_game_name: "Test Game".to_string(),
@@ -6770,7 +6821,7 @@ mod tests {
         let map: std::collections::HashMap<String, i64> = results.into_iter().collect();
         assert_eq!(map.get("game-a"), Some(&1000));
         assert_eq!(map.get("game-b"), Some(&3000));
-        assert!(map.get("game-c").is_none());
+        assert!(!map.contains_key("game-c"));
     }
 
     // ── AI Personality Tests ────────────────────────────────────────
@@ -7015,6 +7066,98 @@ mod tests {
         assert!(!db.list_ai_personalities().unwrap().is_empty());
     }
 
+    #[test]
+    fn test_delete_ai_avatar_cascades() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let pid = &personalities[0].id;
+        let a1 = db.create_ai_avatar("Avatar1", pid).unwrap();
+        let a2 = db.create_ai_avatar("Avatar2", pid).unwrap();
+
+        // Add data to both avatars
+        db.insert_ai_memory_raw(&a1.id, "mem1", 5, "general", None, false)
+            .unwrap();
+        db.insert_ai_memory_raw(&a2.id, "mem2", 5, "general", None, false)
+            .unwrap();
+        db.create_ai_conversation_stub("conv-a1", &a1.id).unwrap();
+        db.create_ai_conversation_stub("conv-a2", &a2.id).unwrap();
+        db.insert_ai_journal_raw(&a1.id, "conv-a1", "2026-01-01", "journal1")
+            .unwrap();
+        db.insert_ai_journal_raw(&a2.id, "conv-a2", "2026-01-02", "journal2")
+            .unwrap();
+
+        // Delete a1
+        db.delete_ai_avatar(&a1.id).unwrap();
+
+        // a1 gone, a2 still present
+        let avatars = db.list_ai_avatars().unwrap();
+        assert_eq!(avatars.len(), 1);
+        assert_eq!(avatars[0].id, a2.id);
+
+        // a1 memories gone
+        let mems1 = db.get_all_active_memories_raw(&a1.id).unwrap();
+        assert!(mems1.is_empty());
+        // a2 memories intact
+        let mems2 = db.get_all_active_memories_raw(&a2.id).unwrap();
+        assert_eq!(mems2.len(), 1);
+
+        // a2 journal intact
+        let journal2 = db.get_ai_journal_raw(&a2.id).unwrap();
+        assert_eq!(journal2.len(), 1);
+    }
+
+    #[test]
+    fn test_wipe_avatar_data_keeps_avatar() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let pid = &personalities[0].id;
+        let a1 = db.create_ai_avatar("WipeMe", pid).unwrap();
+        let a2 = db.create_ai_avatar("KeepMe", pid).unwrap();
+
+        // Add data to both
+        db.insert_ai_memory_raw(&a1.id, "mem1", 5, "general", None, false)
+            .unwrap();
+        db.insert_ai_memory_raw(&a2.id, "mem2", 5, "general", None, false)
+            .unwrap();
+        db.create_ai_conversation_stub("conv-w1", &a1.id).unwrap();
+        db.insert_ai_journal_raw(&a1.id, "conv-w1", "2026-01-01", "journal1")
+            .unwrap();
+
+        // Wipe a1's data
+        db.wipe_avatar_data(&a1.id).unwrap();
+
+        // Avatar still exists
+        let avatars = db.list_ai_avatars().unwrap();
+        assert_eq!(avatars.len(), 2);
+
+        // a1 data gone
+        let mems1 = db.get_all_active_memories_raw(&a1.id).unwrap();
+        assert!(mems1.is_empty());
+        let journal1 = db.get_ai_journal_raw(&a1.id).unwrap();
+        assert!(journal1.is_empty());
+
+        // a2 data intact
+        let mems2 = db.get_all_active_memories_raw(&a2.id).unwrap();
+        assert_eq!(mems2.len(), 1);
+    }
+
+    #[test]
+    fn test_count_ai_avatars() {
+        let db = test_db();
+        assert_eq!(db.count_ai_avatars().unwrap(), 0);
+
+        let personalities = db.list_ai_personalities().unwrap();
+        let pid = &personalities[0].id;
+        db.create_ai_avatar("One", pid).unwrap();
+        assert_eq!(db.count_ai_avatars().unwrap(), 1);
+
+        let a2 = db.create_ai_avatar("Two", pid).unwrap();
+        assert_eq!(db.count_ai_avatars().unwrap(), 2);
+
+        db.delete_ai_avatar(&a2.id).unwrap();
+        assert_eq!(db.count_ai_avatars().unwrap(), 1);
+    }
+
     // ── AI Conversation Tests ──────────────────────────────────────────
 
     #[test]
@@ -7165,7 +7308,7 @@ mod tests {
             "summary_enc",
             "journal_enc",
             &memories,
-            &[old_mem_id.clone()],
+            std::slice::from_ref(&old_mem_id),
         )
         .unwrap();
 

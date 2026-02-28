@@ -439,6 +439,93 @@
   border-style: dashed;
 }
 
+/* ── AI Data Management (Danger Zone) ─────────────────── */
+.settings-view__section--danger {
+  border-color: var(--color-danger, #e53e3e);
+}
+
+.settings-view__label--danger {
+  color: var(--color-danger, #e53e3e);
+}
+
+.settings-view__wipe-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.settings-view__wipe-warning {
+  font-size: var(--font-size-xs);
+  color: var(--color-danger, #e53e3e);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.settings-view__wipe-instruction {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.settings-view__key-export {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.settings-view__key-display {
+  font-size: var(--font-size-xs);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xs) var(--space-sm);
+  word-break: break-all;
+  max-width: 300px;
+  font-family: var(--font-mono, monospace);
+}
+
+.settings-view__key-import {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.settings-view__key-import-warning {
+  font-size: var(--font-size-xs);
+  color: var(--color-danger, #e53e3e);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.settings-view__cloud-input {
+  width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.settings-view__cloud-input:focus {
+  border-color: var(--color-accent-primary);
+}
+
+.settings-view__cloud-message {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin: var(--space-xs) 0 0;
+}
+
+.settings-view__value {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
 @keyframes settings-overlay-fade-in {
   from {
     opacity: 0;

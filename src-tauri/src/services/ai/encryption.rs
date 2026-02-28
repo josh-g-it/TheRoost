@@ -124,6 +124,28 @@ pub fn has_encryption_key() -> Result<bool, AppError> {
     }
 }
 
+/// Store an encryption key from a base64-encoded string.
+/// Validates that the decoded key is exactly 32 bytes before storing.
+pub fn store_encryption_key_from_base64(key_base64: &str) -> Result<(), AppError> {
+    let decoded = Zeroizing::new(
+        base64::engine::general_purpose::STANDARD
+            .decode(key_base64.trim().as_bytes())
+            .map_err(|e| AppError::Encryption(format!("Invalid base64: {e}")))?,
+    );
+
+    if decoded.len() != 32 {
+        return Err(AppError::Encryption(format!(
+            "Key must be exactly 32 bytes, got {}",
+            decoded.len()
+        )));
+    }
+
+    let mut key = Zeroizing::new([0u8; 32]);
+    key.copy_from_slice(&decoded);
+    store_encryption_key(&key)?;
+    Ok(())
+}
+
 /// Delete the AI encryption key from the credential manager.
 /// Treats a missing key as success (idempotent).
 #[allow(dead_code)]
@@ -324,5 +346,64 @@ mod tests {
         let mut restored = [0u8; 32];
         restored.copy_from_slice(&decoded);
         assert_eq!(restored, key);
+    }
+
+    #[test]
+    fn test_store_key_from_base64_invalid_base64() {
+        let result = store_encryption_key_from_base64("not-valid-base64!!!");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::Encryption(msg) => {
+                assert!(
+                    msg.contains("Invalid base64"),
+                    "Expected 'Invalid base64', got: {msg}"
+                );
+            }
+            other => panic!("Expected AppError::Encryption, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_store_key_from_base64_wrong_length_short() {
+        let short_key = base64::engine::general_purpose::STANDARD.encode([0u8; 16]);
+        let result = store_encryption_key_from_base64(&short_key);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::Encryption(msg) => {
+                assert!(
+                    msg.contains("32 bytes"),
+                    "Expected '32 bytes' error, got: {msg}"
+                );
+            }
+            other => panic!("Expected AppError::Encryption, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_store_key_from_base64_wrong_length_long() {
+        let long_key = base64::engine::general_purpose::STANDARD.encode([0u8; 64]);
+        let result = store_encryption_key_from_base64(&long_key);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::Encryption(msg) => {
+                assert!(
+                    msg.contains("32 bytes"),
+                    "Expected '32 bytes' error, got: {msg}"
+                );
+            }
+            other => panic!("Expected AppError::Encryption, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_store_key_from_base64_empty() {
+        let result = store_encryption_key_from_base64("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_store_key_from_base64_whitespace_only() {
+        let result = store_encryption_key_from_base64("   \n\t  ");
+        assert!(result.is_err());
     }
 }

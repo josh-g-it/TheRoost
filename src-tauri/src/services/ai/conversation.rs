@@ -643,7 +643,7 @@ mod tests {
         // Should not include all 30 messages
         assert!(messages.len() < 30);
         // Should include at least some messages
-        assert!(messages.len() > 0);
+        assert!(!messages.is_empty());
         // Total chars should be within budget
         let total_chars: usize = messages.iter().map(|m| m.content.len()).sum();
         assert!(total_chars <= TOKEN_BUDGET_LAYER4 * CHARS_PER_TOKEN);

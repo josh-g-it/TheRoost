@@ -13,6 +13,8 @@ const mockListPersonalities = vi.fn();
 const mockSwitchAvatar = vi.fn();
 const mockCreateAvatar = vi.fn();
 const mockCreatePersonality = vi.fn();
+const mockDeleteAvatar = vi.fn();
+const mockWipeAvatarData = vi.fn();
 
 vi.mock("../../services/tauri", () => ({
   assistantApi: {
@@ -21,6 +23,8 @@ vi.mock("../../services/tauri", () => ({
     switchAvatar: (...args: unknown[]) => mockSwitchAvatar(...args),
     createAvatar: (...args: unknown[]) => mockCreateAvatar(...args),
     createPersonality: (...args: unknown[]) => mockCreatePersonality(...args),
+    deleteAvatar: (...args: unknown[]) => mockDeleteAvatar(...args),
+    wipeAvatarData: (...args: unknown[]) => mockWipeAvatarData(...args),
   },
 }));
 
@@ -51,6 +55,8 @@ describe("AssistantAvatars", () => {
     mockCreatePersonality.mockResolvedValue(
       makeAiPersonality("p3", { name: "Custom", isBuiltin: false }),
     );
+    mockDeleteAvatar.mockResolvedValue(undefined);
+    mockWipeAvatarData.mockResolvedValue(undefined);
   });
 
   it("renders avatar list with names", async () => {
@@ -133,5 +139,197 @@ describe("AssistantAvatars", () => {
     render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={onSwitch} />);
 
     expect(screen.getByText("Loading...")).toBeInTheDocument();
+  });
+
+  // ── Delete Avatar Tests ──────────────────────────────────────────
+
+  it("delete button hidden for active avatar", async () => {
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Buddy")).toBeInTheDocument();
+    });
+
+    // Only one Delete button should exist (for non-active Scholar, not for active Buddy)
+    const deleteButtons = screen.getAllByTitle("Delete this avatar");
+    expect(deleteButtons).toHaveLength(1);
+  });
+
+  it("delete button hidden when only 1 avatar exists", async () => {
+    mockListAvatars.mockResolvedValue([
+      makeAiAvatar("a1", { name: "Solo", personalityId: "p1", isActive: true }),
+    ]);
+
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Solo")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTitle("Delete this avatar")).not.toBeInTheDocument();
+  });
+
+  it("clicking delete shows confirmation dialog", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Scholar")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTitle("Delete this avatar"));
+
+    expect(
+      screen.getByText(/All conversations, memories, and journal entries/),
+    ).toBeInTheDocument();
+    // Confirmation dialog has a danger-styled Delete button
+    const confirmOverlay = screen
+      .getByText(/All conversations, memories, and journal entries/)
+      .closest(".avatar-item__confirm-overlay")!;
+    expect(
+      confirmOverlay.querySelector(".avatar-item__confirm-btn--danger"),
+    ).toBeInTheDocument();
+  });
+
+  it("confirming delete calls API and removes avatar from list", async () => {
+    const user = userEvent.setup();
+    const onDeleted = vi.fn();
+    render(
+      <AssistantAvatars
+        activeAvatarId="a1"
+        onAvatarSwitch={vi.fn()}
+        onAvatarDeleted={onDeleted}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Scholar")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTitle("Delete this avatar"));
+    // Click the danger-styled confirm button inside the overlay
+    const confirmOverlay = screen
+      .getByText(/All conversations, memories, and journal entries/)
+      .closest(".avatar-item__confirm-overlay")!;
+    const confirmBtn = confirmOverlay.querySelector(
+      ".avatar-item__confirm-btn--danger",
+    ) as HTMLElement;
+    await user.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(mockDeleteAvatar).toHaveBeenCalledWith("a2");
+      expect(onDeleted).toHaveBeenCalledWith("a2");
+    });
+
+    // Scholar should be removed from the list
+    await waitFor(() => {
+      expect(screen.queryByText("Scholar")).not.toBeInTheDocument();
+    });
+  });
+
+  it("cancel dismisses delete confirmation", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Scholar")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTitle("Delete this avatar"));
+    expect(
+      screen.getByText(/All conversations, memories, and journal entries/),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(
+      screen.queryByText(/All conversations, memories, and journal entries/),
+    ).not.toBeInTheDocument();
+    expect(mockDeleteAvatar).not.toHaveBeenCalled();
+  });
+
+  // ── Wipe Avatar Data Tests ───────────────────────────────────────
+
+  it("clear data button visible for all avatars", async () => {
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Buddy")).toBeInTheDocument();
+    });
+
+    // Both avatars should have Clear Data buttons
+    const clearButtons = screen.getAllByTitle("Clear all data for this avatar");
+    expect(clearButtons).toHaveLength(2);
+  });
+
+  it("clicking clear data shows confirmation dialog", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Buddy")).toBeInTheDocument();
+    });
+
+    const clearButtons = screen.getAllByTitle("Clear all data for this avatar");
+    await user.click(clearButtons[0]);
+
+    expect(
+      screen.getByText(/all memories, journal entries, and conversation history/),
+    ).toBeInTheDocument();
+    // Confirmation dialog has a danger-styled Clear Data button
+    const confirmOverlay = screen
+      .getByText(/all memories, journal entries, and conversation history/)
+      .closest(".avatar-item__confirm-overlay")!;
+    expect(
+      confirmOverlay.querySelector(".avatar-item__confirm-btn--danger"),
+    ).toBeInTheDocument();
+  });
+
+  it("confirming wipe calls API", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Buddy")).toBeInTheDocument();
+    });
+
+    const clearButtons = screen.getAllByTitle("Clear all data for this avatar");
+    await user.click(clearButtons[0]);
+    // Click the danger-styled confirm button inside the overlay
+    const confirmOverlay = screen
+      .getByText(/all memories, journal entries, and conversation history/)
+      .closest(".avatar-item__confirm-overlay")!;
+    const confirmBtn = confirmOverlay.querySelector(
+      ".avatar-item__confirm-btn--danger",
+    ) as HTMLElement;
+    await user.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(mockWipeAvatarData).toHaveBeenCalledWith("a1");
+    });
+  });
+
+  it("cancel dismisses wipe confirmation", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Buddy")).toBeInTheDocument();
+    });
+
+    const clearButtons = screen.getAllByTitle("Clear all data for this avatar");
+    await user.click(clearButtons[0]);
+    expect(
+      screen.getByText(/all memories, journal entries, and conversation history/),
+    ).toBeInTheDocument();
+
+    // Get the Cancel button from within the confirmation overlay
+    const cancelButtons = screen.getAllByRole("button", { name: "Cancel" });
+    await user.click(cancelButtons[cancelButtons.length - 1]);
+
+    expect(
+      screen.queryByText(/all memories, journal entries, and conversation history/),
+    ).not.toBeInTheDocument();
+    expect(mockWipeAvatarData).not.toHaveBeenCalled();
   });
 });

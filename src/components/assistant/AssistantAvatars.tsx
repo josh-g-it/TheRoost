@@ -10,11 +10,15 @@ import "./AssistantAvatars.css";
 interface AssistantAvatarsProps {
   activeAvatarId: string;
   onAvatarSwitch: (avatarId: string) => void;
+  onAvatarDeleted?: (deletedAvatarId: string) => void;
+  onAvatarDataWiped?: (avatarId: string) => void;
 }
 
 export function AssistantAvatars({
   activeAvatarId,
   onAvatarSwitch,
+  onAvatarDeleted,
+  onAvatarDataWiped,
 }: AssistantAvatarsProps) {
   const [avatars, setAvatars] = useState<AiAvatar[]>([]);
   const [personalities, setPersonalities] = useState<AiPersonality[]>([]);
@@ -30,6 +34,12 @@ export function AssistantAvatars({
   const [newPersonalityName, setNewPersonalityName] = useState("");
   const [newPersonalityPrompt, setNewPersonalityPrompt] = useState("");
   const [isCreatingPersonality, setIsCreatingPersonality] = useState(false);
+
+  // Delete / wipe state
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmWipeId, setConfirmWipeId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isWiping, setIsWiping] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -90,6 +100,45 @@ export function AssistantAvatars({
       }
     },
     [onAvatarSwitch],
+  );
+
+  const handleDeleteAvatar = useCallback(
+    async (avatarId: string) => {
+      setIsDeleting(true);
+      try {
+        await assistantApi.deleteAvatar(avatarId);
+        setAvatars((prev) => prev.filter((a) => a.id !== avatarId));
+        onAvatarDeleted?.(avatarId);
+        logger.info("AssistantAvatars", "api", "Avatar deleted", { avatarId });
+      } catch (err) {
+        logger.error("AssistantAvatars", "api", "Failed to delete avatar", {
+          error: getErrorMessage(err),
+        });
+      } finally {
+        setIsDeleting(false);
+        setConfirmDeleteId(null);
+      }
+    },
+    [onAvatarDeleted],
+  );
+
+  const handleWipeAvatarData = useCallback(
+    async (avatarId: string) => {
+      setIsWiping(true);
+      try {
+        await assistantApi.wipeAvatarData(avatarId);
+        onAvatarDataWiped?.(avatarId);
+        logger.info("AssistantAvatars", "api", "Avatar data wiped", { avatarId });
+      } catch (err) {
+        logger.error("AssistantAvatars", "api", "Failed to wipe avatar data", {
+          error: getErrorMessage(err),
+        });
+      } finally {
+        setIsWiping(false);
+        setConfirmWipeId(null);
+      }
+    },
+    [onAvatarDataWiped],
   );
 
   const handleCreatePersonality = useCallback(async () => {
@@ -153,15 +202,85 @@ export function AssistantAvatars({
                     {getPersonalityName(avatar.personalityId)}
                   </div>
                 </div>
-                {avatar.id === activeAvatarId ? (
-                  <span className="avatar-item__active-badge">Active</span>
-                ) : (
-                  <button
-                    className="avatar-item__switch-btn"
-                    onClick={() => handleSwitchAvatar(avatar.id)}
-                  >
-                    Switch
-                  </button>
+                <div className="avatar-item__actions">
+                  {avatar.id === activeAvatarId ? (
+                    <span className="avatar-item__active-badge">Active</span>
+                  ) : (
+                    <button
+                      className="avatar-item__switch-btn"
+                      onClick={() => handleSwitchAvatar(avatar.id)}
+                    >
+                      Switch
+                    </button>
+                  )}
+                  <div className="avatar-item__action-row">
+                    <button
+                      className="avatar-item__action-btn avatar-item__action-btn--wipe"
+                      title="Clear all data for this avatar"
+                      onClick={() => setConfirmWipeId(avatar.id)}
+                    >
+                      <AppIcon name="close" size={12} /> Clear Data
+                    </button>
+                    {avatar.id !== activeAvatarId && avatars.length > 1 && (
+                      <button
+                        className="avatar-item__action-btn avatar-item__action-btn--delete"
+                        title="Delete this avatar"
+                        onClick={() => setConfirmDeleteId(avatar.id)}
+                      >
+                        <AppIcon name="trash" size={12} /> Delete
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {confirmDeleteId === avatar.id && (
+                  <div className="avatar-item__confirm-overlay">
+                    <p className="avatar-item__confirm-text">
+                      Delete <strong>{avatar.name}</strong>? All conversations, memories,
+                      and journal entries for this avatar will be permanently deleted.
+                      This cannot be undone.
+                    </p>
+                    <div className="avatar-item__confirm-actions">
+                      <button
+                        className="avatar-item__confirm-btn avatar-item__confirm-btn--danger"
+                        disabled={isDeleting}
+                        onClick={() => handleDeleteAvatar(avatar.id)}
+                      >
+                        {isDeleting ? "Deleting..." : "Delete"}
+                      </button>
+                      <button
+                        className="avatar-item__confirm-btn"
+                        onClick={() => setConfirmDeleteId(null)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {confirmWipeId === avatar.id && (
+                  <div className="avatar-item__confirm-overlay">
+                    <p className="avatar-item__confirm-text">
+                      Clear all data for <strong>{avatar.name}</strong>? This will delete
+                      all memories, journal entries, and conversation history for this
+                      avatar. The avatar itself will be kept. This cannot be undone.
+                    </p>
+                    <div className="avatar-item__confirm-actions">
+                      <button
+                        className="avatar-item__confirm-btn avatar-item__confirm-btn--danger"
+                        disabled={isWiping}
+                        onClick={() => handleWipeAvatarData(avatar.id)}
+                      >
+                        {isWiping ? "Clearing..." : "Clear Data"}
+                      </button>
+                      <button
+                        className="avatar-item__confirm-btn"
+                        onClick={() => setConfirmWipeId(null)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             ))}

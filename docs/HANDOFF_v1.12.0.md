@@ -1,16 +1,16 @@
 # v1.12.0 Handoff — Conversational AI Assistant
 
 > Use this document to get up to speed at the start of a new session.
-> Last updated: 2026-02-27 — Phase 9 complete, ready for Phase 10.
+> Last updated: 2026-02-27 — Phase 10 complete, ready for Phase 11.
 
 ---
 
 ## Current State
 
 - **Version**: 1.11.0 (synced across `tauri.conf.json`, `package.json`, `Cargo.toml`)
-- **Branch**: master — Phase 1+2+3+4+5+6+7+8+9 committed and pushed to GitHub
+- **Branch**: master — Phase 1+2+3+4+5+6+7+8+9+10 committed and pushed to GitHub
 - **Release**: v1.11.0 tag pushed and release built successfully
-- **Tests**: 426 Rust + 594 frontend = 1020 total (all passing)
+- **Tests**: 436 Rust + 607 frontend = 1043 total (all passing)
 - **DB schema**: v24 (29 tables — 23 original + 6 new AI tables, WAL mode, SQLite via rusqlite bundled)
 - **Design phase**: Complete — 11 design documents in `docs/ai-design/`
 - **Implementation plan**: Complete — 13 phases in `docs/ai-design/implementation_plan/`
@@ -23,7 +23,39 @@
 - **Phase 7**: COMPLETE — Hidden messages + stale conversation reset (QA reviewed, all fixes applied)
 - **Phase 8**: COMPLETE — Backend inactivity timer (QA reviewed, all fixes applied)
 - **Phase 9**: COMPLETE — UX Polish (QA reviewed, all fixes applied)
-- **Next step**: Begin Phase 10 (Error Recovery)
+- **Phase 10**: COMPLETE — Error Recovery (QA reviewed, all fixes applied)
+- **Next step**: Begin Phase 11 (Personality Influence)
+
+---
+
+## Phase 10 Completion Summary
+
+**Error Recovery** — completed 2026-02-27.
+
+### What Was Built
+- **Orphan conversation recovery**: On mount, checks for conversations with `ended_at IS NULL AND compacted = 0` (crash survivors). Shows a banner with Resume/New options. Resume dismisses the banner and continues the conversation; New ends the orphan and starts fresh.
+- **Compaction retry UI**: On mount, checks for conversations with `ended_at IS NOT NULL AND compacted = 0 AND has messages` (failed compaction). Shows a non-blocking banner with Compact Now, Copy Raw Data, and Paste Response buttons.
+- **Clipboard copy failsafe**: Copy Raw Data copies the full compaction prompt + transcript to clipboard for use with an external AI. Paste Response opens a modal where users can paste back the external AI's JSON result (validated: summary, memories array with content/importance/category, supersededMemories).
+- **Avatar isolation** (QA fix): `get_orphaned_conversations` now requires `avatar_id` parameter throughout the chain (DB → service → command → frontend) to prevent cross-avatar data mixing.
+- **Category validation** (QA fix): `apply_external_compaction` validates memory categories against `["preference", "opinion", "fact", "general"]` allowlist.
+- **Conversation ownership verification** (QA fix): `apply_external_compaction` verifies the conversation belongs to the specified avatar before applying.
+- **23 new tests** (1020 → 1043 total): 10 Rust (7 cache_db + 3 conversation) + 13 frontend (4 orphan banner + 9 compaction banner/modal)
+
+### Files Modified (8 files)
+| File | Change |
+|------|--------|
+| `src-tauri/src/services/cache_db.rs` | Removed `#[allow(dead_code)]` from `get_orphaned_conversations`, added `avatar_id` param; added `get_pending_compaction_conversations` + `get_compaction_conversation_data` methods; 10 new tests |
+| `src-tauri/src/services/ai/conversation.rs` | Updated `check_orphaned_conversations` to accept `avatar_id`; added 3 public wrappers for compaction formatting helpers; 3 new tests |
+| `src-tauri/src/commands/ai.rs` | Added `CompactionResult` import; 4 new commands: `check_orphaned_conversations`, `get_compaction_pending_conversations`, `get_compaction_raw_data`, `apply_external_compaction` (with category + ownership validation) |
+| `src-tauri/src/lib.rs` | Registered 4 new commands |
+| `src/services/tauri.ts` | Added 4 API methods; updated `checkOrphanedConversations` to accept `avatarId` |
+| `src/components/assistant/AssistantView.tsx` | Error recovery state, mount-time orphan/compaction checks, 5 handler callbacks, orphan banner, compaction banner, paste modal |
+| `src/components/assistant/AssistantView.css` | ~138 lines: recovery banners + paste modal styles |
+| `src/components/assistant/AssistantView.test.tsx` | 6 new mocks, 13 new tests (orphan banner + compaction banner/modal) |
+
+### QA Findings Applied
+- **Security**: No critical issues. 3 warnings fixed: avatar isolation on orphan queries, category field validation, conversation ownership verification.
+- **Correctness**: 1 bug fixed: `get_orphaned_conversations` didn't filter by `avatar_id`, enabling cross-avatar orphan mixing.
 
 ---
 
@@ -480,7 +512,7 @@ The build is broken into 13 sequential phases in `docs/ai-design/implementation_
 | [7](ai-design/implementation_plan/phase-7-hidden-messages-stale-reset.md) | Ephemeral greeting + stale conversation reset | Both | **DONE** |
 | [8](ai-design/implementation_plan/phase-8-backend-inactivity-timer.md) | Backend tokio timer + frontend hook refactor | Both | **DONE** |
 | [9](ai-design/implementation_plan/phase-9-ux-polish.md) | End button, journaling splash, game session context, auto-end toggle | Both | **DONE** |
-| [10](ai-design/implementation_plan/phase-10-error-recovery.md) | Orphan recovery, compaction retry, clipboard failsafe | Both | |
+| [10](ai-design/implementation_plan/phase-10-error-recovery.md) | Orphan recovery, compaction retry, clipboard failsafe | Both | **DONE** |
 | [11](ai-design/implementation_plan/phase-11-avatar-data-management.md) | Delete avatar, per-avatar wipe, encryption key management | Both | |
 | [12](ai-design/implementation_plan/phase-12-post-session-reviews.md) | Native notifications, review trigger, context enrichment | Both | |
 | [13](ai-design/implementation_plan/phase-13-structured-action-execution.md) | Action delimiter, streaming parser, executor bridge | Both | **DISCUSSION** |
@@ -622,7 +654,7 @@ All design decisions have been made and documented in `docs/ai-design/`:
 | Priority | File | Why |
 |----------|------|-----|
 | 1 | `docs/ai-design/implementation_plan/README.md` | Phase dependency graph + summary table |
-| 2 | `docs/ai-design/implementation_plan/phase-10-error-recovery.md` | **NEXT PHASE** — exact files, functions, and tests |
+| 2 | `docs/ai-design/implementation_plan/phase-11-avatar-data-management.md` | **NEXT PHASE** — exact files, functions, and tests |
 | 3 | `docs/ai-design/README.md` | Full architecture overview + all resolved decisions |
 | 4 | `docs/ai-design/03-conversation-lifecycle.md` | Start/resume/end, 4-layer context assembly, mid-session summarization |
 | 5 | `docs/ai-design/02-memory-system.md` | Memory vault, compaction, pruning — used by conversation end |

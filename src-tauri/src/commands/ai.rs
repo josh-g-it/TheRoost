@@ -1,3 +1,4 @@
+use base64::Engine;
 use tauri::{Emitter, Manager, State};
 
 use crate::models::ai::{CloudAiUsage, CloudProvider, ResolvedIntent};
@@ -280,6 +281,73 @@ pub fn switch_avatar(avatar_id: String, db: State<'_, CacheDbHandle>) -> Result<
     db.switch_ai_avatar(&avatar_id)
 }
 
+#[tauri::command]
+pub fn delete_avatar(avatar_id: String, db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
+    let db_guard = db.lock_or_err("DB")?;
+
+    // Guard: cannot delete the active avatar — must switch away first
+    if let Some(active) = db_guard.get_active_ai_avatar()? {
+        if active.id == avatar_id {
+            return Err(AppError::Validation(
+                "Cannot delete the active avatar. Switch to a different avatar first.".into(),
+            ));
+        }
+    }
+
+    // Guard: must have at least 1 avatar remaining after deletion
+    let count = db_guard.count_ai_avatars()?;
+    if count <= 1 {
+        return Err(AppError::Validation(
+            "Cannot delete the last avatar.".into(),
+        ));
+    }
+
+    db_guard.delete_ai_avatar(&avatar_id)?;
+    tracing::info!(avatar_id = avatar_id.as_str(), "Avatar deleted");
+    Ok(())
+}
+
+#[tauri::command]
+pub fn wipe_avatar_data(
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), AppError> {
+    // Load encryption key BEFORE acquiring DB lock (keyring I/O)
+    let key = encryption::load_encryption_key()?;
+
+    // Load username from settings — no username field exists yet, fall back to "User"
+    let username = settings_store::load_settings(&app_handle)
+        .ok()
+        .and(None::<String>)
+        .unwrap_or_else(|| "User".to_string());
+
+    // First lock scope: get avatar name + wipe data
+    let avatar_name = {
+        let db_guard = db.lock_or_err("DB")?;
+        let avatars = db_guard.list_ai_avatars()?;
+        let name = avatars
+            .iter()
+            .find(|a| a.id == avatar_id)
+            .map(|a| a.name.clone())
+            .ok_or_else(|| AppError::NotFound("Avatar not found".into()))?;
+        db_guard.wipe_avatar_data(&avatar_id)?;
+        name
+    }; // DB lock dropped
+
+    // Second lock scope: re-seed system memories
+    {
+        let db_guard = db.lock_or_err("DB")?;
+        memory::seed_system_memories(&db_guard, &avatar_id, &avatar_name, &username, &key)?;
+    }
+
+    tracing::info!(
+        avatar_id = avatar_id.as_str(),
+        "Avatar data wiped and system memories re-seeded"
+    );
+    Ok(())
+}
+
 // ── Memory Commands ─────────────────────────────────────────────────
 
 #[tauri::command]
@@ -365,6 +433,22 @@ pub fn generate_encryption_key() -> Result<(), AppError> {
 #[tauri::command]
 pub fn check_encryption_key_exists() -> Result<bool, AppError> {
     encryption::has_encryption_key()
+}
+
+#[tauri::command]
+pub fn import_encryption_key(key_base64: String) -> Result<(), AppError> {
+    if key_base64.trim().is_empty() {
+        return Err(AppError::Validation("Key cannot be empty".into()));
+    }
+    encryption::store_encryption_key_from_base64(&key_base64)?;
+    tracing::info!("Encryption key imported successfully");
+    Ok(())
+}
+
+#[tauri::command]
+pub fn export_encryption_key() -> Result<String, AppError> {
+    let key = encryption::load_encryption_key()?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(*key))
 }
 
 // ── Conversation Commands ────────────────────────────────────────────

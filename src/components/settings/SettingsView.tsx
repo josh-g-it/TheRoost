@@ -13,7 +13,15 @@ import { BackupRestoreSection } from "./BackupRestoreSection";
 import { useSettings } from "../../hooks/useSettings";
 import { useAppVersion } from "../../hooks/useAppVersion";
 import { useLibraryStore } from "../../store/librarySlice";
-import { coverArtApi, cloudAiApi, updaterApi, autostartApi } from "../../services/tauri";
+import {
+  coverArtApi,
+  cloudAiApi,
+  updaterApi,
+  autostartApi,
+  assistantApi,
+} from "../../services/tauri";
+import { getErrorMessage } from "../../utils/errors";
+import { logger } from "../../utils/logger";
 import type {
   AppSettings,
   CommandCenterShortcut,
@@ -82,6 +90,27 @@ export function SettingsView() {
   const [autostartEnabled, setAutostartEnabled] = useState(false);
   const [autostartLoading, setAutostartLoading] = useState(true);
 
+  // AI Data Management state
+  const [showWipeConfirm, setShowWipeConfirm] = useState(false);
+  const [wipeConfirmText, setWipeConfirmText] = useState("");
+  const [isWipingAi, setIsWipingAi] = useState(false);
+  const [encryptionKeyExists, setEncryptionKeyExists] = useState(false);
+  const [showKeyImport, setShowKeyImport] = useState(false);
+  const [importKeyValue, setImportKeyValue] = useState("");
+  const [keyImportMessage, setKeyImportMessage] = useState<string | null>(null);
+  const [isImportingKey, setIsImportingKey] = useState(false);
+  const [showExportedKey, setShowExportedKey] = useState(false);
+  const [exportedKey, setExportedKey] = useState("");
+  const clipboardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear exported key from memory on unmount
+  useEffect(() => {
+    return () => {
+      setExportedKey("");
+      if (clipboardTimerRef.current) clearTimeout(clipboardTimerRef.current);
+    };
+  }, []);
+
   // Game name lookup for exclude/include lists
   const allGames = useLibraryStore((s) => s.library?.games);
   const gameNameMap = useMemo(() => {
@@ -119,6 +148,10 @@ export function SettingsView() {
         setAutostartLoading(false);
       })
       .catch(() => setAutostartLoading(false));
+    assistantApi
+      .checkEncryptionKeyExists()
+      .then(setEncryptionKeyExists)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -901,6 +934,202 @@ export function SettingsView() {
                 </p>
               </>
             )}
+          </section>
+
+          <section className="settings-view__section settings-view__section--danger">
+            <h3 className="settings-view__section-title">AI Data Management</h3>
+
+            <div className="settings-view__field-row">
+              <label className="settings-view__label">Encryption Key</label>
+              <span className="settings-view__value">
+                {encryptionKeyExists
+                  ? "Stored in Windows Credential Manager"
+                  : "Not found"}
+              </span>
+            </div>
+
+            {encryptionKeyExists && (
+              <div className="settings-view__field-row">
+                <label className="settings-view__label">Export Key</label>
+                <div>
+                  {!showExportedKey ? (
+                    <Button
+                      variant="ghost"
+                      onClick={async () => {
+                        try {
+                          const key = await assistantApi.exportEncryptionKey();
+                          setExportedKey(key);
+                          setShowExportedKey(true);
+                        } catch {
+                          setKeyImportMessage("Failed to export key");
+                        }
+                      }}
+                    >
+                      Show Key
+                    </Button>
+                  ) : (
+                    <div className="settings-view__key-export">
+                      <code className="settings-view__key-display">{exportedKey}</code>
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          navigator.clipboard.writeText(exportedKey);
+                          setKeyImportMessage("Copied to clipboard (auto-clears in 30s)");
+                          setTimeout(() => setKeyImportMessage(null), 3000);
+                          if (clipboardTimerRef.current)
+                            clearTimeout(clipboardTimerRef.current);
+                          clipboardTimerRef.current = setTimeout(() => {
+                            navigator.clipboard.writeText("").catch(() => {});
+                            clipboardTimerRef.current = null;
+                          }, 30000);
+                        }}
+                      >
+                        Copy
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          setShowExportedKey(false);
+                          setExportedKey("");
+                        }}
+                      >
+                        Hide
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="settings-view__field-row">
+              <label className="settings-view__label">Import Key</label>
+              <div>
+                {!showKeyImport ? (
+                  <Button variant="ghost" onClick={() => setShowKeyImport(true)}>
+                    Import Key
+                  </Button>
+                ) : (
+                  <div className="settings-view__key-import">
+                    {encryptionKeyExists && (
+                      <p className="settings-view__key-import-warning">
+                        Importing a new key will make existing encrypted AI data
+                        unreadable.
+                      </p>
+                    )}
+                    <input
+                      className="settings-view__cloud-input"
+                      type="text"
+                      placeholder="Paste base64 key..."
+                      value={importKeyValue}
+                      onChange={(e) => setImportKeyValue(e.target.value)}
+                    />
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <Button
+                        disabled={!importKeyValue.trim() || isImportingKey}
+                        onClick={async () => {
+                          setIsImportingKey(true);
+                          setKeyImportMessage(null);
+                          try {
+                            await assistantApi.importEncryptionKey(importKeyValue.trim());
+                            setEncryptionKeyExists(true);
+                            setImportKeyValue("");
+                            setShowKeyImport(false);
+                            setKeyImportMessage("Key imported successfully");
+                          } catch (err) {
+                            setKeyImportMessage(`Import failed: ${getErrorMessage(err)}`);
+                          } finally {
+                            setIsImportingKey(false);
+                          }
+                        }}
+                      >
+                        {isImportingKey ? "Importing..." : "Import"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          setShowKeyImport(false);
+                          setImportKeyValue("");
+                          setKeyImportMessage(null);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {keyImportMessage && (
+                  <p className="settings-view__cloud-message">{keyImportMessage}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="settings-view__field-row">
+              <div>
+                <label className="settings-view__label settings-view__label--danger">
+                  Wipe All AI Data
+                </label>
+                <p className="settings-view__field-hint">
+                  Permanently delete all conversations, memories, and journal entries for
+                  all avatars.
+                </p>
+              </div>
+              <div>
+                {!showWipeConfirm ? (
+                  <Button variant="danger" onClick={() => setShowWipeConfirm(true)}>
+                    Wipe All AI Data
+                  </Button>
+                ) : (
+                  <div className="settings-view__wipe-confirm">
+                    <p className="settings-view__wipe-warning">
+                      This will permanently delete ALL conversations, memories, and
+                      journal entries for ALL avatars. Avatars and personalities will be
+                      kept. This cannot be undone.
+                    </p>
+                    <p className="settings-view__wipe-instruction">
+                      Type <strong>DELETE</strong> to confirm:
+                    </p>
+                    <input
+                      className="settings-view__cloud-input"
+                      type="text"
+                      placeholder="Type DELETE"
+                      value={wipeConfirmText}
+                      onChange={(e) => setWipeConfirmText(e.target.value)}
+                    />
+                    <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+                      <Button
+                        variant="danger"
+                        disabled={wipeConfirmText !== "DELETE" || isWipingAi}
+                        onClick={async () => {
+                          setIsWipingAi(true);
+                          try {
+                            await assistantApi.wipeAiMemory();
+                            setShowWipeConfirm(false);
+                            setWipeConfirmText("");
+                          } catch (err) {
+                            logger.error("Settings", "api", "Failed to wipe AI data", {
+                              error: getErrorMessage(err),
+                            });
+                          } finally {
+                            setIsWipingAi(false);
+                          }
+                        }}
+                      >
+                        {isWipingAi ? "Wiping..." : "Confirm Wipe"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          setShowWipeConfirm(false);
+                          setWipeConfirmText("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </section>
         </div>
 
