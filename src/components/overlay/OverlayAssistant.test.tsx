@@ -43,6 +43,19 @@ vi.mock("../../store/settingsSlice", () => ({
     selector({ settings: { iconSet: "classic" } }),
 }));
 
+vi.mock("../../hooks/useActionPipeline", () => ({
+  useActionPipeline: () => ({
+    state: { actions: [], currentIndex: 0, status: "idle", results: [] },
+    setActions: vi.fn(),
+    confirmTier2: vi.fn(),
+    denyTier2: vi.fn(),
+    cancelAll: vi.fn(),
+    consumeResults: vi.fn().mockReturnValue([]),
+    reset: vi.fn(),
+  }),
+  serializeActionFeedback: () => "",
+}));
+
 const avatar = makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" });
 const personality = makeAiPersonality("p1", { name: "Friendly" });
 

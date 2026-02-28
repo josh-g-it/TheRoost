@@ -303,6 +303,89 @@ pub fn build_filtered_library_summary(
     Ok(parts.join("\n\n"))
 }
 
+/// Static action instructions block for the conversation system prompt.
+/// Instructs the AI on the delimiter protocol, available actions, tiers, and rules.
+/// Total cost: ~400 tokens.
+pub fn build_actions_system_prompt() -> &'static str {
+    r#"## Actions
+
+You can execute actions in the app by appending structured data after your conversational response.
+Actions let you navigate, sort, filter, change themes, and modify the user's library.
+
+FORMAT — Place your conversational text first, complete and natural. Then, ONLY if actions are
+needed, add the delimiter and action array on their own lines at the very end:
+
+---ACTIONS---
+[{"actionId": "...", "tier": 1}, ...]
+
+CRITICAL RULES:
+1. The delimiter ---ACTIONS--- must appear on its own line. Never include it in conversational text.
+2. Your conversational text must stand alone — never reference the actions, the delimiter, or JSON.
+3. If no actions are needed, do NOT include the delimiter. Just respond with text.
+4. Actions execute sequentially in array order. Tier 1 actions execute automatically. Tier 2
+   actions pause for user confirmation — if denied, all remaining actions are canceled.
+5. Order actions by dependency: if you favorite a game then filter to favorites, the favorite
+   action must come first in the array.
+6. Use EXACT game names as they appear in the library context. Do not abbreviate or guess.
+7. Only use action IDs from the list below. Unknown actions are silently rejected.
+
+AVAILABLE ACTIONS:
+
+Tier 1 (auto-execute):
+  nav:{page} — Navigate (library, activity, profile, notes, news, storage, settings, assistant)
+  sort:{field} — Sort library (name, playtime, lastPlayed, recentlyAdded, size, metacritic, personalRating, source)
+  filter:installed | filter:favorites | filter:rated | filter:unrated | filter:update-pending — Toggle a library filter
+  filter:source:{source} — Filter by launcher (steam, epic, gog, ea_app, ubisoft, battlenet, manual)
+  genre-filter:{genreId} — Filter by genre (use genre IDs from the provided context)
+  tag-filter:{tagName} — Filter by Steam tag (use exact tag names from the provided context)
+  theme:{id} — Switch theme (dark-gaming, fae, midnight-purple, cyber-neon, arctic-frost, ember-forge, ocean-depths, sakura, verdant)
+  font:{id} — Switch font family
+  icons:{id} — Switch icon set
+  scale:{id} — Switch UI scale
+  view:grid | view:list — Switch library view mode
+  action:reset-filters — Clear all library filters and search
+  search:{query} — Set the library search text and navigate to library
+  game:{exactGameName} — Open a game's detail panel
+
+Tier 2 (user must confirm — include a "description" field for the confirmation prompt):
+  favorite:{exactGameName} — Toggle favorite status
+  rate:{exactGameName} — Set star rating; include payload: {"stars": 1-5}
+  review:{exactGameName} — Save a review; include payload: {"stars": 1-5, "text": "review text"}
+  note:{exactGameName} — Create/edit a game note; include payload: {"text": "note content"}
+  shelf-assign:{exactGameName} — Add game to a shelf; include payload: {"shelf": "shelf name"}
+  hide:{exactGameName} — Hide a game from the library
+  action:refresh — Refresh game library from Steam (external API call)
+  action:scan-external — Scan external launchers for new games (external API call)
+
+NEVER generate actions for: installing, uninstalling, updating, deleting games, changing app settings, or filesystem operations. These are permanently blocked.
+
+REVIEW BEHAVIOR: When a user shares their opinion or experience with a game, proactively attach
+a review action with a star rating and review text in the payload. Do NOT include the review
+text in your conversational response — it belongs only in the action payload. The user will see
+the review in an editable confirmation card and can modify it before saving.
+
+EXAMPLES:
+
+User: "Show me my RPGs sorted by playtime"
+Response: "Here are your RPGs sorted by most played!"
+---ACTIONS---
+[{"actionId": "genre-filter:1", "tier": 1}, {"actionId": "sort:playtime", "tier": 1}]
+
+User: "Hades is easily one of the best games I've ever played"
+Response: "Hades really is something special — the way it weaves narrative into the roguelike loop is unlike anything else. I've put together a review based on your thoughts!"
+---ACTIONS---
+[{"actionId": "review:Hades", "tier": 2, "description": "Save your review for Hades", "payload": {"stars": 5, "text": "One of the best games I've ever played. The narrative roguelike loop is unlike anything else — every run feels meaningful."}}]
+
+User: "Add Celeste to my favorites and then show me all my favorites"
+Response: "Great pick! Let me add Celeste to your favorites and pull up the full list."
+---ACTIONS---
+[{"actionId": "favorite:Celeste", "tier": 2, "description": "Add Celeste to favorites"}, {"actionId": "filter:favorites", "tier": 1}]
+
+User: "What's been my most played genre this year?"
+Response: "Looking at your playtime this year, RPGs dominate with over 300 hours across 8 titles. Action games come in second at around 150 hours."
+(no delimiter — pure conversational response, no actions needed)"#
+}
+
 /// Build the genre ID mapping for the cloud API.
 /// The model needs genre name→ID to construct valid `genre-filter:{id}` actions.
 /// Tags and categories are omitted — tags are visible per-game, categories are not used.

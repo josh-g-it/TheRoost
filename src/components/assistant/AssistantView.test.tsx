@@ -66,6 +66,23 @@ vi.mock("../../store/settingsSlice", () => ({
     selector({ settings: { iconSet: "classic" } }),
 }));
 
+vi.mock("react-router-dom", () => ({
+  useNavigate: () => vi.fn(),
+}));
+
+vi.mock("../../hooks/useActionPipeline", () => ({
+  useActionPipeline: () => ({
+    state: { actions: [], currentIndex: 0, status: "idle", results: [] },
+    setActions: vi.fn(),
+    confirmTier2: vi.fn(),
+    denyTier2: vi.fn(),
+    cancelAll: vi.fn(),
+    consumeResults: vi.fn().mockReturnValue([]),
+    reset: vi.fn(),
+  }),
+  serializeActionFeedback: () => "",
+}));
+
 describe("AssistantView", () => {
   beforeEach(() => {
     vi.clearAllMocks();

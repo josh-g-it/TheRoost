@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { listen } from "@tauri-apps/api/event";
 import type { AiAvatar, AiPersonality, ConversationEndedPayload } from "../../types";
 import { assistantApi } from "../../services/tauri";
@@ -30,6 +31,7 @@ function formatTimer(seconds: number): string {
 }
 
 export function AssistantView() {
+  const navigate = useNavigate();
   const [activeAvatar, setActiveAvatar] = useState<AiAvatar | null>(null);
   const [personalities, setPersonalities] = useState<AiPersonality[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -454,6 +456,7 @@ export function AssistantView() {
                 onStaleReset={handleStaleReset}
                 pendingReview={pendingReview}
                 onPendingReviewConsumed={() => setPendingReview(null)}
+                navigate={navigate}
               />
             )}
             {activeTab === "memories" && <AssistantMemories avatarId={activeAvatar.id} />}

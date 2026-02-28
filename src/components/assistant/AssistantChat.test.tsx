@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AssistantChat } from "./AssistantChat";
+import type { ActionPipelineState } from "../../hooks/useActionPipeline";
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(vi.fn()),
@@ -14,6 +15,7 @@ const mockCheckConversationStale = vi.fn();
 const mockAbandonConversation = vi.fn();
 
 const mockSaveGameRating = vi.fn();
+const mockSaveGameNote = vi.fn();
 
 vi.mock("../../services/tauri", () => ({
   assistantApi: {
@@ -26,11 +28,70 @@ vi.mock("../../services/tauri", () => ({
   ratingsApi: {
     saveGameRating: (...args: unknown[]) => mockSaveGameRating(...args),
   },
+  notesApi: {
+    saveGameNote: (...args: unknown[]) => mockSaveGameNote(...args),
+  },
 }));
 
 vi.mock("../../store/settingsSlice", () => ({
-  useSettingsStore: (selector: (s: Record<string, unknown>) => unknown) =>
-    selector({ settings: { iconSet: "classic" } }),
+  useSettingsStore: Object.assign(
+    (selector: (s: Record<string, unknown>) => unknown) =>
+      selector({ settings: { iconSet: "classic" } }),
+    {
+      getState: () => ({
+        settings: { theme: "dark" },
+        saveSettings: vi.fn(),
+      }),
+    },
+  ),
+}));
+
+vi.mock("../../store/favoritesSlice", () => ({
+  useFavoritesStore: {
+    getState: () => ({ toggleFavorite: vi.fn().mockResolvedValue(undefined) }),
+  },
+}));
+
+vi.mock("../../store/hiddenGamesSlice", () => ({
+  useHiddenGamesStore: {
+    getState: () => ({ toggleHidden: vi.fn().mockResolvedValue(undefined) }),
+  },
+}));
+
+vi.mock("../../utils/commandPalette", () => ({
+  resolveExecutor: () => null,
+}));
+
+vi.mock("../../utils/logger", () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+const mockSetActions = vi.fn();
+const mockCancelAll = vi.fn().mockReturnValue(undefined);
+const mockConfirmTier2 = vi.fn();
+const mockDenyTier2 = vi.fn();
+const mockConsumeResults = vi.fn().mockReturnValue([]);
+const mockReset = vi.fn();
+
+let mockPipelineState: ActionPipelineState = {
+  actions: [],
+  currentIndex: 0,
+  status: "idle",
+  results: [],
+};
+
+vi.mock("../../hooks/useActionPipeline", () => ({
+  useActionPipeline: () => ({
+    state: mockPipelineState,
+    setActions: mockSetActions,
+    confirmTier2: (...args: unknown[]) => mockConfirmTier2(...args),
+    denyTier2: (...args: unknown[]) => mockDenyTier2(...args),
+    cancelAll: mockCancelAll,
+    consumeResults: mockConsumeResults,
+    reset: mockReset,
+  }),
+  serializeActionFeedback: (results: unknown[]) =>
+    results.length > 0 ? "[System] Previous actions:\n- mock → success" : "",
 }));
 
 describe("AssistantChat", () => {
@@ -47,10 +108,15 @@ describe("AssistantChat", () => {
     vi.clearAllMocks();
     mockSendMessage.mockResolvedValue(undefined);
     mockEndConversation.mockResolvedValue(undefined);
+    mockSaveGameRating.mockResolvedValue(undefined);
+    mockSaveGameNote.mockResolvedValue(undefined);
     // Return a non-empty history by default so auto-greeting doesn't fire
     mockGetConversationHistory.mockResolvedValue([existingMessage]);
     mockCheckConversationStale.mockResolvedValue(false);
     mockAbandonConversation.mockResolvedValue(undefined);
+    // Reset pipeline state + feedback mocks
+    mockPipelineState = { actions: [], currentIndex: 0, status: "idle", results: [] };
+    mockConsumeResults.mockReturnValue([]);
   });
 
   it("renders empty state with prompt text when no conversation", () => {
@@ -140,6 +206,7 @@ describe("AssistantChat", () => {
         "a1",
         expect.stringContaining("A new conversation has started"),
         true,
+        undefined,
       );
     });
   });
@@ -154,6 +221,7 @@ describe("AssistantChat", () => {
         "a1",
         expect.stringContaining("your very first conversation"),
         true,
+        undefined,
       );
     });
   });
@@ -238,6 +306,7 @@ describe("AssistantChat", () => {
         "a1",
         expect.stringContaining("A new conversation has started"),
         true,
+        undefined,
       );
     });
     // Component should not crash — input should be present
@@ -410,5 +479,181 @@ describe("AssistantChat", () => {
     await waitFor(() => {
       expect(onConsumed).toHaveBeenCalled();
     });
+  });
+
+  // ── Phase 13c: Tier 2 confirmation card tests ─────────────────
+
+  it("renders generic confirmation card when pipeline is paused on Tier 2", () => {
+    mockPipelineState = {
+      actions: [
+        {
+          actionId: "favorite:uuid-123",
+          originalActionId: "favorite:Elden Ring",
+          tier: 2,
+          description: "Add Elden Ring to favorites?",
+          resolvedName: "Elden Ring",
+        },
+      ],
+      currentIndex: 0,
+      status: "paused",
+      results: [],
+    };
+
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    expect(screen.getByText("Add Elden Ring to favorites?")).toBeInTheDocument();
+    expect(screen.getByText("Confirm")).toBeInTheDocument();
+    expect(screen.getByText("Cancel")).toBeInTheDocument();
+  });
+
+  it("renders review confirmation card for review actions", () => {
+    mockPipelineState = {
+      actions: [
+        {
+          actionId: "review:uuid-123",
+          originalActionId: "review:Elden Ring",
+          tier: 2,
+          description: "Review Elden Ring",
+          resolvedName: "Elden Ring",
+          payload: { stars: 4, text: "Great combat." },
+        },
+      ],
+      currentIndex: 0,
+      status: "paused",
+      results: [],
+    };
+
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    expect(screen.getByText("Review: Elden Ring")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Write your review...")).toHaveValue(
+      "Great combat.",
+    );
+    expect(screen.getByText("Save Review")).toBeInTheDocument();
+    expect(screen.getByText("Cancel")).toBeInTheDocument();
+  });
+
+  it("renders note confirmation card for note actions", () => {
+    mockPipelineState = {
+      actions: [
+        {
+          actionId: "note:uuid-456",
+          originalActionId: "note:Hollow Knight",
+          tier: 2,
+          description: "Add note for Hollow Knight",
+          resolvedName: "Hollow Knight",
+          payload: { text: "Explore the Abyss." },
+        },
+      ],
+      currentIndex: 0,
+      status: "paused",
+      results: [],
+    };
+
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    expect(screen.getByText("Note: Hollow Knight")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Write your note...")).toHaveValue(
+      "Explore the Abyss.",
+    );
+    expect(screen.getByText("Save Note")).toBeInTheDocument();
+  });
+
+  it("does not render cards when pipeline is idle", () => {
+    mockPipelineState = { actions: [], currentIndex: 0, status: "idle", results: [] };
+
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    expect(screen.queryByText("Confirm")).not.toBeInTheDocument();
+    expect(screen.queryByText("Save Review")).not.toBeInTheDocument();
+    expect(screen.queryByText("Save Note")).not.toBeInTheDocument();
+  });
+
+  it("calls denyTier2 when Cancel is clicked on generic card", async () => {
+    const user = userEvent.setup();
+    mockPipelineState = {
+      actions: [
+        {
+          actionId: "favorite:uuid-1",
+          originalActionId: "favorite:Elden Ring",
+          tier: 2,
+          description: "Add Elden Ring to favorites?",
+        },
+      ],
+      currentIndex: 0,
+      status: "paused",
+      results: [],
+    };
+
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    await user.click(screen.getByText("Cancel"));
+    expect(mockDenyTier2).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows canceled message when pipeline is canceled", () => {
+    mockPipelineState = {
+      actions: [
+        {
+          actionId: "favorite:uuid-1",
+          originalActionId: "favorite:Elden Ring",
+          tier: 2,
+          description: "Add Elden Ring to favorites?",
+        },
+      ],
+      currentIndex: 0,
+      status: "canceled",
+      results: [],
+    };
+
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    expect(screen.getByText("Remaining actions canceled.")).toBeInTheDocument();
+  });
+
+  it("does not show canceled message when pipeline is idle", () => {
+    mockPipelineState = { actions: [], currentIndex: 0, status: "idle", results: [] };
+
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    expect(screen.queryByText("Remaining actions canceled.")).not.toBeInTheDocument();
+  });
+
+  it("cancels pipeline when user sends a new message while card is visible", async () => {
+    const user = userEvent.setup();
+    mockPipelineState = {
+      actions: [
+        {
+          actionId: "favorite:uuid-1",
+          originalActionId: "favorite:Elden Ring",
+          tier: 2,
+          description: "Fav Elden Ring?",
+        },
+      ],
+      currentIndex: 0,
+      status: "paused",
+      results: [],
+    };
+
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+
+    const input = screen.getByPlaceholderText("Type a message...");
+    await user.type(input, "New question");
+    await user.click(screen.getByTitle("Send message"));
+
+    await waitFor(() => {
+      expect(mockCancelAll).toHaveBeenCalled();
+    });
+  });
+
+  it("uses fallback description when action has no description", () => {
+    mockPipelineState = {
+      actions: [
+        {
+          actionId: "shelf-assign:uuid-1",
+          originalActionId: "shelf-assign:Elden Ring",
+          tier: 2,
+        },
+      ],
+      currentIndex: 0,
+      status: "paused",
+      results: [],
+    };
+
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    expect(screen.getByText("Execute: shelf-assign:Elden Ring")).toBeInTheDocument();
   });
 });

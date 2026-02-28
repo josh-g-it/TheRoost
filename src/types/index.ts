@@ -123,6 +123,10 @@ export type {
   ConversationEndedPayload,
   ActionSuggestion,
   ReviewConfirmationData,
+  ResolvedAction,
+  ResolvedActionSet,
+  PipelineStatus,
+  ActionResult,
 } from "./assistant";
 export type { UpdateInfo } from "./updater";
 export type {

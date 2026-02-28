@@ -24,7 +24,8 @@ export type LogCategory =
   | "notes"
   | "routing"
   | "backup"
-  | "install";
+  | "install"
+  | "ai";
 
 export interface LogEvent {
   id: string;

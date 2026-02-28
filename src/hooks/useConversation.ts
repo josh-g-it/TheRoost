@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import type { AiMessage, ConversationEndedPayload, StreamChunk } from "../types";
+import type {
+  AiMessage,
+  ConversationEndedPayload,
+  ResolvedAction,
+  StreamChunk,
+} from "../types";
 import { assistantApi } from "../services/tauri";
 import { getErrorMessage } from "../utils/errors";
 import { logger } from "../utils/logger";
+import { createParserState, processChunk, finalizeStream } from "../utils/actionParser";
+import type { StreamParserState } from "../utils/actionParser";
 
 interface UseConversationOptions {
   avatarId: string;
@@ -17,10 +24,12 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
   const [currentStreamText, setCurrentStreamText] = useState("");
   const [isEnded, setIsEnded] = useState(false);
   const [isCompacting, setIsCompacting] = useState(false);
+  const [pendingActions, setPendingActions] = useState<ResolvedAction[]>([]);
   const lastUserMessageRef = useRef<string | null>(null);
   const isStreamingRef = useRef(false);
   const convIdRef = useRef(conversationId);
   const isLocalEndRef = useRef(false);
+  const parserStateRef = useRef<StreamParserState | null>(null);
 
   useEffect(() => {
     convIdRef.current = conversationId;
@@ -30,6 +39,8 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
     setError(null);
     setIsEnded(false);
     setIsCompacting(false);
+    setPendingActions([]);
+    parserStateRef.current = null;
   }, [conversationId]);
 
   useEffect(() => {
@@ -40,8 +51,20 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
       if (chunk.conversationId !== convIdRef.current) return;
 
       if (chunk.isFinal) {
+        // Initialize parser if not yet started (edge case: only final chunk)
+        if (!parserStateRef.current) {
+          parserStateRef.current = createParserState();
+        }
+
+        // Process the final chunk through the parser
+        const safeText = processChunk(parserStateRef.current, chunk.text);
+
+        // Finalize — get remaining display text and parsed actions
+        const result = finalizeStream(parserStateRef.current);
+        parserStateRef.current = null;
+
         setCurrentStreamText((prev) => {
-          const finalText = prev + chunk.text;
+          const finalText = prev + safeText + result.displayText;
           setMessages((msgs) => [
             ...msgs,
             {
@@ -55,10 +78,37 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
           ]);
           return "";
         });
+
         setIsStreaming(false);
         isStreamingRef.current = false;
+
+        // Validate and resolve actions via IPC
+        if (result.actions.length > 0) {
+          assistantApi
+            .validateAndResolveAiActions(result.actions)
+            .then((resolved) => {
+              if (resolved.actions.length > 0) {
+                setPendingActions(resolved.actions);
+              }
+              if (resolved.rejectedCount > 0) {
+                logger.warn("useConversation", "ai", "Some actions rejected", {
+                  rejectedCount: resolved.rejectedCount,
+                });
+              }
+            })
+            .catch((err) => {
+              logger.warn("useConversation", "ai", "Failed to validate actions", {
+                error: getErrorMessage(err),
+              });
+            });
+        }
       } else {
-        setCurrentStreamText((prev) => prev + chunk.text);
+        // Initialize parser on first non-final chunk
+        if (!parserStateRef.current) {
+          parserStateRef.current = createParserState();
+        }
+        const displayText = processChunk(parserStateRef.current, chunk.text);
+        setCurrentStreamText((prev) => prev + displayText);
       }
     });
 
@@ -86,6 +136,7 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
         setIsStreaming(false);
         isStreamingRef.current = false;
         setIsEnded(true);
+        setPendingActions([]);
       },
     );
 
@@ -113,7 +164,7 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
   }, []);
 
   const sendMessage = useCallback(
-    async (text: string, options?: { hidden?: boolean }) => {
+    async (text: string, options?: { hidden?: boolean; actionFeedback?: string }) => {
       if (!conversationId) return;
       if (isStreamingRef.current) return;
       setError(null);
@@ -133,9 +184,16 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
       setIsStreaming(true);
       isStreamingRef.current = true;
       setCurrentStreamText("");
+      parserStateRef.current = null;
 
       try {
-        await assistantApi.sendMessage(conversationId, avatarId, text, options?.hidden);
+        await assistantApi.sendMessage(
+          conversationId,
+          avatarId,
+          text,
+          options?.hidden,
+          options?.actionFeedback,
+        );
       } catch (err) {
         setIsStreaming(false);
         isStreamingRef.current = false;
@@ -195,6 +253,10 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
     setMessages((prev) => [...prev, msg]);
   }, []);
 
+  const clearPendingActions = useCallback(() => {
+    setPendingActions([]);
+  }, []);
+
   return {
     messages,
     isStreaming,
@@ -202,10 +264,12 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
     currentStreamText,
     isEnded,
     isCompacting,
+    pendingActions,
     sendMessage,
     retry,
     endConversation,
     loadHistory,
     injectMessage,
+    clearPendingActions,
   };
 }

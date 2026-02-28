@@ -3,12 +3,25 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useConversation } from "../../hooks/useConversation";
+import {
+  useActionPipeline,
+  serializeActionFeedback,
+} from "../../hooks/useActionPipeline";
 import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
-import { assistantApi, ratingsApi } from "../../services/tauri";
+import { assistantApi, ratingsApi, notesApi } from "../../services/tauri";
+import { useFavoritesStore } from "../../store/favoritesSlice";
+import { useHiddenGamesStore } from "../../store/hiddenGamesSlice";
+import { resolveExecutor } from "../../utils/commandPalette";
 import { parseReviewFromResponse } from "../../utils/reviewParser";
+import { logger } from "../../utils/logger";
+import type { ResolvedAction, ActionResult, PaletteContext } from "../../types";
 import { AppIcon } from "../common/AppIcon";
 import { ReviewConfirmation } from "./ReviewConfirmation";
+import { ActionConfirmationCard } from "./ActionConfirmationCard";
+import { ReviewConfirmationCard } from "./ReviewConfirmationCard";
+import { NoteConfirmationCard } from "./NoteConfirmationCard";
 import "./AssistantChat.css";
+import "./ActionConfirmationCard.css";
 
 interface PendingReview {
   gameId: string;
@@ -26,6 +39,8 @@ interface AssistantChatProps {
   onStaleReset?: () => void;
   pendingReview?: PendingReview | null;
   onPendingReviewConsumed?: () => void;
+  /** Navigate function for action execution — provided by router-based parents. */
+  navigate?: (path: string) => void;
 }
 
 export function AssistantChat({
@@ -38,6 +53,7 @@ export function AssistantChat({
   onStaleReset,
   pendingReview,
   onPendingReviewConsumed,
+  navigate,
 }: AssistantChatProps) {
   const {
     messages,
@@ -45,12 +61,17 @@ export function AssistantChat({
     error,
     currentStreamText,
     isCompacting,
+    pendingActions,
     sendMessage,
     retry,
     endConversation,
     loadHistory,
     injectMessage,
+    clearPendingActions,
   } = useConversation({ avatarId, conversationId });
+
+  const noop = useCallback(() => {}, []);
+  const pipeline = useActionPipeline({ navigate: navigate ?? noop });
 
   const {
     transcript,
@@ -169,9 +190,17 @@ export function AssistantChat({
     onConversationStart?.();
   }, [reviewContext, sendMessage, onConversationStart]);
 
+  // Phase 13: Feed resolved actions into the execution pipeline
+  useEffect(() => {
+    if (pendingActions.length > 0) {
+      pipeline.setActions(pendingActions);
+      clearPendingActions();
+    }
+  }, [pendingActions, pipeline, clearPendingActions]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView?.({ behavior: "smooth" });
-  }, [messages, currentStreamText]);
+  }, [messages, currentStreamText, pipeline.state.status]);
 
   useEffect(() => {
     if (!isListening && transcript) {
@@ -182,10 +211,15 @@ export function AssistantChat({
   const handleSend = useCallback(() => {
     const text = inputValue.trim();
     if (!text || isStreaming) return;
-    sendMessage(text);
+    // Cancel any active pipeline (adds remaining actions as canceled to feedback ref)
+    pipeline.cancelAll();
+    // Consume results for feedback injection, then reset pipeline
+    const feedback = serializeActionFeedback(pipeline.consumeResults());
+    pipeline.reset();
+    sendMessage(text, feedback ? { actionFeedback: feedback } : undefined);
     setInputValue("");
     onConversationStart?.();
-  }, [inputValue, isStreaming, sendMessage, onConversationStart]);
+  }, [inputValue, isStreaming, sendMessage, onConversationStart, pipeline]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -204,6 +238,101 @@ export function AssistantChat({
       startListening();
     }
   }, [isListening, startListening, stopListening]);
+
+  // ── Phase 13c: Tier 2 action execution helpers ─────────────────
+  const makeResult = useCallback(
+    (action: ResolvedAction, success: boolean, error?: string): ActionResult => ({
+      actionId: action.actionId,
+      originalActionId: action.originalActionId,
+      success,
+      error,
+      executedAt: new Date().toISOString(),
+    }),
+    [],
+  );
+
+  const handleTier2Confirm = useCallback(
+    async (action: ResolvedAction) => {
+      const prefix = action.actionId.split(":")[0];
+      const gameId = action.actionId.includes(":")
+        ? action.actionId.slice(prefix.length + 1)
+        : "";
+
+      try {
+        switch (prefix) {
+          case "favorite":
+            await useFavoritesStore.getState().toggleFavorite(gameId);
+            break;
+          case "hide":
+            await useHiddenGamesStore.getState().toggleHidden(gameId);
+            break;
+          case "rate": {
+            const stars = (action.payload?.stars as number) ?? 3;
+            await ratingsApi.saveGameRating(gameId, Math.round(stars * 2), null);
+            break;
+          }
+          case "action":
+          default: {
+            // action:refresh, action:scan-external, etc. — use command palette executor
+            const executor = resolveExecutor(action.actionId);
+            if (executor) {
+              const ctx: PaletteContext = {
+                navigate: navigate ?? (() => {}),
+                closeCommandCenter: () => {},
+                settings: {} as PaletteContext["settings"],
+                saveSettings: () => {},
+              };
+              executor(ctx);
+            }
+            break;
+          }
+        }
+        pipeline.confirmTier2(action, makeResult(action, true));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error("AssistantChat", "ai", "Tier 2 action failed", {
+          actionId: action.actionId,
+          error: msg,
+        });
+        pipeline.confirmTier2(action, makeResult(action, false, msg));
+      }
+    },
+    [navigate, pipeline, makeResult],
+  );
+
+  const handleReviewConfirmAction = useCallback(
+    async (action: ResolvedAction, stars: number, reviewText: string) => {
+      const gameId = action.actionId.slice("review:".length);
+      try {
+        await ratingsApi.saveGameRating(
+          gameId,
+          Math.round(stars * 2),
+          reviewText || null,
+        );
+        pipeline.confirmTier2(action, makeResult(action, true));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error("AssistantChat", "ai", "Review save failed", { error: msg });
+        pipeline.confirmTier2(action, makeResult(action, false, msg));
+      }
+    },
+    [pipeline, makeResult],
+  );
+
+  const handleNoteConfirmAction = useCallback(
+    async (action: ResolvedAction, noteText: string) => {
+      const gameId = action.actionId.slice("note:".length);
+      try {
+        await notesApi.saveGameNote(gameId, noteText);
+        pipeline.confirmTier2(action, makeResult(action, true));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error("AssistantChat", "ai", "Note save failed", { error: msg });
+        pipeline.confirmTier2(action, makeResult(action, false, msg));
+      }
+    },
+    [pipeline, makeResult],
+  );
 
   const markdownComponents = {
     a: ({ href, children, ...props }: ComponentPropsWithoutRef<"a">) => {
@@ -342,6 +471,55 @@ export function AssistantChat({
                 <span className="assistant-chat__streaming-cursor" />
               </div>
             )}
+
+            {/* Phase 13c: Tier 2 confirmation cards */}
+            {pipeline.state.status === "paused" &&
+              (() => {
+                const action = pipeline.state.actions[pipeline.state.currentIndex];
+                if (!action) return null;
+                const prefix = action.actionId.split(":")[0];
+
+                if (prefix === "review") {
+                  return (
+                    <ReviewConfirmationCard
+                      gameName={action.resolvedName ?? action.originalActionId}
+                      stars={(action.payload?.stars as number) ?? 3}
+                      reviewText={(action.payload?.text as string) ?? ""}
+                      onConfirm={(stars, text) =>
+                        handleReviewConfirmAction(action, stars, text)
+                      }
+                      onDeny={pipeline.denyTier2}
+                    />
+                  );
+                }
+
+                if (prefix === "note") {
+                  return (
+                    <NoteConfirmationCard
+                      gameName={action.resolvedName ?? action.originalActionId}
+                      noteText={(action.payload?.text as string) ?? ""}
+                      onConfirm={(text) => handleNoteConfirmAction(action, text)}
+                      onDeny={pipeline.denyTier2}
+                    />
+                  );
+                }
+
+                return (
+                  <ActionConfirmationCard
+                    description={
+                      action.description ?? `Execute: ${action.originalActionId}`
+                    }
+                    onConfirm={() => handleTier2Confirm(action)}
+                    onDeny={pipeline.denyTier2}
+                  />
+                );
+              })()}
+
+            {pipeline.state.status === "canceled" &&
+              pipeline.state.actions.length > 0 && (
+                <div className="action-canceled-text">Remaining actions canceled.</div>
+              )}
+
             <div ref={messagesEndRef} />
           </>
         )}

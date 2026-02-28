@@ -152,6 +152,7 @@ pub fn run() {
             audio::set_audio_device_alias,
             audio::delete_audio_device_alias,
             audio::set_audio_session_hidden,
+            ai::validate_and_resolve_ai_actions,
             ai::ai_resolve_intent,
             ai::ai_cloud_resolve,
             ai::store_cloud_api_key,

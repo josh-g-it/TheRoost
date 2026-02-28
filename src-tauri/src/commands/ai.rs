@@ -5,6 +5,8 @@ use crate::models::ai::{CloudAiUsage, CloudProvider, ResolvedIntent};
 use crate::models::assistant::{
     AiAvatar, AiDailyLog, AiMemory, AiMessage, AiPersonality, CompactionResult,
 };
+use crate::services::ai::action_resolver;
+use crate::services::ai::action_validator::{self, RawAiAction};
 use crate::services::ai::cloud_config::CloudConfigHandle;
 use crate::services::ai::cloud_resolver::CloudResolver;
 use crate::services::ai::context_builder;
@@ -20,6 +22,29 @@ use crate::services::cache_db::CacheDbHandle;
 use crate::services::credential_store;
 use crate::services::settings_store;
 use crate::utils::error::{AppError, MutexExt};
+
+/// Validate and resolve AI actions in a single IPC round-trip.
+/// Validates tiers (rejects blacklisted/unknown) and fuzzy-resolves game names to UUIDs.
+#[tauri::command]
+pub fn validate_and_resolve_ai_actions(
+    actions: Vec<RawAiAction>,
+    db: State<'_, CacheDbHandle>,
+) -> Result<action_resolver::ResolvedActionSet, AppError> {
+    // Step 1: Validate tiers
+    let (validated, rejected_count) = action_validator::validate_actions(actions);
+
+    // Step 2: Resolve game names to UUIDs
+    let game_library = {
+        let db_guard = db.lock_or_err("DB")?;
+        db_guard.get_all_game_names()?
+    };
+
+    Ok(action_resolver::resolve_actions(
+        validated,
+        &game_library,
+        rejected_count,
+    ))
+}
 
 /// Pattern-matcher-only AI resolution (instant, local, always available).
 /// Called automatically by the frontend for every qualifying search query.
@@ -468,6 +493,7 @@ pub async fn send_message(
     avatar_id: String,
     message: String,
     hidden: Option<bool>,
+    action_feedback: Option<String>,
     db: State<'_, CacheDbHandle>,
     cloud: State<'_, CloudConfigHandle>,
     app_handle: tauri::AppHandle,
@@ -506,6 +532,7 @@ pub async fn send_message(
         &key,
         &settings,
         skip_user_persist,
+        action_feedback.as_deref(),
     )
     .await?;
 

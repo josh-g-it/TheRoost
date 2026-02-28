@@ -16,6 +16,7 @@ const TOKEN_BUDGET_LAYER4: usize = 4000; // ~16000 chars
 const MID_SESSION_THRESHOLD: usize = 20;
 
 fn build_conversation_system_prompt(personality_prompt: &str) -> String {
+    let actions_prompt = context_builder::build_actions_system_prompt();
     format!(
         r#"You are a personal gaming companion in The Roost — a PC game launcher app that manages games from Steam, Epic, GOG, EA, Ubisoft, and Battle.net.
 
@@ -24,11 +25,10 @@ You have deep knowledge of the user's gaming library, playtime, and preferences 
 ## Your Personality
 {}
 
-## Standing Instructions
-When the user describes their thoughts, opinions, or experience with a game — whether prompted or spontaneous — draft a review on their behalf. Present the review with a star rating (1-5) and a concise text summary, then ask the user to confirm before saving.
+{}
 
 Keep your responses conversational and engaging. You can reference specific games, stats, and patterns from the user's library to make the conversation feel personal."#,
-        personality_prompt
+        personality_prompt, actions_prompt
     )
 }
 
@@ -233,12 +233,22 @@ pub async fn send_message_and_stream(
     key: &[u8; 32],
     settings: &AppSettings,
     skip_user_persist: bool,
+    action_feedback: Option<&str>,
 ) -> Result<(), AppError> {
     // Step 1: Build context (under lock)
     let (system_prompt, mut messages) = {
         let db_guard = db.lock_or_err("DB")?;
         assemble_context(&db_guard, conv_id, avatar_id, key, settings)?
     }; // lock dropped
+
+    // Inject action feedback as ephemeral context (not stored in DB)
+    if let Some(feedback) = action_feedback {
+        messages.push(ChatMessage {
+            role: ChatRole::User,
+            content: feedback.to_string(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        });
+    }
 
     // Add the new user message to the messages list
     messages.push(ChatMessage {
@@ -832,8 +842,12 @@ mod tests {
         let prompt = build_conversation_system_prompt("You are a friendly guide.");
         assert!(prompt.contains("You are a friendly guide."));
         assert!(prompt.contains("Your Personality"));
-        assert!(prompt.contains("Standing Instructions"));
-        assert!(prompt.contains("draft a review"));
+        // Phase 13: action instructions
+        assert!(prompt.contains("---ACTIONS---"));
+        assert!(prompt.contains("CRITICAL RULES"));
+        assert!(prompt.contains("AVAILABLE ACTIONS"));
+        assert!(prompt.contains("REVIEW BEHAVIOR"));
+        assert!(prompt.contains("EXAMPLES"));
     }
 
     #[test]

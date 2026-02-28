@@ -40,6 +40,7 @@ import type {
   AiMessage,
   AiMemory,
   AiDailyLog,
+  ResolvedActionSet,
 } from "../types";
 
 export const steamApi = {
@@ -472,7 +473,15 @@ export const assistantApi = {
     avatarId: string,
     message: string,
     hidden?: boolean,
-  ) => invoke<void>("send_message", { conversationId, avatarId, message, hidden }),
+    actionFeedback?: string,
+  ) =>
+    invoke<void>("send_message", {
+      conversationId,
+      avatarId,
+      message,
+      hidden,
+      actionFeedback,
+    }),
   abandonConversation: (conversationId: string) =>
     invoke<void>("abandon_conversation", { conversationId }),
   checkConversationStale: (conversationId: string) =>
@@ -524,4 +533,12 @@ export const assistantApi = {
     invoke<{ remainingSeconds: number; isPaused: boolean } | null>(
       "get_conversation_timer_state",
     ),
+  validateAndResolveAiActions: (
+    actions: {
+      actionId: string;
+      tier: number;
+      description?: string;
+      payload?: Record<string, unknown>;
+    }[],
+  ) => invoke<ResolvedActionSet>("validate_and_resolve_ai_actions", { actions }),
 };

@@ -26,12 +26,15 @@ vi.mock("@tauri-apps/api/event", () => ({
 const mockSendMessage = vi.fn();
 const mockEndConversation = vi.fn();
 const mockGetConversationHistory = vi.fn();
+const mockValidateAndResolveAiActions = vi.fn();
 
 vi.mock("../services/tauri", () => ({
   assistantApi: {
     sendMessage: (...args: unknown[]) => mockSendMessage(...args),
     endConversation: (...args: unknown[]) => mockEndConversation(...args),
     getConversationHistory: (...args: unknown[]) => mockGetConversationHistory(...args),
+    validateAndResolveAiActions: (...args: unknown[]) =>
+      mockValidateAndResolveAiActions(...args),
   },
 }));
 
@@ -43,6 +46,10 @@ describe("useConversation", () => {
     mockSendMessage.mockResolvedValue(undefined);
     mockEndConversation.mockResolvedValue(undefined);
     mockGetConversationHistory.mockResolvedValue([]);
+    mockValidateAndResolveAiActions.mockResolvedValue({
+      actions: [],
+      rejectedCount: 0,
+    });
   });
 
   it("starts with empty messages and not streaming", () => {
@@ -54,6 +61,7 @@ describe("useConversation", () => {
     expect(result.current.isStreaming).toBe(false);
     expect(result.current.error).toBeNull();
     expect(result.current.currentStreamText).toBe("");
+    expect(result.current.pendingActions).toEqual([]);
   });
 
   it("sendMessage calls API with correct params and adds user message", async () => {
@@ -65,7 +73,13 @@ describe("useConversation", () => {
       await result.current.sendMessage("Hello there");
     });
 
-    expect(mockSendMessage).toHaveBeenCalledWith("c1", "a1", "Hello there", undefined);
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      "c1",
+      "a1",
+      "Hello there",
+      undefined,
+      undefined,
+    );
     expect(result.current.messages).toHaveLength(1);
     expect(result.current.messages[0].role).toBe("user");
     expect(result.current.messages[0].content).toBe("Hello there");
@@ -172,7 +186,13 @@ describe("useConversation", () => {
       await result.current.retry();
     });
 
-    expect(mockSendMessage).toHaveBeenCalledWith("c1", "a1", "Hello", undefined);
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      "c1",
+      "a1",
+      "Hello",
+      undefined,
+      undefined,
+    );
   });
 
   it("guards sendMessage while streaming", async () => {
@@ -241,22 +261,35 @@ describe("useConversation", () => {
       await result.current.sendMessage("Hello");
     });
 
-    // Fire non-final chunks
+    // Fire non-final chunks (must be > 15 chars total to see emitted text due to parser buffering)
     act(() => {
       streamCallback!({
-        payload: { conversationId: "c1", text: "Hello ", isFinal: false },
+        payload: {
+          conversationId: "c1",
+          text: "Hello world, this is a streaming response. ",
+          isFinal: false,
+        },
       });
     });
 
-    expect(result.current.currentStreamText).toBe("Hello ");
+    // Parser buffers last 15 chars, emits the rest
+    expect(result.current.currentStreamText.length).toBeGreaterThan(0);
+    expect(result.current.currentStreamText).toContain("Hello world");
 
     act(() => {
       streamCallback!({
-        payload: { conversationId: "c1", text: "world", isFinal: false },
+        payload: {
+          conversationId: "c1",
+          text: "It continues with more text here.",
+          isFinal: false,
+        },
       });
     });
 
-    expect(result.current.currentStreamText).toBe("Hello world");
+    // More text accumulated
+    expect(result.current.currentStreamText.length).toBeGreaterThan(
+      "Hello world, this is a streaming response. ".length - 15,
+    );
   });
 
   it("adds assistant message on final chunk and resets streaming", async () => {
@@ -290,6 +323,7 @@ describe("useConversation", () => {
     // Messages should have: user message + assistant message
     expect(result.current.messages).toHaveLength(2);
     expect(result.current.messages[1].role).toBe("assistant");
+    // Parser buffers short text but flushes on finalize — full content preserved
     expect(result.current.messages[1].content).toBe("Hi there!");
   });
 
@@ -521,9 +555,34 @@ describe("useConversation", () => {
       await result.current.sendMessage("Hello", { hidden: true });
     });
 
-    expect(mockSendMessage).toHaveBeenCalledWith("c1", "a1", "Hello", true);
+    expect(mockSendMessage).toHaveBeenCalledWith("c1", "a1", "Hello", true, undefined);
     // Hidden messages should not add a user message to local state
     expect(result.current.messages).toHaveLength(0);
+  });
+
+  it("sendMessage passes actionFeedback to API when provided", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    const feedback = "[System] Previous actions:\n- sort:playtime → success";
+    await act(async () => {
+      await result.current.sendMessage("Sort by name instead", {
+        actionFeedback: feedback,
+      });
+    });
+
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      "c1",
+      "a1",
+      "Sort by name instead",
+      undefined,
+      feedback,
+    );
+    // User message should show clean text, not the feedback
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].content).toBe("Sort by name instead");
+    expect(result.current.messages[0].content).not.toContain("[System]");
   });
 
   // ── injectMessage tests ──────────────────────────────────────────
@@ -575,5 +634,211 @@ describe("useConversation", () => {
     expect(result.current.isStreaming).toBe(false);
     expect(result.current.error).toBeNull();
     expect(result.current.messages).toHaveLength(1);
+  });
+
+  // ── Streaming with action parser (Phase 13a) ──────────────────────
+
+  it("displays only text before delimiter during streaming", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+    await act(async () => {});
+    await act(async () => {
+      await result.current.sendMessage("Show my RPGs");
+    });
+
+    // Stream text + delimiter + actions in final chunk
+    act(() => {
+      streamCallback!({
+        payload: {
+          conversationId: "c1",
+          text: 'Here are your RPGs sorted by most played!\n---ACTIONS---\n[{"actionId": "sort:playtime", "tier": 1}]',
+          isFinal: true,
+        },
+      });
+    });
+
+    // Assistant message should only contain display text
+    expect(result.current.messages).toHaveLength(2);
+    const assistantMsg = result.current.messages[1];
+    expect(assistantMsg.content).toBe("Here are your RPGs sorted by most played!");
+    expect(assistantMsg.content).not.toContain("ACTIONS");
+    expect(assistantMsg.content).not.toContain("sort:playtime");
+  });
+
+  it("extracts actions on stream completion", async () => {
+    mockValidateAndResolveAiActions.mockResolvedValue({
+      actions: [
+        { actionId: "sort:playtime", originalActionId: "sort:playtime", tier: 1 },
+      ],
+      rejectedCount: 0,
+    });
+
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+    await act(async () => {});
+    await act(async () => {
+      await result.current.sendMessage("Sort by playtime");
+    });
+
+    await act(async () => {
+      streamCallback!({
+        payload: {
+          conversationId: "c1",
+          text: 'Sorting by playtime!\n---ACTIONS---\n[{"actionId": "sort:playtime", "tier": 1}]',
+          isFinal: true,
+        },
+      });
+    });
+
+    // Wait for the IPC promise to resolve
+    await act(async () => {});
+
+    expect(mockValidateAndResolveAiActions).toHaveBeenCalledWith([
+      { actionId: "sort:playtime", tier: 1 },
+    ]);
+  });
+
+  it("sets pendingActions state after stream finishes", async () => {
+    const resolvedActions = [
+      {
+        actionId: "sort:playtime",
+        originalActionId: "sort:playtime",
+        tier: 1,
+      },
+    ];
+    mockValidateAndResolveAiActions.mockResolvedValue({
+      actions: resolvedActions,
+      rejectedCount: 0,
+    });
+
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+    await act(async () => {});
+    await act(async () => {
+      await result.current.sendMessage("Sort");
+    });
+
+    await act(async () => {
+      streamCallback!({
+        payload: {
+          conversationId: "c1",
+          text: 'Sorting!\n---ACTIONS---\n[{"actionId": "sort:playtime", "tier": 1}]',
+          isFinal: true,
+        },
+      });
+    });
+
+    // Wait for IPC resolution
+    await act(async () => {});
+
+    expect(result.current.pendingActions).toEqual(resolvedActions);
+  });
+
+  it("handles stream with no delimiter (normal text-only behavior)", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+    await act(async () => {});
+    await act(async () => {
+      await result.current.sendMessage("What should I play?");
+    });
+
+    act(() => {
+      streamCallback!({
+        payload: {
+          conversationId: "c1",
+          text: "Based on your playtime, I'd recommend trying Elden Ring!",
+          isFinal: true,
+        },
+      });
+    });
+
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages[1].content).toBe(
+      "Based on your playtime, I'd recommend trying Elden Ring!",
+    );
+    // No IPC call should have been made
+    expect(mockValidateAndResolveAiActions).not.toHaveBeenCalled();
+    expect(result.current.pendingActions).toEqual([]);
+  });
+
+  it("clearPendingActions resets to empty array", async () => {
+    const resolvedActions = [
+      {
+        actionId: "nav:library",
+        originalActionId: "nav:library",
+        tier: 1,
+      },
+    ];
+    mockValidateAndResolveAiActions.mockResolvedValue({
+      actions: resolvedActions,
+      rejectedCount: 0,
+    });
+
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+    await act(async () => {});
+    await act(async () => {
+      await result.current.sendMessage("Go to library");
+    });
+
+    await act(async () => {
+      streamCallback!({
+        payload: {
+          conversationId: "c1",
+          text: 'Here you go!\n---ACTIONS---\n[{"actionId": "nav:library", "tier": 1}]',
+          isFinal: true,
+        },
+      });
+    });
+    await act(async () => {});
+
+    expect(result.current.pendingActions).toEqual(resolvedActions);
+
+    act(() => {
+      result.current.clearPendingActions();
+    });
+
+    expect(result.current.pendingActions).toEqual([]);
+  });
+
+  it("initializes parser state on stream start", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+    await act(async () => {});
+    await act(async () => {
+      await result.current.sendMessage("Test");
+    });
+
+    // Stream some text — parser should be initialized
+    act(() => {
+      streamCallback!({
+        payload: {
+          conversationId: "c1",
+          text: "This is a longer response that should partially display during streaming.",
+          isFinal: false,
+        },
+      });
+    });
+
+    // Parser buffers last 15 chars, rest is displayed
+    expect(result.current.currentStreamText.length).toBeGreaterThan(0);
+
+    // Finalize the stream
+    act(() => {
+      streamCallback!({
+        payload: { conversationId: "c1", text: "", isFinal: true },
+      });
+    });
+
+    expect(result.current.isStreaming).toBe(false);
+    expect(result.current.messages[1].content).toContain(
+      "This is a longer response that should partially display during streaming.",
+    );
   });
 });

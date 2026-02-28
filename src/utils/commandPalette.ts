@@ -162,6 +162,14 @@ const STATIC_DESCRIPTORS: ActionDescriptor[] = [
     icon: "settings",
     category: "navigation",
   },
+  {
+    id: "nav:assistant",
+    label: "Go to Assistant",
+    description: "Navigate to the AI assistant page",
+    keywords: ["ai", "chat", "conversation", "assistant"],
+    icon: "assistant",
+    category: "navigation",
+  },
 
   // Developer (gated)
   {
@@ -595,7 +603,7 @@ for (const desc of GAME_ACTION_DESCRIPTORS) {
 
 // ── Executor Registry ───────────────────────────────────────────
 
-type ActionExecutor = (ctx: PaletteContext) => void;
+export type ActionExecutor = (ctx: PaletteContext) => void;
 
 /** Direct executor lookup for static action IDs. */
 const EXECUTORS: Record<string, ActionExecutor> = {
@@ -626,6 +634,10 @@ const EXECUTORS: Record<string, ActionExecutor> = {
   },
   "nav:settings": (ctx) => {
     ctx.navigate("/settings");
+    ctx.closeCommandCenter();
+  },
+  "nav:assistant": (ctx) => {
+    ctx.navigate("/assistant");
     ctx.closeCommandCenter();
   },
   "nav:debug": (ctx) => {
@@ -842,7 +854,7 @@ const EXECUTORS: Record<string, ActionExecutor> = {
  * Resolve an executor for any action ID, including prefix-pattern IDs
  * (theme:*, font:*, icons:*, scale:*, sort:*, filter:source:*).
  */
-function resolveExecutor(actionId: string): ActionExecutor | null {
+export function resolveExecutor(actionId: string): ActionExecutor | null {
   if (EXECUTORS[actionId]) return EXECUTORS[actionId];
 
   // Theme prefix
@@ -963,6 +975,16 @@ function resolveExecutor(actionId: string): ActionExecutor | null {
         ui.setFilterBySource([...current, source]);
       }
       ui.setViewMode("list");
+      ctx.navigate("/library");
+      ctx.closeCommandCenter();
+    };
+  }
+
+  // Search prefix — fills library search box
+  if (actionId.startsWith("search:")) {
+    const query = actionId.slice(7);
+    return (ctx) => {
+      useUIStore.getState().setSearchQuery(query);
       ctx.navigate("/library");
       ctx.closeCommandCenter();
     };

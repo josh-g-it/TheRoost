@@ -1,7 +1,7 @@
 # v1.12.0 Handoff — Conversational AI Assistant
 
 > Use this document to get up to speed at the start of a new session.
-> Last updated: 2026-02-28 — Phase 12 complete, ready for Phase 13.
+> Last updated: 2026-02-28 — Phase 13a + 13b + 13c complete, ready for Phase 13d (final).
 
 ---
 
@@ -10,7 +10,7 @@
 - **Version**: 1.11.0 (synced across `tauri.conf.json`, `package.json`, `Cargo.toml`)
 - **Branch**: master — Phases 1-12 committed and pushed to GitHub
 - **Release**: v1.11.0 tag pushed and release built successfully
-- **Tests**: 450 Rust + 633 frontend = 1083 total (all passing)
+- **Tests**: 481 Rust + 1342 frontend = 1823 total (all passing)
 - **DB schema**: v24 (29 tables — 23 original + 6 new AI tables, WAL mode, SQLite via rusqlite bundled)
 - **Design phase**: Complete — 11 design documents in `docs/ai-design/`
 - **Implementation plan**: Complete — 13 phases in `docs/ai-design/implementation_plan/`
@@ -26,7 +26,62 @@
 - **Phase 10**: COMPLETE — Error Recovery (QA reviewed, all fixes applied)
 - **Phase 11**: COMPLETE — Avatar & Data Management (QA reviewed, all fixes applied)
 - **Phase 12**: COMPLETE — Post-Session Reviews (QA reviewed, all fixes applied)
-- **Next step**: Begin Phase 13 (Structured Action Execution Pipeline)
+- **Phase 13a**: COMPLETE — Streaming parser + Rust validator/resolver + system prompt + useConversation integration
+- **Phase 13b**: COMPLETE — Execution pipeline state machine + Tier 1 auto-execution + search/nav:assistant actions
+- **Phase 13c**: COMPLETE — Tier 2 confirmation cards (generic, review, note) + inline rendering + cancel flow
+- **Next step**: Implement Phase 13d (Action Feedback + Polish) — the FINAL sub-phase of v1.12.0
+
+---
+
+## Phase 13c Completion Summary
+
+**Tier 2 Confirmation Cards** — completed 2026-02-28.
+
+### What was built
+- **ActionConfirmationCard**: Generic Tier 2 card with description text + Confirm/Cancel buttons, 150ms CSS fade-in animation
+- **ReviewConfirmationCard**: Inline-editable review card — interactive `StarRating` (1-5, half-star) + textarea pre-filled from AI payload; user can edit before saving
+- **NoteConfirmationCard**: Inline-editable note card — textarea pre-filled from AI payload; user can edit before saving
+- **AssistantChat integration**: Cards render inline in chat when pipeline is paused; routes to correct card type by action prefix (`review:` → ReviewConfirmationCard, `note:` → NoteConfirmationCard, all others → generic); cancel shows "Remaining actions canceled." text; auto-dismisses on new message via `cancelAll`
+- **Execution flow**: Cards handle their own API calls (e.g., `ratingsApi.saveGameRating`, `notesApi.saveGameNote`, `useFavoritesStore.toggleFavorite`) then pass precomputed `ActionResult` to `confirmTier2`; `confirmTier2` now accepts optional `precomputedResult` parameter to bypass `resolveExecutor`
+- **Shared CSS**: All cards use `action-confirmation-card` BEM block; compact mode adjustments for overlay
+- **LogCategory**: Added `"ai"` to union type; fixed pre-existing category mismatches in `useActionPipeline.ts` and `useConversation.ts`
+
+### Files changed (13c)
+- **New (7)**: `ActionConfirmationCard.tsx`, `ActionConfirmationCard.css`, `ReviewConfirmationCard.tsx`, `NoteConfirmationCard.tsx`, `ActionConfirmationCard.test.tsx`, `ReviewConfirmationCard.test.tsx`, `NoteConfirmationCard.test.tsx`
+- **Modified (5)**: `useActionPipeline.ts` (precomputed result param), `AssistantChat.tsx` (card rendering + execution handlers), `AssistantChat.test.tsx` (dynamic pipeline mock + 8 integration tests), `log.ts` (`"ai"` category), `useConversation.ts` (logger category fix)
+
+### Test counts
+- Rust: 481 passed (unchanged)
+- Frontend: 1342 passed (29 new: 5 ActionConfirmationCard + 8 ReviewConfirmationCard + 7 NoteConfirmationCard + 8 AssistantChat integration + 1 existing updated)
+
+---
+
+## Phase 13a + 13b Completion Summary
+
+**Structured Action Execution — Foundation + Pipeline** — completed 2026-02-28.
+
+### Phase 13a: What was built (Foundation)
+- **Streaming parser** (`actionParser.ts`): Trailing buffer (15 chars) splits `---ACTIONS---` delimiter across chunk boundaries; `processChunk` returns display text, `finalizeStream` extracts JSON actions
+- **Tier validator** (`action_validator.rs`): Whitelist-based classification — Tier 1 prefixes (nav:, sort:, filter:, theme:, etc.), Tier 2 prefixes (favorite:, rate:, review:, note:, etc.), Tier 3 blocklist (install:, delete:, settings:, etc.); overrides AI-claimed tier
+- **Game name resolver** (`action_resolver.rs`): Jaro-Winkler fuzzy matching (0.85+ threshold, exact-first), ambiguity rejection (top two within 0.05), replaces game names with UUIDs
+- **System prompt**: `build_actions_system_prompt()` — full action catalog, 7 critical rules, 4 examples (~400 tokens)
+- **IPC command**: `validate_and_resolve_ai_actions` — single round-trip for validation + resolution
+- **useConversation integration**: Parser wired into stream handler; `pendingActions` + `clearPendingActions` exposed
+
+### Phase 13b: What was built (Pipeline + Tier 1)
+- **State machine** (`useActionPipeline.ts`): 5 states (idle/running/paused/completed/canceled), sequential processing, Tier 1 auto-execution via `resolveExecutor()`, Tier 2 pause, error recovery with continuation
+- **Command palette exports**: `resolveExecutor` + `ActionExecutor` type exported for pipeline use
+- **New actions**: `nav:assistant` (descriptor + executor), `search:{query}` prefix handler
+- **AssistantChat wiring**: Feeds `pendingActions` into pipeline on stream end; cancels pipeline on new message; optional `navigate` prop (noop for overlay)
+- **Types**: `PipelineStatus`, `ActionResult` in assistant.ts
+
+### Files changed (13a + 13b combined)
+- **New (6)**: `actionParser.ts`, `actionParser.test.ts`, `action_validator.rs`, `action_resolver.rs`, `useActionPipeline.ts`, `useActionPipeline.test.ts`
+- **Modified (14)**: `mod.rs`, `context_builder.rs`, `conversation.rs`, `commands/ai.rs`, `lib.rs`, `useConversation.ts`, `useConversation.test.ts`, `tauri.ts`, `assistant.ts`, `index.ts`, `commandPalette.ts`, `AssistantChat.tsx`, `AssistantView.tsx`, plus 3 test files updated with mocks
+
+### Test counts
+- Rust: 481 passed (24 new in validator + resolver)
+- Frontend: 1313 passed (18 new in pipeline + 6 new in conversation + 21 new in parser)
 
 ---
 
@@ -56,6 +111,40 @@
 - Textarea maxLength=2000
 - Byte→char fix for review truncation in Rust
 - Game name truncation (100 chars) in notification
+
+---
+
+## Phase 13 Design Finalization
+
+**Structured Action Execution Pipeline** — design finalized 2026-02-28.
+
+Full spec: `docs/ai-design/implementation_plan/phase-13-structured-action-execution.md`
+
+### Key Architecture Decisions
+- **Delimiter approach**: `\n---ACTIONS---\n` separator between conversational text and action JSON in AI responses; streaming parser with trailing buffer intercepts delimiter invisibly
+- **Sequential pipeline**: Actions execute in array order — Tier 1 auto-executes, Tier 2 shows inline confirmation cards that pause the pipeline, denial cancels all remaining actions
+- **Game name resolution**: Rust-side fuzzy matching (Jaro-Winkler, 0.85+ threshold, exact-first) resolves game names from AI output to UUIDs — AI uses exact game names, never UUIDs
+- **Superset of command palette**: Reuses all viable palette actions + new AI-only actions (review, note, rate with payload, shelf-assign, search)
+- **Action payload**: Extended action format with optional `payload` field for review text, note content, star ratings, shelf names
+- **Overlay**: Fully functional with adapted card UI; delegates execution to main window via `emit_to`
+- **Feedback loop**: Hidden system message injected on next user turn with previous action execution results
+
+### New Actions Created
+- `nav:assistant` (Tier 1, AI-only)
+- `search:{query}` (Tier 1, both palette + AI)
+- `rate:{gameName}` with `{stars}` payload (Tier 2, AI-only)
+- `review:{gameName}` with `{stars, text}` payload (Tier 2, AI-only, inline-editable card)
+- `note:{gameName}` with `{text}` payload (Tier 2, AI-only, inline-editable card)
+- `shelf-assign:{gameName}` with `{shelf}` payload (Tier 2, AI-only)
+- `hide:{gameName}` (Tier 2, AI-only)
+- `action:refresh` moved to Tier 2 (external API, rate-limit risk)
+- `action:scan-external` moved to Tier 2 (external API, rate-limit risk)
+
+### Sub-Phases
+- **13a**: Foundation — streaming parser, Rust validator + resolver, system prompt update, `useConversation` integration
+- **13b**: Execution pipeline + Tier 1 — `useActionPipeline` hook, export `resolveExecutor`, wire into AssistantChat
+- **13c**: Tier 2 confirmation cards — ActionConfirmationCard, ReviewConfirmationCard (inline edit), NoteConfirmationCard (inline edit), overlay adaptations
+- **13d**: Action feedback + polish — hidden system message injection, correction flows, edge cases, full regression
 
 ---
 
