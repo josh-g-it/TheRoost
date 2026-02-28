@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import type { AiAvatar, AiPersonality } from "../../types";
+import type { AiAvatar, AiPersonality, ConversationEndedPayload } from "../../types";
 import { assistantApi } from "../../services/tauri";
 import { useInactivityTimer } from "../../hooks/useInactivityTimer";
 import { getAvatarColor } from "../../utils/avatarColors";
@@ -66,19 +66,35 @@ export function AssistantView() {
     load();
   }, []);
 
-  // Listen for cross-window conversation-ended events
+  // Listen for cross-window conversation-ended events — auto-restart on manual end
   useEffect(() => {
-    const unlisten = listen<string>("ai-conversation-ended", (event) => {
-      const endedConvId = event.payload;
-      if (endedConvId === conversationId) {
-        setConversationId(null);
-        setHasConversation(false);
-      }
-    });
+    const unlisten = listen<ConversationEndedPayload>(
+      "ai-conversation-ended",
+      async (event) => {
+        const { conversationId: endedConvId, reason } = event.payload;
+        if (endedConvId !== conversationId) return;
+        if (reason === "manual" && activeAvatar) {
+          try {
+            const newConvId = await assistantApi.startConversation(activeAvatar.id);
+            setConversationId(newConvId);
+            setHasConversation(true);
+          } catch (err) {
+            logger.error("AssistantView", "api", "Failed to auto-restart conversation", {
+              error: getErrorMessage(err),
+            });
+            setConversationId(null);
+            setHasConversation(false);
+          }
+        } else {
+          setConversationId(null);
+          setHasConversation(false);
+        }
+      },
+    );
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [conversationId]);
+  }, [conversationId, activeAvatar]);
 
   const handleFirstRunComplete = useCallback(
     async (_avatarId: string, convId: string) => {

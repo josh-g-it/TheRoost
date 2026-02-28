@@ -96,9 +96,14 @@ describe("AssistantChat", () => {
     });
   });
 
-  it("shows end conversation button when conversationId is provided", () => {
+  it("shows End Conversation button when conversationId is provided", () => {
     render(<AssistantChat avatarId="a1" conversationId="c1" />);
-    expect(screen.getByTitle("End conversation")).toBeInTheDocument();
+    expect(screen.getByText("End Conversation")).toBeInTheDocument();
+  });
+
+  it("End Conversation button is hidden when hideEndButton is true", () => {
+    render(<AssistantChat avatarId="a1" conversationId="c1" hideEndButton />);
+    expect(screen.queryByText("End Conversation")).not.toBeInTheDocument();
   });
 
   it("calls loadHistory on mount when conversationId exists", async () => {
@@ -232,5 +237,58 @@ describe("AssistantChat", () => {
     });
     // Component should not crash — input should be present
     expect(screen.getByPlaceholderText("Type a message...")).toBeInTheDocument();
+  });
+
+  it("does not render End Conversation button when conversationId is null", () => {
+    render(<AssistantChat avatarId="a1" conversationId={null} />);
+    expect(screen.queryByText("End Conversation")).not.toBeInTheDocument();
+  });
+
+  it("shows compacting splash when conversation is ending", async () => {
+    // Make endConversation never resolve so isCompacting stays true
+    mockEndConversation.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+
+    // Wait for history to load
+    await waitFor(() => {
+      expect(screen.getByText("Hello! How can I help you today?")).toBeInTheDocument();
+    });
+
+    // Click End Conversation to enter compacting state
+    await user.click(screen.getByText("End Conversation"));
+
+    // Assert compacting splash
+    await waitFor(() => {
+      expect(screen.getByText("Storing memories...")).toBeInTheDocument();
+    });
+    expect(
+      document.querySelector(".assistant-chat__compacting-spinner"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("End Conversation")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Type a message...")).not.toBeInTheDocument();
+  });
+
+  it("End Conversation button is disabled while streaming", async () => {
+    // Make sendMessage never resolve so streaming stays active
+    mockSendMessage.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+
+    // Wait for history to load
+    await waitFor(() => {
+      expect(screen.getByText("Hello! How can I help you today?")).toBeInTheDocument();
+    });
+
+    // Type and send to enter streaming state
+    const input = screen.getByPlaceholderText("Type a message...");
+    await user.type(input, "test");
+    await user.click(screen.getByTitle("Send message"));
+
+    // End button should be disabled while streaming
+    const endBtn = screen.getByText("End Conversation").closest("button")!;
+    expect(endBtn).toBeDisabled();
   });
 });

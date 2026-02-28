@@ -63,6 +63,11 @@ export interface StreamChunk {
   isFinal: boolean;
 }
 
+export interface ConversationEndedPayload {
+  conversationId: string;
+  reason: "manual" | "timer";
+}
+
 export interface ActionSuggestion {
   actionId: string;
   description: string;

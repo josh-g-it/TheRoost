@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { AiAvatar, AiPersonality } from "../../types";
+import type { AiAvatar, AiPersonality, ConversationEndedPayload } from "../../types";
 import { assistantApi } from "../../services/tauri";
 import { getAvatarColor } from "../../utils/avatarColors";
 import { AssistantChat } from "../assistant/AssistantChat";
@@ -51,18 +51,35 @@ export function OverlayAssistant() {
     };
   }, []);
 
-  // Listen for cross-window conversation-ended events
+  // Listen for cross-window conversation-ended events — auto-restart on manual end
   useEffect(() => {
-    const unlisten = listen<string>("ai-conversation-ended", (event) => {
-      const endedConvId = event.payload;
-      if (endedConvId === conversationId) {
-        setConversationId(null);
-      }
-    });
+    const unlisten = listen<ConversationEndedPayload>(
+      "ai-conversation-ended",
+      async (event) => {
+        const { conversationId: endedConvId, reason } = event.payload;
+        if (endedConvId !== conversationId) return;
+        if (reason === "manual" && activeAvatar) {
+          try {
+            const newConvId = await assistantApi.startConversation(activeAvatar.id);
+            if (mountedRef.current) {
+              setConversationId(newConvId);
+            }
+          } catch {
+            if (mountedRef.current) {
+              setConversationId(null);
+            }
+          }
+        } else {
+          if (mountedRef.current) {
+            setConversationId(null);
+          }
+        }
+      },
+    );
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [conversationId]);
+  }, [conversationId, activeAvatar]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -111,7 +128,6 @@ export function OverlayAssistant() {
     isEndingRef.current = true;
     try {
       await assistantApi.endConversation(conversationId, activeAvatar.id);
-      setConversationId(null);
       setShowMore(false);
     } catch {
       // End conversation failed silently

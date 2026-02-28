@@ -222,8 +222,7 @@
 }
 
 .assistant-chat__send-btn,
-.assistant-chat__mic-btn,
-.assistant-chat__end-btn {
+.assistant-chat__mic-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -266,12 +265,90 @@
   color: var(--color-danger, #ef4444);
 }
 
-.assistant-chat__end-btn {
-  background: none;
-  color: var(--color-text-tertiary);
+/* ── Top Bar ─────────────────────────────────────────────── */
+.assistant-chat__top-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-secondary);
+  flex-shrink: 0;
 }
 
-.assistant-chat__end-btn:hover {
+.assistant-chat--compact .assistant-chat__top-bar {
+  padding: 0.35rem 0.65rem;
+}
+
+.assistant-chat__end-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--color-danger, #ef4444) 40%, transparent);
+  border-radius: var(--radius-sm);
   color: var(--color-danger, #ef4444);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.assistant-chat__end-btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--color-danger, #ef4444) 10%, transparent);
+  border-color: var(--color-danger, #ef4444);
+}
+
+.assistant-chat__end-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Compacting Splash ──────────────────────────────────── */
+.assistant-chat__compacting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex: 1;
+  padding: 3rem 1rem;
+}
+
+.assistant-chat__compacting-icon {
+  color: var(--color-text-tertiary);
+  animation: assistant-pulse 2s ease-in-out infinite;
+}
+
+.assistant-chat__compacting-text {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.assistant-chat__compacting-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-border-subtle);
+  border-top-color: var(--color-accent-primary);
+  border-radius: 50%;
+  animation: assistant-spin 0.8s linear infinite;
+}
+
+@keyframes assistant-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes assistant-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

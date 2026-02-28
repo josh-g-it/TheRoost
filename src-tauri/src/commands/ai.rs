@@ -6,7 +6,9 @@ use crate::services::ai::cloud_config::CloudConfigHandle;
 use crate::services::ai::cloud_resolver::CloudResolver;
 use crate::services::ai::context_builder;
 use crate::services::ai::conversation;
-use crate::services::ai::conversation_timer::{self, ConversationTimerHandle, TimerTickPayload};
+use crate::services::ai::conversation_timer::{
+    self, ConversationEndedPayload, ConversationTimerHandle, TimerTickPayload,
+};
 use crate::services::ai::encryption;
 use crate::services::ai::memory;
 use crate::services::ai::orchestrator::AiOrchestrator;
@@ -487,7 +489,11 @@ pub async fn end_conversation(
     }
 
     // Notify all windows that this conversation has ended
-    let _ = app_handle.emit("ai-conversation-ended", &conversation_id);
+    let payload = ConversationEndedPayload {
+        conversation_id: conversation_id.clone(),
+        reason: "manual".to_string(),
+    };
+    let _ = app_handle.emit("ai-conversation-ended", &payload);
 
     Ok(())
 }

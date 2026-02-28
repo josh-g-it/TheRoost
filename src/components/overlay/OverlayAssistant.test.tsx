@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { OverlayAssistant } from "./OverlayAssistant";
@@ -180,8 +180,11 @@ describe("OverlayAssistant", () => {
     });
   });
 
-  // B2: State reset after End Conversation
-  it("resets conversationId after End Conversation", async () => {
+  // B2: End Conversation calls API and auto-restarts via event
+  it("auto-restarts conversation after manual end", async () => {
+    mockStartConversation
+      .mockResolvedValueOnce("conv-1") // initial
+      .mockResolvedValueOnce("conv-2"); // auto-restart
     const user = userEvent.setup();
     render(<OverlayAssistant />);
     await waitFor(() => {
@@ -194,13 +197,17 @@ describe("OverlayAssistant", () => {
       expect(mockEndConversation).toHaveBeenCalledWith("conv-1", "a1");
     });
 
-    // After ending, the conversationId is null — AssistantChat receives null,
-    // which means the end button inside the chat should not be rendered.
-    // Verify that clicking End again does nothing (no double call).
-    mockEndConversation.mockClear();
-    await user.click(screen.getByText("End"));
-    // Should not call endConversation again since conversationId is null
-    expect(mockEndConversation).not.toHaveBeenCalled();
+    // Simulate the conversation-ended event with reason: manual
+    await act(async () => {
+      listenCallbacks["ai-conversation-ended"]?.({
+        payload: { conversationId: "conv-1", reason: "manual" },
+      });
+    });
+
+    // Should auto-restart: startConversation called again
+    await waitFor(() => {
+      expect(mockStartConversation).toHaveBeenCalledTimes(2);
+    });
   });
 
   // B3: End Conversation via dropdown
@@ -330,7 +337,63 @@ describe("OverlayAssistant", () => {
     expect(screenshotBtn).toBeDisabled();
   });
 
-  // B10: Stale reset starts a fresh conversation
+  // B10: Timer auto-end does NOT auto-restart
+  it("does NOT auto-restart on timer auto-end", async () => {
+    render(<OverlayAssistant />);
+    await waitFor(() => {
+      expect(screen.getByText("Buddy")).toBeInTheDocument();
+    });
+
+    // Simulate the conversation-ended event with reason: timer
+    await act(async () => {
+      listenCallbacks["ai-conversation-ended"]?.({
+        payload: { conversationId: "conv-1", reason: "timer" },
+      });
+    });
+
+    // startConversation should have been called only once (initial load)
+    expect(mockStartConversation).toHaveBeenCalledTimes(1);
+  });
+
+  // B12: Auto-restart error sets conversationId to null
+  it("sets conversationId to null when auto-restart fails", async () => {
+    mockStartConversation
+      .mockResolvedValueOnce("conv-1")
+      .mockRejectedValueOnce(new Error("fail"));
+
+    render(<OverlayAssistant />);
+    await waitFor(() => {
+      expect(screen.getByText("Buddy")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      listenCallbacks["ai-conversation-ended"]?.({
+        payload: { conversationId: "conv-1", reason: "manual" },
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockStartConversation).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // B13: isEndingRef guard prevents double endConversation calls
+  it("guards against double endConversation calls", async () => {
+    mockEndConversation.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+
+    render(<OverlayAssistant />);
+    await waitFor(() => {
+      expect(screen.getByText("Buddy")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("End"));
+    await user.click(screen.getByText("End"));
+
+    expect(mockEndConversation).toHaveBeenCalledTimes(1);
+  });
+
+  // B11: Stale reset starts a fresh conversation
   it("starts a fresh conversation after stale reset", async () => {
     // Only the first conversation is stale; the replacement is fresh
     mockCheckConversationStale

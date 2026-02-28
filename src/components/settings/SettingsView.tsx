@@ -862,6 +862,25 @@ export function SettingsView() {
                     ))}
                   </div>
                 )}
+                <div className="settings-view__field-row">
+                  <label className="settings-view__checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={form.aiConversationAutoEndEnabled ?? true}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          aiConversationAutoEndEnabled: e.target.checked,
+                        })
+                      }
+                    />
+                    Auto-end conversations after inactivity
+                  </label>
+                </div>
+                <p className="settings-view__field-hint">
+                  Automatically end conversations after 1 hour of inactivity. When
+                  disabled, conversations stay open until manually ended.
+                </p>
               </>
             )}
           </section>

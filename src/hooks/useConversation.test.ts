@@ -5,7 +5,9 @@ import type { StreamChunk } from "../types";
 
 type EventCallback = (event: { payload: unknown }) => void;
 let streamCallback: ((event: { payload: StreamChunk }) => void) | null = null;
-let conversationEndedCallback: ((event: { payload: string }) => void) | null = null;
+let conversationEndedCallback:
+  | ((event: { payload: { conversationId: string; reason: string } }) => void)
+  | null = null;
 const mockUnlisten = vi.fn();
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -13,7 +15,9 @@ vi.mock("@tauri-apps/api/event", () => ({
     if (eventName === "ai-stream-chunk") {
       streamCallback = callback as (event: { payload: StreamChunk }) => void;
     } else if (eventName === "ai-conversation-ended") {
-      conversationEndedCallback = callback as (event: { payload: string }) => void;
+      conversationEndedCallback = callback as (event: {
+        payload: { conversationId: string; reason: string };
+      }) => void;
     }
     return Promise.resolve(mockUnlisten);
   }),
@@ -356,7 +360,7 @@ describe("useConversation", () => {
     // Fire the conversation-ended event matching our conversationId
     expect(conversationEndedCallback).not.toBeNull();
     act(() => {
-      conversationEndedCallback!({ payload: "c1" });
+      conversationEndedCallback!({ payload: { conversationId: "c1", reason: "manual" } });
     });
 
     expect(result.current.isEnded).toBe(true);
@@ -393,7 +397,9 @@ describe("useConversation", () => {
 
     // Fire event with wrong conversationId
     act(() => {
-      conversationEndedCallback!({ payload: "c-other" });
+      conversationEndedCallback!({
+        payload: { conversationId: "c-other", reason: "manual" },
+      });
     });
 
     // Messages should remain unchanged
@@ -416,11 +422,94 @@ describe("useConversation", () => {
 
     // Simulate the event arriving (as it would from the backend)
     act(() => {
-      conversationEndedCallback!({ payload: "c1" });
+      conversationEndedCallback!({ payload: { conversationId: "c1", reason: "manual" } });
     });
 
     // isEnded should be false because we triggered the end locally
     expect(result.current.isEnded).toBe(false);
+  });
+
+  // ── isCompacting tests ──────────────────────────────────────────
+
+  it("isCompacting is false initially", () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+    expect(result.current.isCompacting).toBe(false);
+  });
+
+  it("isCompacting becomes true when endConversation is called", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    await act(async () => {
+      await result.current.endConversation();
+    });
+
+    expect(result.current.isCompacting).toBe(true);
+  });
+
+  it("isCompacting becomes false when conversationId changes", async () => {
+    const { result, rerender } = renderHook(
+      ({ convId }) => useConversation({ avatarId: "a1", conversationId: convId }),
+      { initialProps: { convId: "c1" as string | null } },
+    );
+
+    await act(async () => {
+      await result.current.endConversation();
+    });
+    expect(result.current.isCompacting).toBe(true);
+
+    rerender({ convId: "c2" });
+    expect(result.current.isCompacting).toBe(false);
+  });
+
+  it("isCompacting becomes false on endConversation error", async () => {
+    mockEndConversation.mockRejectedValue({ message: "fail" });
+
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    await act(async () => {
+      await result.current.endConversation();
+    });
+
+    expect(result.current.isCompacting).toBe(false);
+  });
+
+  it("isCompacting is included in the returned object", () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+    expect("isCompacting" in result.current).toBe(true);
+  });
+
+  it("resets isLocalEndRef after skipping one event, allowing the next event through", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    await act(async () => {});
+
+    // Local end sets isLocalEndRef = true
+    await act(async () => {
+      await result.current.endConversation();
+    });
+
+    // First event: skipped (local end)
+    act(() => {
+      conversationEndedCallback!({ payload: { conversationId: "c1", reason: "manual" } });
+    });
+    expect(result.current.isEnded).toBe(false);
+
+    // Second event: should NOT be skipped -- ref was reset
+    act(() => {
+      conversationEndedCallback!({ payload: { conversationId: "c1", reason: "manual" } });
+    });
+    expect(result.current.isEnded).toBe(true);
+    expect(result.current.messages).toEqual([]);
   });
 
   it("sendMessage passes hidden=true to API when options.hidden is true", async () => {

@@ -2200,6 +2200,27 @@ impl CacheDb {
         Ok(results)
     }
 
+    /// Returns (game_name, start_time) for the most recently started active game session.
+    /// Used by conversation context to inject "Currently Playing" into the AI system prompt.
+    pub fn get_active_game_session_context(&self) -> Result<Option<(String, i64)>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT g.name, gs.start_time
+             FROM game_sessions gs
+             JOIN games g ON gs.game_id = g.game_id
+             WHERE gs.end_time IS NULL
+             ORDER BY gs.start_time DESC
+             LIMIT 1",
+        )?;
+        let result = stmt.query_row([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        });
+        match result {
+            Ok(pair) => Ok(Some(pair)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(AppError::Database(e)),
+        }
+    }
+
     // ── Tags ─────────────────────────────────────────────────────
 
     pub fn create_tag(&self, name: &str, color_index: u32) -> Result<Tag, AppError> {
@@ -4746,6 +4767,59 @@ mod tests {
         assert_eq!(active[0].0, gid);
         assert_eq!(active[0].1, "Team Fortress 2");
         assert_eq!(active[0].2, now);
+    }
+
+    // ── Active Game Session Context ────────────────────────────────
+
+    #[test]
+    fn test_get_active_game_session_context_none_when_no_sessions() {
+        let db = test_db();
+        let result = db.get_active_game_session_context().unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_active_game_session_context_returns_active_game() {
+        let db = test_db();
+        let now = chrono::Utc::now().timestamp();
+        let gid = db.register_game("steam", "440", "Team Fortress 2").unwrap();
+        db.start_session(&gid, now).unwrap();
+
+        let result = db.get_active_game_session_context().unwrap();
+        assert!(result.is_some());
+        let (name, start_time) = result.unwrap();
+        assert_eq!(name, "Team Fortress 2");
+        assert_eq!(start_time, now);
+    }
+
+    #[test]
+    fn test_get_active_game_session_context_returns_most_recent() {
+        let db = test_db();
+        let now = chrono::Utc::now().timestamp();
+
+        let gid1 = db.register_game("steam", "440", "Team Fortress 2").unwrap();
+        db.start_session(&gid1, now - 100).unwrap();
+
+        let gid2 = db.register_game("steam", "730", "CS2").unwrap();
+        db.start_session(&gid2, now).unwrap();
+
+        let result = db.get_active_game_session_context().unwrap();
+        assert!(result.is_some());
+        let (name, _start_time) = result.unwrap();
+        assert_eq!(name, "CS2"); // Most recently started
+    }
+
+    #[test]
+    fn test_get_active_game_session_context_none_when_all_ended() {
+        let db = test_db();
+        let now = chrono::Utc::now().timestamp();
+
+        let gid = db.register_game("steam", "440", "Team Fortress 2").unwrap();
+        let sid = db.start_session(&gid, now).unwrap();
+        db.close_session(sid, now + 3600, 60).unwrap();
+
+        let result = db.get_active_game_session_context().unwrap();
+        assert!(result.is_none());
     }
 
     // ── Tags ────────────────────────────────────────────────────────

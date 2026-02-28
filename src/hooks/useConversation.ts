@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import type { AiMessage, StreamChunk } from "../types";
+import type { AiMessage, ConversationEndedPayload, StreamChunk } from "../types";
 import { assistantApi } from "../services/tauri";
 import { getErrorMessage } from "../utils/errors";
 import { logger } from "../utils/logger";
@@ -16,6 +16,7 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
   const [error, setError] = useState<string | null>(null);
   const [currentStreamText, setCurrentStreamText] = useState("");
   const [isEnded, setIsEnded] = useState(false);
+  const [isCompacting, setIsCompacting] = useState(false);
   const lastUserMessageRef = useRef<string | null>(null);
   const isStreamingRef = useRef(false);
   const convIdRef = useRef(conversationId);
@@ -28,6 +29,7 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
     setCurrentStreamText("");
     setError(null);
     setIsEnded(false);
+    setIsCompacting(false);
   }, [conversationId]);
 
   useEffect(() => {
@@ -69,20 +71,23 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
   useEffect(() => {
     if (!conversationId) return;
 
-    const unlisten = listen<string>("ai-conversation-ended", (event) => {
-      const endedConvId = event.payload;
-      if (endedConvId !== convIdRef.current) return;
-      // Skip if we are the one who triggered the end
-      if (isLocalEndRef.current) {
-        isLocalEndRef.current = false;
-        return;
-      }
-      setMessages([]);
-      setCurrentStreamText("");
-      setIsStreaming(false);
-      isStreamingRef.current = false;
-      setIsEnded(true);
-    });
+    const unlisten = listen<ConversationEndedPayload>(
+      "ai-conversation-ended",
+      (event) => {
+        const endedConvId = event.payload.conversationId;
+        if (endedConvId !== convIdRef.current) return;
+        // Skip if we are the one who triggered the end
+        if (isLocalEndRef.current) {
+          isLocalEndRef.current = false;
+          return;
+        }
+        setMessages([]);
+        setCurrentStreamText("");
+        setIsStreaming(false);
+        isStreamingRef.current = false;
+        setIsEnded(true);
+      },
+    );
 
     return () => {
       unlisten.then((fn) => fn());
@@ -158,18 +163,33 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
 
   const endConversation = useCallback(async () => {
     if (!conversationId) return;
+    if (isCompacting) return;
     isLocalEndRef.current = true;
+    setIsCompacting(true);
     try {
       await assistantApi.endConversation(conversationId, avatarId);
       logger.info("useConversation", "api", "Conversation ended", { conversationId });
+      // Safety net: if conversationId hasn't changed after 30s, force reset
+      const savedConvId = conversationId;
+      setTimeout(() => {
+        if (convIdRef.current === savedConvId) {
+          isLocalEndRef.current = false;
+          setIsCompacting(false);
+          setIsEnded(true);
+          logger.warn("useConversation", "api", "Compaction timeout — forced reset", {
+            conversationId: savedConvId,
+          });
+        }
+      }, 30_000);
     } catch (err) {
       isLocalEndRef.current = false;
+      setIsCompacting(false);
       setError(getErrorMessage(err));
       logger.error("useConversation", "api", "Failed to end conversation", {
         error: getErrorMessage(err),
       });
     }
-  }, [conversationId, avatarId]);
+  }, [conversationId, avatarId, isCompacting]);
 
   return {
     messages,
@@ -177,6 +197,7 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
     error,
     currentStreamText,
     isEnded,
+    isCompacting,
     sendMessage,
     retry,
     endConversation,

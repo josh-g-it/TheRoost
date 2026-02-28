@@ -32,6 +32,7 @@ export function AssistantChat({
     isStreaming,
     error,
     currentStreamText,
+    isCompacting,
     sendMessage,
     retry,
     endConversation,
@@ -138,88 +139,108 @@ export function AssistantChat({
 
   return (
     <div className={`assistant-chat ${compact ? "assistant-chat--compact" : ""}`}>
-      <div className="assistant-chat__messages">
-        {messages.length === 0 && !isStreaming && (
-          <div className="assistant-chat__empty">
-            <AppIcon name="assistant" size={48} />
-            <p>Start a conversation with your assistant.</p>
-          </div>
-        )}
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`assistant-chat__message assistant-chat__message--${msg.role}`}
+      {conversationId && !hideEndButton && !isCompacting && (
+        <div className="assistant-chat__top-bar">
+          <button
+            className="assistant-chat__end-btn"
+            onClick={endConversation}
+            disabled={isStreaming}
           >
-            {msg.role === "assistant" ? (
-              <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {msg.content}
-              </Markdown>
-            ) : (
-              msg.content
-            )}
-          </div>
-        ))}
-        {isStreaming && (
-          <div className="assistant-chat__streaming">
-            {currentStreamText ? (
-              <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {currentStreamText}
-              </Markdown>
-            ) : null}
-            <span className="assistant-chat__streaming-cursor" />
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {error && (
-        <div className="assistant-chat__error">
-          <span className="assistant-chat__error-text">{error}</span>
-          <button className="assistant-chat__retry-btn" onClick={retry}>
-            Retry
+            <AppIcon name="close" size={14} />
+            <span>End Conversation</span>
           </button>
         </div>
       )}
 
-      <div className="assistant-chat__input-bar">
-        <input
-          ref={inputRef}
-          className="assistant-chat__input"
-          type="text"
-          placeholder="Type a message..."
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={isStreaming}
-          maxLength={10000}
-        />
-        {isSupported && (
-          <button
-            className={`assistant-chat__mic-btn ${isListening ? "assistant-chat__mic-btn--active" : ""}`}
-            onClick={handleMicToggle}
-            title={isListening ? "Stop listening" : "Voice input"}
-          >
-            <AppIcon name={isListening ? "pause" : "music"} size={16} />
-          </button>
-        )}
-        <button
-          className="assistant-chat__send-btn"
-          onClick={handleSend}
-          disabled={isStreaming || !inputValue.trim()}
-          title="Send message"
-        >
-          <AppIcon name="chevron-right" size={16} />
-        </button>
-        {conversationId && !hideEndButton && (
-          <button
-            className="assistant-chat__end-btn"
-            onClick={endConversation}
-            title="End conversation"
-          >
-            <AppIcon name="close" size={16} />
-          </button>
+      <div className="assistant-chat__messages">
+        {isCompacting ? (
+          <div className="assistant-chat__compacting">
+            <div className="assistant-chat__compacting-icon">
+              <AppIcon name="assistant" size={48} />
+            </div>
+            <div className="assistant-chat__compacting-text">Storing memories...</div>
+            <div className="assistant-chat__compacting-spinner" />
+          </div>
+        ) : (
+          <>
+            {messages.length === 0 && !isStreaming && (
+              <div className="assistant-chat__empty">
+                <AppIcon name="assistant" size={48} />
+                <p>Start a conversation with your assistant.</p>
+              </div>
+            )}
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`assistant-chat__message assistant-chat__message--${msg.role}`}
+              >
+                {msg.role === "assistant" ? (
+                  <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                    {msg.content}
+                  </Markdown>
+                ) : (
+                  msg.content
+                )}
+              </div>
+            ))}
+            {isStreaming && (
+              <div className="assistant-chat__streaming">
+                {currentStreamText ? (
+                  <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                    {currentStreamText}
+                  </Markdown>
+                ) : null}
+                <span className="assistant-chat__streaming-cursor" />
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </>
         )}
       </div>
+
+      {!isCompacting && (
+        <>
+          {error && (
+            <div className="assistant-chat__error">
+              <span className="assistant-chat__error-text">{error}</span>
+              <button className="assistant-chat__retry-btn" onClick={retry}>
+                Retry
+              </button>
+            </div>
+          )}
+
+          <div className="assistant-chat__input-bar">
+            <input
+              ref={inputRef}
+              className="assistant-chat__input"
+              type="text"
+              placeholder="Type a message..."
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={isStreaming}
+              maxLength={10000}
+            />
+            {isSupported && (
+              <button
+                className={`assistant-chat__mic-btn ${isListening ? "assistant-chat__mic-btn--active" : ""}`}
+                onClick={handleMicToggle}
+                title={isListening ? "Stop listening" : "Voice input"}
+              >
+                <AppIcon name={isListening ? "pause" : "music"} size={16} />
+              </button>
+            )}
+            <button
+              className="assistant-chat__send-btn"
+              onClick={handleSend}
+              disabled={isStreaming || !inputValue.trim()}
+              title="Send message"
+            >
+              <AppIcon name="chevron-right" size={16} />
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

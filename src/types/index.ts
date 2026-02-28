@@ -120,6 +120,7 @@ export type {
   AiMemory,
   AiDailyLog,
   StreamChunk,
+  ConversationEndedPayload,
   ActionSuggestion,
   ReviewConfirmationData,
 } from "./assistant";

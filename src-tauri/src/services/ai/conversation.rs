@@ -138,6 +138,25 @@ pub fn assemble_context(
         system_prompt.push_str(&memory_ctx);
     }
 
+    // Layer 3.5: Active game session context
+    if let Ok(Some((game_name, start_time))) = db.get_active_game_session_context() {
+        let now = chrono::Utc::now().timestamp();
+        let duration_minutes = ((now - start_time) / 60).max(0);
+        let start_str = chrono::DateTime::from_timestamp(start_time, 0)
+            .map(|dt| dt.format("%H:%M").to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        // Sanitize game name: collapse to single line, cap length
+        let safe_name: String = game_name
+            .chars()
+            .filter(|c| *c != '\n' && *c != '\r')
+            .take(200)
+            .collect();
+        system_prompt.push_str(&format!(
+            "\n\n## Current Activity\nThe user is currently playing \"{}\". Session started at {}, {} minutes ago.",
+            safe_name, start_str, duration_minutes
+        ));
+    }
+
     // Layer 4: Conversation history
     let raw_msgs = db.get_ai_messages_raw(conv_id)?;
     let mut decrypted: Vec<(AiMessage, usize)> = Vec::with_capacity(raw_msgs.len());
@@ -611,6 +630,47 @@ mod tests {
         // Total chars should be within budget
         let total_chars: usize = messages.iter().map(|m| m.content.len()).sum();
         assert!(total_chars <= TOKEN_BUDGET_LAYER4 * CHARS_PER_TOKEN);
+    }
+
+    #[test]
+    fn test_assemble_context_includes_active_game_session() {
+        let db = test_db();
+        let avatar_id = setup_avatar(&db);
+        memory::seed_system_memories(&db, &avatar_id, "TestBot", "Josh", &TEST_KEY).unwrap();
+        let conv = db.create_ai_conversation(&avatar_id).unwrap();
+
+        // Register a game and start an active session
+        let game_id = db.register_game("steam", "440", "Team Fortress 2").unwrap();
+        let now = chrono::Utc::now().timestamp();
+        db.start_session(&game_id, now - 600).unwrap(); // started 10 min ago
+
+        // Insert a user message so assemble_context has something to work with
+        let enc = encrypt_field("hello", &TEST_KEY).unwrap();
+        db.insert_ai_message(&conv.id, "user", &enc, 2).unwrap();
+
+        let settings = AppSettings::default();
+        let (system_prompt, _messages) =
+            assemble_context(&db, &conv.id, &avatar_id, &TEST_KEY, &settings).unwrap();
+
+        assert!(system_prompt.contains("Current Activity"));
+        assert!(system_prompt.contains("Team Fortress 2"));
+    }
+
+    #[test]
+    fn test_assemble_context_no_game_session_no_activity() {
+        let db = test_db();
+        let avatar_id = setup_avatar(&db);
+        memory::seed_system_memories(&db, &avatar_id, "TestBot", "Josh", &TEST_KEY).unwrap();
+        let conv = db.create_ai_conversation(&avatar_id).unwrap();
+
+        let enc = encrypt_field("hello", &TEST_KEY).unwrap();
+        db.insert_ai_message(&conv.id, "user", &enc, 2).unwrap();
+
+        let settings = AppSettings::default();
+        let (system_prompt, _messages) =
+            assemble_context(&db, &conv.id, &avatar_id, &TEST_KEY, &settings).unwrap();
+
+        assert!(!system_prompt.contains("Current Activity"));
     }
 
     #[test]

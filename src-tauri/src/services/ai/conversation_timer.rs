@@ -25,6 +25,13 @@ pub struct AutoEndedPayload {
     pub conversation_id: String,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationEndedPayload {
+    pub conversation_id: String,
+    pub reason: String, // "manual" | "timer"
+}
+
 pub struct ConversationTimerState {
     pub conversation_id: Option<String>,
     pub avatar_id: Option<String>,
@@ -170,7 +177,11 @@ async fn timer_loop(
 
             // Only emit conversation-ended if the conversation was actually ended in DB
             if auto_end_succeeded {
-                let _ = app_handle.emit("ai-conversation-ended", &conversation_id);
+                let ended_payload = ConversationEndedPayload {
+                    conversation_id: conversation_id.clone(),
+                    reason: "timer".to_string(),
+                };
+                let _ = app_handle.emit("ai-conversation-ended", &ended_payload);
             }
 
             // Clear timer state
@@ -442,5 +453,27 @@ mod tests {
         let state = timer.lock().unwrap();
         assert!(state.is_paused);
         assert_eq!(state.remaining_seconds, 500);
+    }
+
+    #[test]
+    fn conversation_ended_payload_serializes_to_camel_case() {
+        let payload = ConversationEndedPayload {
+            conversation_id: "conv-123".to_string(),
+            reason: "manual".to_string(),
+        };
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"conversationId\""));
+        assert!(json.contains("\"reason\""));
+        assert!(!json.contains("\"conversation_id\""));
+    }
+
+    #[test]
+    fn auto_ended_payload_serializes_to_camel_case() {
+        let payload = AutoEndedPayload {
+            conversation_id: "conv-123".to_string(),
+        };
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"conversationId\""));
+        assert!(!json.contains("\"conversation_id\""));
     }
 }
