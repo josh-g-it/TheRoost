@@ -149,13 +149,12 @@ mod tests {
             "scale:compact",
         ];
         for id in prefixes {
-            let (valid, rejected) =
-                validate_actions(vec![RawAiAction {
-                    action_id: id.to_string(),
-                    tier: 1,
-                    description: None,
-                    payload: None,
-                }]);
+            let (valid, rejected) = validate_actions(vec![RawAiAction {
+                action_id: id.to_string(),
+                tier: 1,
+                description: None,
+                payload: None,
+            }]);
             assert_eq!(valid.len(), 1, "Expected {id} to be valid");
             assert_eq!(valid[0].tier, 1, "Expected {id} to be Tier 1");
             assert_eq!(rejected, 0);
@@ -179,13 +178,12 @@ mod tests {
     fn allows_new_tier1_actions() {
         let ids = vec!["search:dark souls", "view:grid", "view:list"];
         for id in ids {
-            let (valid, rejected) =
-                validate_actions(vec![RawAiAction {
-                    action_id: id.to_string(),
-                    tier: 1,
-                    description: None,
-                    payload: None,
-                }]);
+            let (valid, rejected) = validate_actions(vec![RawAiAction {
+                action_id: id.to_string(),
+                tier: 1,
+                description: None,
+                payload: None,
+            }]);
             assert_eq!(valid.len(), 1, "Expected {id} to be valid");
             assert_eq!(valid[0].tier, 1);
             assert_eq!(rejected, 0);
@@ -203,13 +201,12 @@ mod tests {
             "hide:Bad Game",
         ];
         for id in prefixes {
-            let (valid, rejected) =
-                validate_actions(vec![RawAiAction {
-                    action_id: id.to_string(),
-                    tier: 2,
-                    description: Some("Test".to_string()),
-                    payload: None,
-                }]);
+            let (valid, rejected) = validate_actions(vec![RawAiAction {
+                action_id: id.to_string(),
+                tier: 2,
+                description: Some("Test".to_string()),
+                payload: None,
+            }]);
             assert_eq!(valid.len(), 1, "Expected {id} to be valid");
             assert_eq!(valid[0].tier, 2, "Expected {id} to be Tier 2");
             assert_eq!(rejected, 0);
@@ -220,13 +217,12 @@ mod tests {
     fn allows_tier2_exact_actions() {
         let ids = vec!["action:refresh", "action:scan-external"];
         for id in ids {
-            let (valid, rejected) =
-                validate_actions(vec![RawAiAction {
-                    action_id: id.to_string(),
-                    tier: 2,
-                    description: None,
-                    payload: None,
-                }]);
+            let (valid, rejected) = validate_actions(vec![RawAiAction {
+                action_id: id.to_string(),
+                tier: 2,
+                description: None,
+                payload: None,
+            }]);
             assert_eq!(valid.len(), 1, "Expected {id} to be valid");
             assert_eq!(valid[0].tier, 2);
             assert_eq!(rejected, 0);
@@ -247,13 +243,12 @@ mod tests {
             "filesystem:read",
         ];
         for id in blocked {
-            let (valid, rejected) =
-                validate_actions(vec![RawAiAction {
-                    action_id: id.to_string(),
-                    tier: 1,
-                    description: None,
-                    payload: None,
-                }]);
+            let (valid, rejected) = validate_actions(vec![RawAiAction {
+                action_id: id.to_string(),
+                tier: 1,
+                description: None,
+                payload: None,
+            }]);
             assert_eq!(valid.len(), 0, "Expected {id} to be rejected");
             assert_eq!(rejected, 1, "Expected {id} to increment rejected count");
         }
@@ -263,13 +258,12 @@ mod tests {
     fn rejects_unknown_action_ids() {
         let unknown = vec!["foo:bar", "xyz", "action:unknown", "custom:thing"];
         for id in unknown {
-            let (valid, rejected) =
-                validate_actions(vec![RawAiAction {
-                    action_id: id.to_string(),
-                    tier: 1,
-                    description: None,
-                    payload: None,
-                }]);
+            let (valid, rejected) = validate_actions(vec![RawAiAction {
+                action_id: id.to_string(),
+                tier: 1,
+                description: None,
+                payload: None,
+            }]);
             assert_eq!(valid.len(), 0, "Expected {id} to be rejected");
             assert_eq!(rejected, 1);
         }
@@ -381,10 +375,7 @@ mod tests {
             payload: Some(payload.clone()),
         }]);
         assert_eq!(valid.len(), 1);
-        assert_eq!(
-            valid[0].description.as_deref(),
-            Some("Save your review")
-        );
+        assert_eq!(valid[0].description.as_deref(), Some("Save your review"));
         assert_eq!(valid[0].payload, Some(payload));
     }
 }

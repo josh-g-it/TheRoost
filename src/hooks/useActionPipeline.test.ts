@@ -4,7 +4,7 @@ import { useActionPipeline, serializeActionFeedback } from "./useActionPipeline"
 import type { ResolvedAction, ActionResult } from "../types";
 
 // Mock resolveExecutor from commandPalette
-const mockExecutors: Record<string, vi.Mock> = {};
+const mockExecutors: Record<string, ReturnType<typeof vi.fn>> = {};
 vi.mock("../utils/commandPalette", () => ({
   resolveExecutor: (actionId: string) => mockExecutors[actionId] ?? null,
 }));

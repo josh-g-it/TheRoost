@@ -129,10 +129,7 @@ pub fn resolve_actions(
 /// Resolve a game name to a (game_id, canonical_name) pair.
 /// Uses exact match first, then Jaro-Winkler fuzzy match (0.85+ threshold).
 /// Rejects ambiguous matches (top two within 0.05 similarity).
-fn resolve_game_name(
-    query: &str,
-    library: &[(String, String)],
-) -> Option<(String, String)> {
+fn resolve_game_name(query: &str, library: &[(String, String)]) -> Option<(String, String)> {
     if library.is_empty() {
         return None;
     }
@@ -401,10 +398,7 @@ mod tests {
         let result = resolve_actions(actions, &library, 0);
         assert_eq!(result.actions.len(), 1);
         assert_eq!(result.actions[0].action_id, "favorite:uuid-1");
-        assert_eq!(
-            result.actions[0].original_action_id,
-            "favorite:Elden Ring"
-        );
+        assert_eq!(result.actions[0].original_action_id, "favorite:Elden Ring");
         assert_eq!(
             result.actions[0].resolved_name.as_deref(),
             Some("Elden Ring")
@@ -481,10 +475,7 @@ mod tests {
         let result = resolve_actions(actions, &library, 0);
         assert_eq!(result.actions.len(), 1);
         assert_eq!(result.actions[0].action_id, "game:uuid-3");
-        assert_eq!(
-            result.actions[0].resolved_name.as_deref(),
-            Some("Celeste")
-        );
+        assert_eq!(result.actions[0].resolved_name.as_deref(), Some("Celeste"));
     }
 
     #[test]
@@ -504,10 +495,7 @@ mod tests {
         assert!(result.actions[0].resolved_name.is_none());
         // Game-targeting actions resolved
         assert_eq!(result.actions[1].action_id, "favorite:uuid-2");
-        assert_eq!(
-            result.actions[1].resolved_name.as_deref(),
-            Some("Hades")
-        );
+        assert_eq!(result.actions[1].resolved_name.as_deref(), Some("Hades"));
         assert_eq!(result.actions[2].action_id, "sort:playtime");
         assert_eq!(result.actions[3].action_id, "game:uuid-3");
     }
