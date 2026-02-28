@@ -1,16 +1,16 @@
 # v1.12.0 Handoff — Conversational AI Assistant
 
 > Use this document to get up to speed at the start of a new session.
-> Last updated: 2026-02-27 — Phase 7 complete, ready for Phase 8.
+> Last updated: 2026-02-27 — Phase 8 complete, ready for Phase 9.
 
 ---
 
 ## Current State
 
 - **Version**: 1.11.0 (synced across `tauri.conf.json`, `package.json`, `Cargo.toml`)
-- **Branch**: master — Phase 1+2+3+4+5+6+7 committed and pushed to GitHub
+- **Branch**: master — Phase 1+2+3+4+5+6+7+8 committed and pushed to GitHub
 - **Release**: v1.11.0 tag pushed and release built successfully
-- **Tests**: 402 Rust + 575 frontend = 977 total (all passing)
+- **Tests**: 418 Rust + 578 frontend = 996 total (all passing)
 - **DB schema**: v24 (29 tables — 23 original + 6 new AI tables, WAL mode, SQLite via rusqlite bundled)
 - **Design phase**: Complete — 11 design documents in `docs/ai-design/`
 - **Implementation plan**: Complete — 13 phases in `docs/ai-design/implementation_plan/`
@@ -21,7 +21,61 @@
 - **Phase 5**: COMPLETE — Frontend `/assistant` route + chat UI (QA reviewed, all fixes applied)
 - **Phase 6**: COMPLETE — Overlay assistant panel + cross-window sync (QA reviewed, all fixes applied)
 - **Phase 7**: COMPLETE — Hidden messages + stale conversation reset (QA reviewed, all fixes applied)
-- **Next step**: Begin Phase 8 (Backend Inactivity Timer)
+- **Phase 8**: COMPLETE — Backend inactivity timer (QA reviewed, all fixes applied)
+- **Next step**: Begin Phase 9 (UX Polish)
+
+---
+
+## Phase 8 Completion Summary
+
+**Backend Inactivity Timer** — completed 2026-02-27.
+
+### What Was Built
+- **Rust tokio timer service**: `conversation_timer.rs` — background task ticks every 1s internally, emits `conversation-timer-tick` events every 10s to frontend. Timer automatically pauses when game sessions are active (process monitor integration) and resumes when all games stop.
+- **Auto-end on expiry**: When the 1-hour inactivity timer expires, the Rust backend calls `end_conversation` directly (with compaction), emits `conversation-auto-ended` + `ai-conversation-ended` events. No frontend involvement required.
+- **Cooperative cancellation**: Uses `tokio::sync::oneshot` channel for clean shutdown — no `abort()`, timer loop checks for cancellation via `tokio::select!` on each tick.
+- **New setting**: `ai_conversation_auto_end_enabled` (defaults to `true`) — when disabled, `start_conversation_timer` is a no-op. Settings UI toggle deferred to Phase 9.
+- **Frontend refactor**: `useInactivityTimer` hook rewritten from local `setInterval` countdown to display-only backend subscriber. Takes `conversationId` + `avatarId` instead of `onTimeout` callback. On mount, syncs current state from backend via `getConversationTimerState`.
+- **4 new Tauri commands**: `start_conversation_timer`, `stop_conversation_timer`, `reset_conversation_timer`, `get_conversation_timer_state`
+- **Process monitor integration**: Timer pauses when ANY game starts, resumes only when ALL games stop (`running.is_empty()` guard). Also integrated into `cleanup_stale_sessions`.
+- **19 new tests** (977 → 996 total): 15 Rust (13 timer state + 2 settings deserialization) + 10 frontend (7 rewritten + 3 new from QA)
+
+### Files Created (1 new file)
+| File | Purpose |
+|------|---------|
+| `src-tauri/src/services/ai/conversation_timer.rs` | Timer state, lifecycle functions, tokio background loop, 15 unit tests |
+
+### Files Modified (12 files)
+| File | Change |
+|------|--------|
+| `src-tauri/src/services/ai/mod.rs` | Added `pub mod conversation_timer` |
+| `src-tauri/src/models/settings.rs` | Added `ai_conversation_auto_end_enabled` field + `default_true` helper + 2 tests |
+| `src-tauri/src/commands/ai.rs` | 4 new timer commands + timer reset in `send_message` + timer stop in `end_conversation` |
+| `src-tauri/src/lib.rs` | Registered `ConversationTimerHandle` managed state + 4 new commands |
+| `src-tauri/src/services/process_monitor.rs` | Timer pause/resume in `scan_once` + `cleanup_stale_sessions` |
+| `src/services/tauri.ts` | 4 new timer API methods in `assistantApi` |
+| `src/hooks/useInactivityTimer.ts` | Full rewrite: backend subscriber instead of local countdown |
+| `src/hooks/useInactivityTimer.test.ts` | Full rewrite: 10 tests for new hook interface |
+| `src/components/assistant/AssistantView.tsx` | Updated hook usage, removed `handleTimeout`, removed redundant `stopConversationTimer` |
+| `src/components/assistant/AssistantView.test.tsx` | Added timer API mocks |
+| `src/types/settings.ts` | Added `aiConversationAutoEndEnabled` field |
+| `docs/ai-design/implementation_plan/phase-9-ux-polish.md` | Added auto-end settings toggle (deferred from Phase 8) |
+
+### QA Fixes Applied
+1. **Conditional event emission (HIGH)**: `ai-conversation-ended` only emitted when `auto_end_conversation` succeeds — prevents frontend/DB desync when compaction fails
+2. **Redundant stop removed (HIGH)**: Removed explicit `stopConversationTimer` from `handleAvatarSwitch` — `endConversation` command already stops timer internally
+3. **resume_timer no-op guard (MEDIUM)**: Added test verifying `resume_timer` is no-op when no active conversation
+4. **Pause preserves remaining (MEDIUM)**: Added test verifying `pause_timer` preserves `remaining_seconds` when already paused
+5. **Initial state sync test (HIGH)**: Added test for `getConversationTimerState` populating non-null state on mount
+6. **avatarId null guard test (HIGH)**: Added test verifying no timer start when `avatarId` is null
+7. **Conversation change restart test (HIGH)**: Added test verifying timer restarts when `conversationId` changes
+
+### Architecture Decisions
+- **`oneshot::Sender` for cancellation** (not `JoinHandle::abort`) — cooperative shutdown via `tokio::select!` ensures clean termination
+- **`TICK_EMIT_INTERVAL = 10`** — timer ticks internally every 1s but only emits events every 10s (plus first tick and expiry) to avoid event spam
+- **`try_state` for integration points** — `send_message`, `end_conversation`, and process monitor use `try_state` so tests without managed state still work
+- **Timer lock never held during I/O** — all event emission and `auto_end_conversation` calls happen after lock is dropped
+- **Settings checked at start only** — `ai_conversation_auto_end_enabled` is checked when `start_conversation_timer` is called, not on each tick. Changing settings mid-conversation doesn't affect the running timer.
 
 ---
 
@@ -369,8 +423,8 @@ The build is broken into 13 sequential phases in `docs/ai-design/implementation_
 | [5](ai-design/implementation_plan/phase-5-frontend-route.md) | `/assistant` route + chat UI | Frontend | **DONE** |
 | [6](ai-design/implementation_plan/phase-6-overlay-panel.md) | Overlay panel | Frontend | **DONE** |
 | [7](ai-design/implementation_plan/phase-7-hidden-messages-stale-reset.md) | Ephemeral greeting + stale conversation reset | Both | **DONE** |
-| [8](ai-design/implementation_plan/phase-8-backend-inactivity-timer.md) | Backend tokio timer + frontend hook refactor | Both | |
-| [9](ai-design/implementation_plan/phase-9-ux-polish.md) | End button, journaling splash, game session context | Both | |
+| [8](ai-design/implementation_plan/phase-8-backend-inactivity-timer.md) | Backend tokio timer + frontend hook refactor | Both | **DONE** |
+| [9](ai-design/implementation_plan/phase-9-ux-polish.md) | End button, journaling splash, game session context, auto-end toggle | Both | |
 | [10](ai-design/implementation_plan/phase-10-error-recovery.md) | Orphan recovery, compaction retry, clipboard failsafe | Both | |
 | [11](ai-design/implementation_plan/phase-11-avatar-data-management.md) | Delete avatar, per-avatar wipe, encryption key management | Both | |
 | [12](ai-design/implementation_plan/phase-12-post-session-reviews.md) | Native notifications, review trigger, context enrichment | Both | |
@@ -513,7 +567,7 @@ All design decisions have been made and documented in `docs/ai-design/`:
 | Priority | File | Why |
 |----------|------|-----|
 | 1 | `docs/ai-design/implementation_plan/README.md` | Phase dependency graph + summary table |
-| 2 | `docs/ai-design/implementation_plan/phase-4-conversation-service.md` | **CURRENT PHASE** — exact files, functions, and tests |
+| 2 | `docs/ai-design/implementation_plan/phase-9-ux-polish.md` | **NEXT PHASE** — exact files, functions, and tests |
 | 3 | `docs/ai-design/README.md` | Full architecture overview + all resolved decisions |
 | 4 | `docs/ai-design/03-conversation-lifecycle.md` | Start/resume/end, 4-layer context assembly, mid-session summarization |
 | 5 | `docs/ai-design/02-memory-system.md` | Memory vault, compaction, pruning — used by conversation end |
