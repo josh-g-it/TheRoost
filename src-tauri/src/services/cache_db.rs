@@ -3927,16 +3927,49 @@ impl CacheDb {
         tx.commit().map_err(AppError::Database)
     }
 
-    /// Find un-ended conversations (crash recovery).
-    #[allow(dead_code)]
-    pub fn get_orphaned_conversations(&self) -> Result<Vec<String>, AppError> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id FROM ai_conversations WHERE ended_at IS NULL AND compacted = 0")?;
+    /// Find un-ended conversations for a specific avatar (crash recovery).
+    pub fn get_orphaned_conversations(&self, avatar_id: &str) -> Result<Vec<String>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id FROM ai_conversations WHERE avatar_id = ?1 AND ended_at IS NULL AND compacted = 0",
+        )?;
         let ids = stmt
-            .query_map([], |row| row.get(0))?
+            .query_map(params![avatar_id], |row| row.get(0))?
             .collect::<Result<Vec<String>, _>>()?;
         Ok(ids)
+    }
+
+    /// Find conversations where compaction failed: ended but not compacted, with messages still present.
+    pub fn get_pending_compaction_conversations(&self) -> Result<Vec<(String, String)>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT c.id, c.avatar_id
+             FROM ai_conversations c
+             WHERE c.ended_at IS NOT NULL
+               AND c.compacted = 0
+               AND EXISTS (SELECT 1 FROM ai_messages m WHERE m.conversation_id = c.id)",
+        )?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<(String, String)>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Get all raw message rows for a conversation (for compaction data export).
+    /// Returns (avatar_id, Vec<AiMessageRow>).
+    pub fn get_compaction_conversation_data(
+        &self,
+        conversation_id: &str,
+    ) -> Result<(String, Vec<AiMessageRow>), AppError> {
+        let avatar_id: String = self
+            .conn
+            .query_row(
+                "SELECT avatar_id FROM ai_conversations WHERE id = ?1",
+                params![conversation_id],
+                |row| row.get(0),
+            )
+            .map_err(|_| AppError::NotFound("Conversation not found".into()))?;
+
+        let messages = self.get_ai_messages_raw(conversation_id)?;
+        Ok((avatar_id, messages))
     }
 
     /// Get personality prompt_text by ID.
@@ -7030,7 +7063,7 @@ mod tests {
         // Verify via get_active_conversation (should return None since it's now ended)
         assert!(db.get_active_conversation(&avatar.id).unwrap().is_none());
         // Verify the conversation was properly completed by checking orphaned
-        let orphans = db.get_orphaned_conversations().unwrap();
+        let orphans = db.get_orphaned_conversations(&avatar.id).unwrap();
         assert!(orphans.is_empty()); // Should not be orphaned since compacted=1
     }
 
@@ -7047,7 +7080,7 @@ mod tests {
             .unwrap();
         // Verify it's fully completed (not orphaned, not active)
         assert!(db.get_active_conversation(&avatar.id).unwrap().is_none());
-        assert!(db.get_orphaned_conversations().unwrap().is_empty());
+        assert!(db.get_orphaned_conversations(&avatar.id).unwrap().is_empty());
     }
 
     #[test]
@@ -7149,7 +7182,7 @@ mod tests {
 
         // Conversation should be completed (not active, not orphaned)
         assert!(db.get_active_conversation(&avatar.id).unwrap().is_none());
-        assert!(db.get_orphaned_conversations().unwrap().is_empty());
+        assert!(db.get_orphaned_conversations(&avatar.id).unwrap().is_empty());
     }
 
     #[test]
@@ -7286,6 +7319,128 @@ mod tests {
     fn test_get_conversation_started_at_not_found() {
         let db = test_db();
         let result = db.get_conversation_started_at("nonexistent-id");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::NotFound(msg) => assert!(msg.contains("Conversation not found")),
+            other => panic!("Expected NotFound, got: {:?}", other),
+        }
+    }
+
+    // ── Phase 10: Pending Compaction Tests ──────────────────────────
+
+    #[test]
+    fn test_pending_compaction_empty_when_no_conversations() {
+        let db = test_db();
+        let result = db.get_pending_compaction_conversations().unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_pending_compaction_empty_when_all_compacted() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+        // End and mark as compacted via complete_compaction
+        db.end_ai_conversation(&conv.id).unwrap();
+        let key = [0u8; 32];
+        let summary_enc = crate::services::ai::encryption::encrypt_field("summary", &key).unwrap();
+        let journal_enc = crate::services::ai::encryption::encrypt_field("journal", &key).unwrap();
+        // Insert a message so compaction has something to process
+        let msg_enc = crate::services::ai::encryption::encrypt_field("hello", &key).unwrap();
+        db.insert_ai_message(&conv.id, "user", &msg_enc, 2).unwrap();
+        db.complete_compaction(&conv.id, &avatar.id, &summary_enc, &journal_enc, &[], &[])
+            .unwrap();
+
+        let result = db.get_pending_compaction_conversations().unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_pending_compaction_returns_ended_uncompacted_with_messages() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+
+        // Insert a message
+        let key = [0u8; 32];
+        let msg_enc = crate::services::ai::encryption::encrypt_field("hello", &key).unwrap();
+        db.insert_ai_message(&conv.id, "user", &msg_enc, 2).unwrap();
+
+        // End the conversation (but don't compact — simulates compaction failure)
+        db.end_ai_conversation(&conv.id).unwrap();
+
+        let result = db.get_pending_compaction_conversations().unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, conv.id);
+        assert_eq!(result[0].1, avatar.id);
+    }
+
+    #[test]
+    fn test_pending_compaction_skips_ended_uncompacted_without_messages() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+
+        // End the conversation with no messages (short conversation, no compaction needed)
+        db.end_ai_conversation(&conv.id).unwrap();
+
+        let result = db.get_pending_compaction_conversations().unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_pending_compaction_returns_multiple() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let key = [0u8; 32];
+
+        let conv1 = db.create_ai_conversation(&avatar.id).unwrap();
+        let msg_enc = crate::services::ai::encryption::encrypt_field("msg1", &key).unwrap();
+        db.insert_ai_message(&conv1.id, "user", &msg_enc, 2)
+            .unwrap();
+        db.end_ai_conversation(&conv1.id).unwrap();
+
+        let conv2 = db.create_ai_conversation(&avatar.id).unwrap();
+        let msg_enc2 = crate::services::ai::encryption::encrypt_field("msg2", &key).unwrap();
+        db.insert_ai_message(&conv2.id, "user", &msg_enc2, 2)
+            .unwrap();
+        db.end_ai_conversation(&conv2.id).unwrap();
+
+        let result = db.get_pending_compaction_conversations().unwrap();
+        assert_eq!(result.len(), 2);
+    }
+
+    // ── Phase 10: Compaction Conversation Data Tests ────────────────
+
+    #[test]
+    fn test_compaction_data_returns_avatar_and_messages() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+
+        let key = [0u8; 32];
+        let msg1 = crate::services::ai::encryption::encrypt_field("hello", &key).unwrap();
+        let msg2 = crate::services::ai::encryption::encrypt_field("world", &key).unwrap();
+        db.insert_ai_message(&conv.id, "user", &msg1, 2).unwrap();
+        db.insert_ai_message(&conv.id, "assistant", &msg2, 2)
+            .unwrap();
+
+        let (returned_avatar_id, messages) = db.get_compaction_conversation_data(&conv.id).unwrap();
+        assert_eq!(returned_avatar_id, avatar.id);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, "user");
+        assert_eq!(messages[1].role, "assistant");
+    }
+
+    #[test]
+    fn test_compaction_data_not_found() {
+        let db = test_db();
+        let result = db.get_compaction_conversation_data("nonexistent-id");
         assert!(result.is_err());
         match result.unwrap_err() {
             AppError::NotFound(msg) => assert!(msg.contains("Conversation not found")),

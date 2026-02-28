@@ -125,3 +125,141 @@
   flex: 1;
   overflow: hidden;
 }
+
+/* ── Recovery Banners (Phase 10) ─────────────────────────────── */
+.assistant-view__recovery-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md, 8px);
+  margin: 0.5rem 0.5rem 0;
+  flex-wrap: wrap;
+}
+
+.assistant-view__recovery-banner--orphan {
+  background: var(--color-surface-alt, #2a2a3e);
+  border: 1px solid var(--color-accent, #6366f1);
+}
+
+.assistant-view__recovery-banner--compaction {
+  background: var(--color-warning-bg, #3a2f1e);
+  border: 1px solid var(--color-warning, #f59e0b);
+}
+
+.assistant-view__recovery-text {
+  flex: 1;
+  font-size: 0.875rem;
+  color: var(--color-text-primary);
+}
+
+.assistant-view__recovery-error {
+  width: 100%;
+  font-size: 0.75rem;
+  color: var(--color-error, #ef4444);
+}
+
+.assistant-view__recovery-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.assistant-view__recovery-btn {
+  padding: 0.375rem 0.75rem;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.assistant-view__recovery-btn:hover {
+  background: var(--color-surface-hover);
+}
+
+.assistant-view__recovery-btn--primary {
+  background: var(--color-accent, #6366f1);
+  border-color: var(--color-accent, #6366f1);
+  color: #fff;
+}
+
+.assistant-view__recovery-btn--primary:hover {
+  opacity: 0.9;
+}
+
+.assistant-view__recovery-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Paste Response Modal (Phase 10) ─────────────────────────── */
+.assistant-view__paste-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.assistant-view__paste-modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 12px);
+  padding: 1.5rem;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.assistant-view__paste-modal-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: var(--color-text-primary);
+}
+
+.assistant-view__paste-modal-desc {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.75rem;
+}
+
+.assistant-view__paste-modal-example {
+  background: var(--color-surface-alt, #1a1a2e);
+  padding: 0.75rem;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  overflow-x: auto;
+  margin: 0 0 0.75rem;
+}
+
+.assistant-view__paste-modal-textarea {
+  width: 100%;
+  background: var(--color-input-bg, #1a1a2e);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary);
+  font-family: monospace;
+  font-size: 0.8125rem;
+  padding: 0.75rem;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.assistant-view__paste-modal-error {
+  font-size: 0.75rem;
+  color: var(--color-error, #ef4444);
+  margin: 0.5rem 0;
+}
+
+.assistant-view__paste-modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}

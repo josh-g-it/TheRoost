@@ -1,7 +1,9 @@
 use tauri::{Emitter, Manager, State};
 
 use crate::models::ai::{CloudAiUsage, CloudProvider, ResolvedIntent};
-use crate::models::assistant::{AiAvatar, AiDailyLog, AiMemory, AiMessage, AiPersonality};
+use crate::models::assistant::{
+    AiAvatar, AiDailyLog, AiMemory, AiMessage, AiPersonality, CompactionResult,
+};
 use crate::services::ai::cloud_config::CloudConfigHandle;
 use crate::services::ai::cloud_resolver::CloudResolver;
 use crate::services::ai::context_builder;
@@ -667,4 +669,152 @@ pub fn get_conversation_timer_state(
     timer: State<'_, ConversationTimerHandle>,
 ) -> Result<Option<TimerTickPayload>, AppError> {
     conversation_timer::get_timer_state(&timer)
+}
+
+// ── Error Recovery Commands (Phase 10) ──────────────────────────────
+
+#[tauri::command]
+pub fn check_orphaned_conversations(
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<Vec<String>, AppError> {
+    let db_guard = db.lock_or_err("DB")?;
+    conversation::check_orphaned_conversations(&db_guard, &avatar_id)
+}
+
+#[tauri::command]
+pub fn get_compaction_pending_conversations(
+    db: State<'_, CacheDbHandle>,
+) -> Result<Vec<(String, String)>, AppError> {
+    let db_guard = db.lock_or_err("DB")?;
+    db_guard.get_pending_compaction_conversations()
+}
+
+#[tauri::command]
+pub fn get_compaction_raw_data(
+    conversation_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<String, AppError> {
+    let key = encryption::load_encryption_key()?;
+
+    let db_guard = db.lock_or_err("DB")?;
+    let (avatar_id, raw_msgs) = db_guard.get_compaction_conversation_data(&conversation_id)?;
+
+    // Build the vault context (same as end_conversation uses)
+    let vault_mems = memory::load_vault_memories(&db_guard, &avatar_id, &key, 100)?;
+    drop(db_guard); // Release lock before formatting
+
+    // Decrypt messages
+    let mut decrypted_msgs = Vec::with_capacity(raw_msgs.len());
+    for row in &raw_msgs {
+        let content = encryption::decrypt_field(&row.content, &key)?;
+        decrypted_msgs.push(AiMessage {
+            id: row.id.clone(),
+            conversation_id: row.conversation_id.clone(),
+            role: row.role.clone(),
+            content,
+            created_at: row.created_at.clone(),
+            token_estimate: row.token_estimate,
+        });
+    }
+
+    // Format as compaction prompt + transcript
+    let vault_context = conversation::format_vault_for_compaction_public(&vault_mems);
+    let compaction_prompt = conversation::build_compaction_prompt_public(&vault_context);
+    let transcript = conversation::format_transcript_public(&decrypted_msgs);
+
+    Ok(format!(
+        "=== SYSTEM PROMPT ===\n{}\n\n=== CONVERSATION ===\n{}",
+        compaction_prompt, transcript
+    ))
+}
+
+#[tauri::command]
+pub fn apply_external_compaction(
+    conversation_id: String,
+    avatar_id: String,
+    json_data: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<(), AppError> {
+    // Parse and validate the JSON
+    let result: CompactionResult = serde_json::from_str(json_data.trim()).map_err(|e| {
+        AppError::Validation(format!(
+            "Invalid compaction JSON: {}. Expected format: {{\"summary\": \"...\", \"memories\": [...], \"supersededMemories\": [...]}}",
+            e
+        ))
+    })?;
+
+    // Validate structural constraints
+    if result.summary.is_empty() {
+        return Err(AppError::Validation("Summary cannot be empty".into()));
+    }
+    if result.memories.len() > 10 {
+        return Err(AppError::Validation(
+            "Too many memories (max 10 per conversation)".into(),
+        ));
+    }
+    const VALID_CATEGORIES: &[&str] = &["preference", "opinion", "fact", "general"];
+    for mem in &result.memories {
+        if mem.content.is_empty() {
+            return Err(AppError::Validation(
+                "Memory content cannot be empty".into(),
+            ));
+        }
+        if mem.importance < 1 || mem.importance > 10 {
+            return Err(AppError::Validation(
+                "Memory importance must be between 1 and 10".into(),
+            ));
+        }
+        if !VALID_CATEGORIES.contains(&mem.category.as_str()) {
+            return Err(AppError::Validation(format!(
+                "Invalid category '{}'. Must be one of: preference, opinion, fact, general",
+                mem.category
+            )));
+        }
+    }
+
+    // Verify conversation belongs to the specified avatar and is pending compaction
+    {
+        let db_guard = db.lock_or_err("DB")?;
+        let (conv_avatar_id, _) = db_guard.get_compaction_conversation_data(&conversation_id)?;
+        if conv_avatar_id != avatar_id {
+            return Err(AppError::Validation(
+                "Avatar ID does not match conversation".into(),
+            ));
+        }
+    }
+
+    let key = encryption::load_encryption_key()?;
+
+    // Encrypt for storage (same as end_conversation)
+    let summary_enc = encryption::encrypt_field(&result.summary, &key)?;
+    let journal_enc = encryption::encrypt_field(&result.summary, &key)?;
+    let memories: Vec<(String, u32, String)> = result
+        .memories
+        .iter()
+        .map(|mem| {
+            encryption::encrypt_field(&mem.content, &key)
+                .map(|enc| (enc, mem.importance, mem.category.clone()))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let db_guard = db.lock_or_err("DB")?;
+    db_guard.complete_compaction(
+        &conversation_id,
+        &avatar_id,
+        &summary_enc,
+        &journal_enc,
+        &memories,
+        &result.superseded_memories,
+    )?;
+
+    // Prune vault (same as end_conversation)
+    memory::prune_vault_if_needed(&db_guard, &avatar_id)?;
+
+    tracing::info!(
+        conversation_id = conversation_id.as_str(),
+        memories_count = memories.len(),
+        "External compaction applied successfully"
+    );
+    Ok(())
 }

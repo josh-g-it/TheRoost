@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import { AssistantView } from "./AssistantView";
 import { makeAiAvatar, makeAiPersonality } from "../../test/factories";
 
@@ -24,6 +24,12 @@ const mockGenerateEncryptionKey = vi.fn();
 const mockSendMessage = vi.fn();
 const mockCheckConversationStale = vi.fn();
 const mockAbandonConversation = vi.fn();
+const mockEndConversation = vi.fn();
+const mockCheckOrphanedConversations = vi.fn();
+const mockGetCompactionPendingConversations = vi.fn();
+const mockRetryCompaction = vi.fn();
+const mockGetCompactionRawData = vi.fn();
+const mockApplyExternalCompaction = vi.fn();
 
 vi.mock("../../services/tauri", () => ({
   assistantApi: {
@@ -40,10 +46,18 @@ vi.mock("../../services/tauri", () => ({
     sendMessage: (...args: unknown[]) => mockSendMessage(...args),
     checkConversationStale: (...args: unknown[]) => mockCheckConversationStale(...args),
     abandonConversation: (...args: unknown[]) => mockAbandonConversation(...args),
+    endConversation: (...args: unknown[]) => mockEndConversation(...args),
     startConversationTimer: vi.fn().mockResolvedValue(undefined),
     stopConversationTimer: vi.fn().mockResolvedValue(undefined),
     resetConversationTimer: vi.fn().mockResolvedValue(undefined),
     getConversationTimerState: vi.fn().mockResolvedValue(null),
+    checkOrphanedConversations: (...args: unknown[]) =>
+      mockCheckOrphanedConversations(...args),
+    getCompactionPendingConversations: (...args: unknown[]) =>
+      mockGetCompactionPendingConversations(...args),
+    retryCompaction: (...args: unknown[]) => mockRetryCompaction(...args),
+    getCompactionRawData: (...args: unknown[]) => mockGetCompactionRawData(...args),
+    applyExternalCompaction: (...args: unknown[]) => mockApplyExternalCompaction(...args),
   },
 }));
 
@@ -69,6 +83,12 @@ describe("AssistantView", () => {
     mockSendMessage.mockResolvedValue(undefined);
     mockCheckConversationStale.mockResolvedValue(false);
     mockAbandonConversation.mockResolvedValue(undefined);
+    mockEndConversation.mockResolvedValue(undefined);
+    mockCheckOrphanedConversations.mockResolvedValue([]);
+    mockGetCompactionPendingConversations.mockResolvedValue([]);
+    mockRetryCompaction.mockResolvedValue(undefined);
+    mockGetCompactionRawData.mockResolvedValue("raw data");
+    mockApplyExternalCompaction.mockResolvedValue(undefined);
   });
 
   it("shows first-run wizard when no active avatar", async () => {
@@ -242,5 +262,351 @@ describe("AssistantView", () => {
       expect(screen.getByText("Idle")).toBeInTheDocument();
     });
     expect(screen.queryByText("In conversation")).not.toBeInTheDocument();
+  });
+
+  // ── Phase 10: Orphan Banner Tests ──────────────────────────────
+
+  describe("orphan banner", () => {
+    it("shows orphan banner when orphaned conversations exist", async () => {
+      mockGetActiveAvatar.mockResolvedValue(
+        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
+      );
+      mockCheckOrphanedConversations.mockResolvedValue(["orphan-conv-1"]);
+
+      render(<AssistantView />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Welcome back! We were in the middle of a conversation."),
+        ).toBeInTheDocument();
+        expect(screen.getByText("Resume")).toBeInTheDocument();
+        expect(screen.getByText("New")).toBeInTheDocument();
+      });
+    });
+
+    it("Resume button dismisses banner and keeps conversationId", async () => {
+      mockGetActiveAvatar.mockResolvedValue(
+        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
+      );
+      mockCheckOrphanedConversations.mockResolvedValue(["orphan-conv-1"]);
+
+      render(<AssistantView />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Resume")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByText("Resume"));
+      });
+
+      // Banner should be gone
+      expect(
+        screen.queryByText("Welcome back! We were in the middle of a conversation."),
+      ).not.toBeInTheDocument();
+      // startConversation should NOT have been called (orphan short-circuits)
+      expect(mockStartConversation).not.toHaveBeenCalled();
+    });
+
+    it("New button ends orphan and starts fresh conversation", async () => {
+      mockGetActiveAvatar.mockResolvedValue(
+        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
+      );
+      mockCheckOrphanedConversations.mockResolvedValue(["orphan-conv-1"]);
+      mockStartConversation.mockResolvedValue("new-conv-1");
+
+      render(<AssistantView />);
+
+      await waitFor(() => {
+        expect(screen.getByText("New")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByText("New"));
+      });
+
+      await waitFor(() => {
+        expect(mockEndConversation).toHaveBeenCalledWith("orphan-conv-1", "a1");
+        expect(mockStartConversation).toHaveBeenCalledWith("a1");
+      });
+
+      // Banner should be gone
+      expect(
+        screen.queryByText("Welcome back! We were in the middle of a conversation."),
+      ).not.toBeInTheDocument();
+    });
+
+    it("does not show compaction banner when orphan banner is visible", async () => {
+      mockGetActiveAvatar.mockResolvedValue(
+        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
+      );
+      mockCheckOrphanedConversations.mockResolvedValue(["orphan-conv-1"]);
+      // Even if compaction checks would return data, orphan returns early before reaching them
+      mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
+
+      render(<AssistantView />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Welcome back! We were in the middle of a conversation."),
+        ).toBeInTheDocument();
+      });
+
+      // Compaction banner text should NOT be present
+      expect(
+        screen.queryByText("A previous conversation needs to be processed."),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  // ── Phase 10: Compaction Banner Tests ─────────────────────────
+
+  describe("compaction banner", () => {
+    it("shows compaction banner when pending compactions exist", async () => {
+      mockGetActiveAvatar.mockResolvedValue(
+        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
+      );
+      mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
+
+      render(<AssistantView />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("A previous conversation needs to be processed."),
+        ).toBeInTheDocument();
+        expect(screen.getByText("Compact Now")).toBeInTheDocument();
+        expect(screen.getByText("Copy Raw Data")).toBeInTheDocument();
+        expect(screen.getByText("Paste Response")).toBeInTheDocument();
+      });
+    });
+
+    it("Compact Now calls retryCompaction with correct IDs", async () => {
+      mockGetActiveAvatar.mockResolvedValue(
+        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
+      );
+      mockGetCompactionPendingConversations.mockResolvedValue([
+        ["compact-conv-1", "avatar-1"],
+      ]);
+
+      render(<AssistantView />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Compact Now")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByText("Compact Now"));
+      });
+
+      await waitFor(() => {
+        expect(mockRetryCompaction).toHaveBeenCalledWith("compact-conv-1", "avatar-1");
+      });
+    });
+
+    it("Compact Now dismisses banner on success", async () => {
+      mockGetActiveAvatar.mockResolvedValue(
+        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
+      );
+      mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
+
+      render(<AssistantView />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Compact Now")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByText("Compact Now"));
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.queryByText("A previous conversation needs to be processed."),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it("Compact Now shows error on failure", async () => {
+      mockGetActiveAvatar.mockResolvedValue(
+        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
+      );
+      mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
+      mockRetryCompaction.mockRejectedValue(new Error("API offline"));
+
+      render(<AssistantView />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Compact Now")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByText("Compact Now"));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("API offline")).toBeInTheDocument();
+      });
+    });
+
+    it("Copy Raw Data calls getCompactionRawData and clipboard", async () => {
+      mockGetActiveAvatar.mockResolvedValue(
+        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
+      );
+      mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
+      mockGetCompactionRawData.mockResolvedValue("system prompt + transcript");
+
+      // Mock navigator.clipboard
+      Object.assign(navigator, {
+        clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+      });
+
+      render(<AssistantView />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Copy Raw Data")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByText("Copy Raw Data"));
+      });
+
+      await waitFor(() => {
+        expect(mockGetCompactionRawData).toHaveBeenCalledWith("compact-conv-1");
+        expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+          "system prompt + transcript",
+        );
+      });
+    });
+
+    it("Paste Response opens modal with textarea", async () => {
+      mockGetActiveAvatar.mockResolvedValue(
+        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
+      );
+      mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
+
+      render(<AssistantView />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Paste Response")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByText("Paste Response"));
+      });
+
+      expect(screen.getByText("Paste Compaction Response")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("Paste JSON here...")).toBeInTheDocument();
+    });
+
+    it("Paste modal Apply calls applyExternalCompaction", async () => {
+      mockGetActiveAvatar.mockResolvedValue(
+        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
+      );
+      mockGetCompactionPendingConversations.mockResolvedValue([
+        ["compact-conv-1", "avatar-1"],
+      ]);
+
+      render(<AssistantView />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Paste Response")).toBeInTheDocument();
+      });
+
+      // Open modal
+      await act(async () => {
+        fireEvent.click(screen.getByText("Paste Response"));
+      });
+
+      // Type JSON
+      const textarea = screen.getByPlaceholderText("Paste JSON here...");
+      await act(async () => {
+        fireEvent.change(textarea, {
+          target: { value: '{"summary":"test","memories":[],"supersededMemories":[]}' },
+        });
+      });
+
+      // Click Apply
+      await act(async () => {
+        fireEvent.click(screen.getByText("Apply"));
+      });
+
+      await waitFor(() => {
+        expect(mockApplyExternalCompaction).toHaveBeenCalledWith(
+          "compact-conv-1",
+          "avatar-1",
+          '{"summary":"test","memories":[],"supersededMemories":[]}',
+        );
+      });
+    });
+
+    it("Paste modal shows validation error from backend inline", async () => {
+      mockGetActiveAvatar.mockResolvedValue(
+        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
+      );
+      mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
+      mockApplyExternalCompaction.mockRejectedValue(new Error("Summary cannot be empty"));
+
+      render(<AssistantView />);
+
+      // Wait for compaction banner to appear
+      await waitFor(() => {
+        expect(screen.getByText("Paste Response")).toBeInTheDocument();
+      });
+
+      // Open modal
+      fireEvent.click(screen.getByText("Paste Response"));
+      const textarea = await screen.findByPlaceholderText("Paste JSON here...");
+
+      // Type JSON and click Apply
+      fireEvent.change(textarea, {
+        target: { value: '{"summary":"","memories":[],"supersededMemories":[]}' },
+      });
+
+      // Wait for Apply button to be enabled (React must re-render with pasteValue)
+      await waitFor(() => {
+        expect(screen.getByText("Apply")).not.toBeDisabled();
+      });
+
+      // Click Apply — the mock will reject, setting compactionError
+      await act(async () => {
+        fireEvent.click(screen.getByText("Apply"));
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      // Error appears in both banner and modal (shared compactionError state)
+      await waitFor(() => {
+        expect(screen.getAllByText("Summary cannot be empty").length).toBeGreaterThan(0);
+      });
+      // Verify it's specifically in the paste modal
+      expect(
+        document.querySelector(".assistant-view__paste-modal-error"),
+      ).toHaveTextContent("Summary cannot be empty");
+    });
+
+    it("Paste modal Cancel closes without action", async () => {
+      mockGetActiveAvatar.mockResolvedValue(
+        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
+      );
+      mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
+
+      render(<AssistantView />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Paste Response")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByText("Paste Response"));
+      });
+
+      expect(screen.getByText("Paste Compaction Response")).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(screen.getByText("Cancel"));
+      });
+
+      expect(screen.queryByText("Paste Compaction Response")).not.toBeInTheDocument();
+      expect(mockApplyExternalCompaction).not.toHaveBeenCalled();
+    });
   });
 });

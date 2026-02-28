@@ -403,10 +403,27 @@ pub async fn end_conversation(
     }
 }
 
-/// Check for orphaned (un-ended, non-compacted) conversations.
-#[allow(dead_code)]
-pub fn check_orphaned_conversations(db: &CacheDb) -> Result<Vec<String>, AppError> {
-    db.get_orphaned_conversations()
+/// Check for orphaned (un-ended, non-compacted) conversations for a specific avatar.
+pub fn check_orphaned_conversations(
+    db: &CacheDb,
+    avatar_id: &str,
+) -> Result<Vec<String>, AppError> {
+    db.get_orphaned_conversations(avatar_id)
+}
+
+/// Public wrapper for format_vault_for_compaction (used by compaction raw data export).
+pub fn format_vault_for_compaction_public(vault: &[AiMemory]) -> String {
+    format_vault_for_compaction(vault)
+}
+
+/// Public wrapper for build_compaction_prompt (used by compaction raw data export).
+pub fn build_compaction_prompt_public(vault_context: &str) -> String {
+    build_compaction_prompt(vault_context)
+}
+
+/// Public wrapper for format_conversation_transcript (used by compaction raw data export).
+pub fn format_transcript_public(messages: &[AiMessage]) -> String {
+    format_conversation_transcript(messages)
 }
 
 // ── Internal Helpers ────────────────────────────────────────────────
@@ -713,7 +730,7 @@ mod tests {
         // End conv1
         db.end_ai_conversation(&conv1.id).unwrap();
 
-        let orphans = check_orphaned_conversations(&db).unwrap();
+        let orphans = check_orphaned_conversations(&db, &avatar_id).unwrap();
         assert_eq!(orphans.len(), 1);
         assert_eq!(orphans[0], conv2.id);
     }
@@ -882,5 +899,50 @@ mod tests {
             .count();
         assert!(non_system > 0);
         assert!(non_system < 30);
+    }
+
+    // ── Phase 10: Public Wrapper Tests ──────────────────────────────
+
+    #[test]
+    fn test_format_vault_for_compaction_public_matches_internal() {
+        let vault = vec![AiMemory {
+            id: "m1".into(),
+            avatar_id: "a".into(),
+            conversation_id: None,
+            content: "Likes RPGs".into(),
+            importance: 8,
+            category: "preference".into(),
+            is_system: false,
+            created_at: "2026-02-27".into(),
+            last_referenced: None,
+            superseded_by: None,
+            active: true,
+        }];
+        let internal = format_vault_for_compaction(&vault);
+        let public = format_vault_for_compaction_public(&vault);
+        assert_eq!(internal, public);
+    }
+
+    #[test]
+    fn test_build_compaction_prompt_public_matches_internal() {
+        let vault_ctx = "[id: m1] [8] Likes RPGs\n";
+        let internal = build_compaction_prompt(vault_ctx);
+        let public = build_compaction_prompt_public(vault_ctx);
+        assert_eq!(internal, public);
+    }
+
+    #[test]
+    fn test_format_transcript_public_matches_internal() {
+        let messages = vec![AiMessage {
+            id: "m1".into(),
+            conversation_id: "c1".into(),
+            role: "user".into(),
+            content: "Hello".into(),
+            created_at: "2026-02-27 10:00:00".into(),
+            token_estimate: 1,
+        }];
+        let internal = format_conversation_transcript(&messages);
+        let public = format_transcript_public(&messages);
+        assert_eq!(internal, public);
     }
 }

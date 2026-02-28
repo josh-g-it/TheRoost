@@ -483,6 +483,14 @@ export const assistantApi = {
     invoke<AiMessage[]>("get_conversation_history", { conversationId }),
   retryCompaction: (conversationId: string, avatarId: string) =>
     invoke<void>("retry_compaction", { conversationId, avatarId }),
+  checkOrphanedConversations: (avatarId: string) =>
+    invoke<string[]>("check_orphaned_conversations", { avatarId }),
+  getCompactionPendingConversations: () =>
+    invoke<[string, string][]>("get_compaction_pending_conversations"),
+  getCompactionRawData: (conversationId: string) =>
+    invoke<string>("get_compaction_raw_data", { conversationId }),
+  applyExternalCompaction: (conversationId: string, avatarId: string, jsonData: string) =>
+    invoke<void>("apply_external_compaction", { conversationId, avatarId, jsonData }),
   listAvatars: () => invoke<AiAvatar[]>("list_avatars"),
   getActiveAvatar: () => invoke<AiAvatar | null>("get_active_avatar"),
   createAvatar: (name: string, personalityId: string) =>
