@@ -474,6 +474,7 @@ export const assistantApi = {
     message: string,
     hidden?: boolean,
     actionFeedback?: string,
+    maxOutputTokens?: number,
   ) =>
     invoke<void>("send_message", {
       conversationId,
@@ -481,6 +482,7 @@ export const assistantApi = {
       message,
       hidden,
       actionFeedback,
+      maxOutputTokens,
     }),
   abandonConversation: (conversationId: string) =>
     invoke<void>("abandon_conversation", { conversationId }),

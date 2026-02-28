@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { listen } from "@tauri-apps/api/event";
 import type { AiAvatar, AiPersonality, ConversationEndedPayload } from "../../types";
@@ -60,7 +60,6 @@ export function AssistantView() {
   }, []);
 
   // Phase 10: Error recovery state
-  const [orphanedConvId, setOrphanedConvId] = useState<string | null>(null);
   const [pendingCompactionConvId, setPendingCompactionConvId] = useState<string | null>(
     null,
   );
@@ -86,13 +85,12 @@ export function AssistantView() {
           const personalityList = await assistantApi.listPersonalities();
           setPersonalities(personalityList);
 
-          // Phase 10: Check for orphaned conversations
+          // Phase 10: Silently resume orphaned conversations
           const orphans = await assistantApi.checkOrphanedConversations(avatar.id);
           if (orphans.length > 0) {
-            setOrphanedConvId(orphans[0]);
             setConversationId(orphans[0]);
             setHasConversation(true);
-            return; // Don't start a new conversation — wait for user decision
+            return; // Resume the existing conversation
           }
 
           // Phase 10: Check for pending compaction
@@ -120,14 +118,42 @@ export function AssistantView() {
     load();
   }, []);
 
-  // Listen for cross-window conversation-ended events — auto-restart on manual end
+  // Track local manual ends to prevent event handler from double-acting
+  const localManualEndRef = useRef(false);
+
+  // Handle locally-triggered conversation end (called after compaction completes)
+  const handleConversationEnd = useCallback(async () => {
+    if (!activeAvatar) return;
+    localManualEndRef.current = true;
+    try {
+      const newConvId = await assistantApi.startConversation(activeAvatar.id);
+      setConversationId(newConvId);
+      setHasConversation(true);
+    } catch (err) {
+      logger.error("AssistantView", "api", "Failed to start new conversation after end", {
+        error: getErrorMessage(err),
+      });
+      setConversationId(null);
+      setHasConversation(false);
+    }
+  }, [activeAvatar]);
+
+  // Listen for conversation-ended events (cross-window manual ends + timer auto-ends)
   useEffect(() => {
     const unlisten = listen<ConversationEndedPayload>(
       "ai-conversation-ended",
       async (event) => {
         const { conversationId: endedConvId, reason } = event.payload;
         if (endedConvId !== conversationId) return;
+
+        // Skip if this was a locally-triggered manual end (handled by onConversationEnd)
+        if (reason === "manual" && localManualEndRef.current) {
+          localManualEndRef.current = false;
+          return;
+        }
+
         if (reason === "manual" && activeAvatar) {
+          // Cross-window manual end — auto-restart
           try {
             const newConvId = await assistantApi.startConversation(activeAvatar.id);
             setConversationId(newConvId);
@@ -140,6 +166,7 @@ export function AssistantView() {
             setHasConversation(false);
           }
         } else {
+          // Timer auto-end or other — go idle
           setConversationId(null);
           setHasConversation(false);
         }
@@ -218,6 +245,11 @@ export function AssistantView() {
     try {
       const avatar = await assistantApi.getActiveAvatar();
       setActiveAvatar(avatar);
+      if (!avatar) {
+        // Last avatar was deleted — clear conversation state so timer stops
+        setConversationId(null);
+        setHasConversation(false);
+      }
     } catch (err) {
       logger.error("AssistantView", "api", "Failed to refresh after avatar deletion", {
         error: getErrorMessage(err),
@@ -249,26 +281,6 @@ export function AssistantView() {
     },
     [activeAvatar, conversationId],
   );
-
-  // Phase 10: Orphan banner handlers
-  const handleOrphanResume = useCallback(() => {
-    setOrphanedConvId(null);
-  }, []);
-
-  const handleOrphanNew = useCallback(async () => {
-    if (!activeAvatar || !orphanedConvId) return;
-    try {
-      await assistantApi.endConversation(orphanedConvId, activeAvatar.id);
-      setOrphanedConvId(null);
-      const convId = await assistantApi.startConversation(activeAvatar.id);
-      setConversationId(convId);
-      setHasConversation(true);
-    } catch (err) {
-      logger.error("AssistantView", "api", "Failed to end orphaned conversation", {
-        error: getErrorMessage(err),
-      });
-    }
-  }, [activeAvatar, orphanedConvId]);
 
   // Phase 10: Compaction banner handlers
   const handleCompactNow = useCallback(async () => {
@@ -367,7 +379,7 @@ export function AssistantView() {
             />
             {hasConversation ? "In conversation" : "Idle"}
           </div>
-          {hasConversation && isActive && (
+          {hasConversation && isActive && !(isPaused && remaining === 3600) && (
             <div className="assistant-view__timer">
               {isPaused
                 ? "Timer paused (game active)"
@@ -377,31 +389,8 @@ export function AssistantView() {
         </aside>
 
         <div className="assistant-view__content">
-          {/* Phase 10: Orphan recovery banner — takes priority */}
-          {orphanedConvId && (
-            <div className="assistant-view__recovery-banner assistant-view__recovery-banner--orphan">
-              <span className="assistant-view__recovery-text">
-                Welcome back! We were in the middle of a conversation.
-              </span>
-              <div className="assistant-view__recovery-actions">
-                <button
-                  className="assistant-view__recovery-btn assistant-view__recovery-btn--primary"
-                  onClick={handleOrphanResume}
-                >
-                  Resume
-                </button>
-                <button
-                  className="assistant-view__recovery-btn"
-                  onClick={handleOrphanNew}
-                >
-                  New
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Phase 10: Compaction retry banner — only if no orphan banner */}
-          {!orphanedConvId && pendingCompactionConvId && (
+          {/* Phase 10: Compaction retry banner */}
+          {pendingCompactionConvId && (
             <div className="assistant-view__recovery-banner assistant-view__recovery-banner--compaction">
               <span className="assistant-view__recovery-text">
                 A previous conversation needs to be processed.
@@ -452,6 +441,7 @@ export function AssistantView() {
                 avatarId={activeAvatar.id}
                 conversationId={conversationId}
                 onConversationStart={handleConversationStart}
+                onConversationEnd={handleConversationEnd}
                 isFirstConversation={isFirstConversation}
                 onStaleReset={handleStaleReset}
                 pendingReview={pendingReview}

@@ -137,11 +137,6 @@
   flex-wrap: wrap;
 }
 
-.assistant-view__recovery-banner--orphan {
-  background: var(--color-surface-alt, #2a2a3e);
-  border: 1px solid var(--color-accent, #6366f1);
-}
-
 .assistant-view__recovery-banner--compaction {
   background: var(--color-warning-bg, #3a2f1e);
   border: 1px solid var(--color-warning, #f59e0b);

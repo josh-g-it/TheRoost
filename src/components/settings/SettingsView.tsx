@@ -759,6 +759,52 @@ export function SettingsView() {
                 )}
 
                 <div className="settings-view__field-row">
+                  <label className="settings-view__label">
+                    Max response length (main)
+                  </label>
+                  <input
+                    type="number"
+                    className="settings-view__number-input"
+                    min={256}
+                    max={32768}
+                    value={form.aiMaxTokensMain ?? 8192}
+                    onChange={(e) => {
+                      const val = Math.max(
+                        256,
+                        Math.min(32768, Number(e.target.value) || 8192),
+                      );
+                      setForm({ ...form, aiMaxTokensMain: val });
+                    }}
+                  />
+                  <span className="settings-view__hint">
+                    Max output tokens for the main assistant window
+                  </span>
+                </div>
+
+                <div className="settings-view__field-row">
+                  <label className="settings-view__label">
+                    Max response length (overlay)
+                  </label>
+                  <input
+                    type="number"
+                    className="settings-view__number-input"
+                    min={256}
+                    max={32768}
+                    value={form.aiMaxTokensOverlay ?? 2048}
+                    onChange={(e) => {
+                      const val = Math.max(
+                        256,
+                        Math.min(32768, Number(e.target.value) || 2048),
+                      );
+                      setForm({ ...form, aiMaxTokensOverlay: val });
+                    }}
+                  />
+                  <span className="settings-view__hint">
+                    Max output tokens for the overlay assistant
+                  </span>
+                </div>
+
+                <div className="settings-view__field-row">
                   <label className="settings-view__label">Context scope</label>
                   <select
                     className="settings-view__select"

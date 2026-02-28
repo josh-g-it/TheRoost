@@ -76,7 +76,7 @@ pub fn start_timer(
         state.conversation_id = Some(conversation_id.to_string());
         state.avatar_id = Some(avatar_id.to_string());
         state.remaining_seconds = DEFAULT_TIMEOUT_SECONDS;
-        state.is_paused = false;
+        state.is_paused = true;
         state.cancel_tx = Some(cancel_tx);
     }
 
@@ -217,11 +217,12 @@ async fn auto_end_conversation(
     Ok(())
 }
 
-/// Reset the timer back to the default timeout (called when user sends a message).
+/// Reset the timer back to the default timeout and unpause it (called when user sends a message).
 pub fn reset_timer(timer: &ConversationTimerHandle) -> Result<(), AppError> {
     let mut state = timer.lock_or_err("ConversationTimer")?;
     if state.conversation_id.is_some() {
         state.remaining_seconds = DEFAULT_TIMEOUT_SECONDS;
+        state.is_paused = false;
     }
     Ok(())
 }
@@ -303,14 +304,30 @@ mod tests {
     }
 
     #[test]
-    fn reset_timer_resets_remaining() {
+    fn reset_timer_resets_remaining_and_unpauses() {
         let timer = make_active_timer();
         {
             let mut state = timer.lock().unwrap();
             state.remaining_seconds = 100;
+            state.is_paused = true;
         }
         reset_timer(&timer).unwrap();
         let state = timer.lock().unwrap();
+        assert_eq!(state.remaining_seconds, DEFAULT_TIMEOUT_SECONDS);
+        assert!(!state.is_paused);
+    }
+
+    #[test]
+    fn reset_timer_unpauses_initial_paused_state() {
+        let timer = make_active_timer();
+        {
+            let mut state = timer.lock().unwrap();
+            // Simulate start_timer's initial paused state
+            state.is_paused = true;
+        }
+        reset_timer(&timer).unwrap();
+        let state = timer.lock().unwrap();
+        assert!(!state.is_paused);
         assert_eq!(state.remaining_seconds, DEFAULT_TIMEOUT_SECONDS);
     }
 
@@ -320,11 +337,13 @@ mod tests {
         {
             let mut state = timer.lock().unwrap();
             state.remaining_seconds = 500;
+            state.is_paused = true;
         }
         reset_timer(&timer).unwrap();
         let state = timer.lock().unwrap();
         // Should not have changed since there's no active conversation
         assert_eq!(state.remaining_seconds, 500);
+        assert!(state.is_paused);
     }
 
     #[test]

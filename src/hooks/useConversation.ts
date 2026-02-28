@@ -9,15 +9,26 @@ import type {
 import { assistantApi } from "../services/tauri";
 import { getErrorMessage } from "../utils/errors";
 import { logger } from "../utils/logger";
-import { createParserState, processChunk, finalizeStream } from "../utils/actionParser";
+import {
+  createParserState,
+  processChunk,
+  finalizeStream,
+  stripActions,
+  parseActionsFromContent,
+} from "../utils/actionParser";
 import type { StreamParserState } from "../utils/actionParser";
 
 interface UseConversationOptions {
   avatarId: string;
   conversationId: string | null;
+  maxOutputTokens?: number;
 }
 
-export function useConversation({ avatarId, conversationId }: UseConversationOptions) {
+export function useConversation({
+  avatarId,
+  conversationId,
+  maxOutputTokens,
+}: UseConversationOptions) {
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +75,10 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
         parserStateRef.current = null;
 
         setCurrentStreamText((prev) => {
-          const finalText = prev + safeText + result.displayText;
+          let finalText = prev + safeText + result.displayText;
+          // Safety-strip delimiter if parser didn't fully catch it
+          const delimIdx = finalText.indexOf("---ACTIONS---");
+          if (delimIdx >= 0) finalText = finalText.substring(0, delimIdx).trimEnd();
           setMessages((msgs) => [
             ...msgs,
             {
@@ -148,12 +162,54 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
   const loadHistory = useCallback(async (convId: string): Promise<AiMessage[]> => {
     try {
       const history = await assistantApi.getConversationHistory(convId);
-      setMessages(history);
+
+      // Strip ---ACTIONS--- from all messages for display, and re-parse
+      // actions from the last assistant message if no user message follows it.
+      let lastActionIdx = -1;
+      const cleaned = history.map((msg, i) => {
+        if (msg.role === "assistant" && msg.content.includes("---ACTIONS---")) {
+          lastActionIdx = i;
+          return { ...msg, content: stripActions(msg.content) };
+        }
+        return msg;
+      });
+
+      // If the last assistant message with actions has no subsequent user message,
+      // re-resolve the actions so the "Run Actions" button reappears.
+      if (lastActionIdx >= 0) {
+        const hasUserAfter = history
+          .slice(lastActionIdx + 1)
+          .some((m) => m.role === "user");
+        if (!hasUserAfter) {
+          const { actions } = parseActionsFromContent(history[lastActionIdx].content);
+          if (actions.length > 0) {
+            assistantApi
+              .validateAndResolveAiActions(actions)
+              .then((resolved) => {
+                if (resolved.actions.length > 0) {
+                  setPendingActions(resolved.actions);
+                }
+              })
+              .catch((err) => {
+                logger.warn(
+                  "useConversation",
+                  "ai",
+                  "Failed to re-resolve history actions",
+                  {
+                    error: getErrorMessage(err),
+                  },
+                );
+              });
+          }
+        }
+      }
+
+      setMessages(cleaned);
       logger.info("useConversation", "api", "Loaded conversation history", {
         conversationId: convId,
         messageCount: history.length,
       });
-      return history;
+      return cleaned;
     } catch (err) {
       logger.error("useConversation", "api", "Failed to load history", {
         error: getErrorMessage(err),
@@ -168,7 +224,8 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
       if (!conversationId) return;
       if (isStreamingRef.current) return;
       setError(null);
-      lastUserMessageRef.current = text;
+      // Only track non-hidden messages for retry
+      if (!options?.hidden) lastUserMessageRef.current = text;
 
       if (!options?.hidden) {
         const userMessage: AiMessage = {
@@ -193,6 +250,7 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
           text,
           options?.hidden,
           options?.actionFeedback,
+          maxOutputTokens,
         );
       } catch (err) {
         setIsStreaming(false);
@@ -203,7 +261,7 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
         });
       }
     },
-    [conversationId, avatarId],
+    [conversationId, avatarId, maxOutputTokens],
   );
 
   const retry = useCallback(async () => {
@@ -227,18 +285,10 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
     try {
       await assistantApi.endConversation(conversationId, avatarId);
       logger.info("useConversation", "api", "Conversation ended", { conversationId });
-      // Safety net: if conversationId hasn't changed after 30s, force reset
-      const savedConvId = conversationId;
-      setTimeout(() => {
-        if (convIdRef.current === savedConvId) {
-          isLocalEndRef.current = false;
-          setIsCompacting(false);
-          setIsEnded(true);
-          logger.warn("useConversation", "api", "Compaction timeout — forced reset", {
-            conversationId: savedConvId,
-          });
-        }
-      }, 30_000);
+      // Compaction is done — clear state immediately
+      isLocalEndRef.current = false;
+      setIsCompacting(false);
+      setIsEnded(true);
     } catch (err) {
       isLocalEndRef.current = false;
       setIsCompacting(false);

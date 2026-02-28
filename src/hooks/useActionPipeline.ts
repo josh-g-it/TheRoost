@@ -112,7 +112,10 @@ export function useActionPipeline({ navigate }: UseActionPipelineOptions) {
     [buildContext],
   );
 
-  // Process the pipeline from the current index
+  // Process the pipeline from the current index.
+  // Batch-executes all consecutive Tier 1 actions in a single synchronous pass
+  // so that navigation + filter actions all fire before any component unmount
+  // (from route change) can interrupt the sequence.
   useEffect(() => {
     if (state.status !== "running") return;
 
@@ -133,18 +136,25 @@ export function useActionPipeline({ navigate }: UseActionPipelineOptions) {
 
     const action = actions[currentIndex];
 
-    if (action.tier === 1) {
-      // Auto-execute Tier 1
-      const result = executeAction(action);
-      setState((prev) => ({
-        ...prev,
-        currentIndex: prev.currentIndex + 1,
-        results: [...prev.results, result],
-      }));
-    } else if (action.tier === 2) {
-      // Pause for Tier 2 confirmation
+    // Tier 2: pause for user confirmation
+    if (action.tier === 2) {
       setState((prev) => ({ ...prev, status: "paused" }));
+      return;
     }
+
+    // Tier 1: batch-execute all consecutive Tier 1 actions synchronously
+    let idx = currentIndex;
+    const batchResults: ActionResult[] = [];
+    while (idx < actions.length && actions[idx].tier === 1) {
+      batchResults.push(executeAction(actions[idx]));
+      idx++;
+    }
+
+    setState((prev) => ({
+      ...prev,
+      currentIndex: idx,
+      results: [...prev.results, ...batchResults],
+    }));
   }, [state, executeAction]);
 
   const setActions = useCallback((actions: ResolvedAction[]) => {

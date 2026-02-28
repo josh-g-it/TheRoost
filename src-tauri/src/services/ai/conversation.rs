@@ -234,6 +234,7 @@ pub async fn send_message_and_stream(
     settings: &AppSettings,
     skip_user_persist: bool,
     action_feedback: Option<&str>,
+    max_output_tokens: Option<u32>,
 ) -> Result<(), AppError> {
     // Step 1: Build context (under lock)
     let (system_prompt, mut messages) = {
@@ -268,7 +269,14 @@ pub async fn send_message_and_stream(
 
     let handle = tokio::spawn(async move {
         provider
-            .send_conversation_stream(&system_prompt, &messages, &api_key, tx, &conv_id_owned)
+            .send_conversation_stream(
+                &system_prompt,
+                &messages,
+                &api_key,
+                tx,
+                &conv_id_owned,
+                max_output_tokens,
+            )
             .await
     });
 
@@ -587,7 +595,7 @@ mod tests {
     fn test_assemble_context_includes_personality() {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
-        memory::seed_system_memories(&db, &avatar_id, "TestBot", "Josh", &TEST_KEY).unwrap();
+        memory::seed_system_memories(&db, &avatar_id, "TestBot", &TEST_KEY).unwrap();
         let conv = db.create_ai_conversation(&avatar_id).unwrap();
 
         // Insert a user message
@@ -663,7 +671,7 @@ mod tests {
     fn test_assemble_context_includes_active_game_session() {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
-        memory::seed_system_memories(&db, &avatar_id, "TestBot", "Josh", &TEST_KEY).unwrap();
+        memory::seed_system_memories(&db, &avatar_id, "TestBot", &TEST_KEY).unwrap();
         let conv = db.create_ai_conversation(&avatar_id).unwrap();
 
         // Register a game and start an active session
@@ -687,7 +695,7 @@ mod tests {
     fn test_assemble_context_no_game_session_no_activity() {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
-        memory::seed_system_memories(&db, &avatar_id, "TestBot", "Josh", &TEST_KEY).unwrap();
+        memory::seed_system_memories(&db, &avatar_id, "TestBot", &TEST_KEY).unwrap();
         let conv = db.create_ai_conversation(&avatar_id).unwrap();
 
         let enc = encrypt_field("hello", &TEST_KEY).unwrap();
@@ -846,7 +854,7 @@ mod tests {
         assert!(prompt.contains("---ACTIONS---"));
         assert!(prompt.contains("CRITICAL RULES"));
         assert!(prompt.contains("AVAILABLE ACTIONS"));
-        assert!(prompt.contains("REVIEW BEHAVIOR"));
+        // REVIEW BEHAVIOR was removed — rule #8 now enforces actions only on explicit request
         assert!(prompt.contains("EXAMPLES"));
     }
 
@@ -881,7 +889,7 @@ mod tests {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
         let conv = db.create_ai_conversation(&avatar_id).unwrap();
-        memory::seed_system_memories(&db, &avatar_id, "Bot", "User", &TEST_KEY).unwrap();
+        memory::seed_system_memories(&db, &avatar_id, "Bot", &TEST_KEY).unwrap();
 
         // Insert a system summary message
         let sys_enc = encrypt_field(

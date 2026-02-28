@@ -11,8 +11,10 @@ import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
 import { assistantApi, ratingsApi, notesApi } from "../../services/tauri";
 import { useFavoritesStore } from "../../store/favoritesSlice";
 import { useHiddenGamesStore } from "../../store/hiddenGamesSlice";
+import { useSettingsStore } from "../../store/settingsSlice";
 import { resolveExecutor } from "../../utils/commandPalette";
 import { parseReviewFromResponse } from "../../utils/reviewParser";
+import { stripActions } from "../../utils/actionParser";
 import { logger } from "../../utils/logger";
 import type { ResolvedAction, ActionResult, PaletteContext } from "../../types";
 import { AppIcon } from "../common/AppIcon";
@@ -33,6 +35,8 @@ interface AssistantChatProps {
   avatarId: string;
   conversationId: string | null;
   onConversationStart?: () => void;
+  /** Called when a locally-triggered conversation end completes (compaction done). */
+  onConversationEnd?: () => void;
   compact?: boolean;
   isFirstConversation?: boolean;
   hideEndButton?: boolean;
@@ -47,6 +51,7 @@ export function AssistantChat({
   avatarId,
   conversationId,
   onConversationStart,
+  onConversationEnd,
   compact,
   isFirstConversation,
   hideEndButton,
@@ -55,11 +60,17 @@ export function AssistantChat({
   onPendingReviewConsumed,
   navigate,
 }: AssistantChatProps) {
+  const settings = useSettingsStore((s) => s.settings);
+  const maxOutputTokens = compact
+    ? settings?.aiMaxTokensOverlay
+    : settings?.aiMaxTokensMain;
+
   const {
     messages,
     isStreaming,
     error,
     currentStreamText,
+    isEnded,
     isCompacting,
     pendingActions,
     sendMessage,
@@ -68,7 +79,7 @@ export function AssistantChat({
     loadHistory,
     injectMessage,
     clearPendingActions,
-  } = useConversation({ avatarId, conversationId });
+  } = useConversation({ avatarId, conversationId, maxOutputTokens });
 
   const noop = useCallback(() => {}, []);
   const pipeline = useActionPipeline({ navigate: navigate ?? noop });
@@ -82,6 +93,7 @@ export function AssistantChat({
   } = useSpeechRecognition();
 
   const [inputValue, setInputValue] = useState("");
+  const [stagedActions, setStagedActions] = useState<ResolvedAction[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -90,6 +102,10 @@ export function AssistantChat({
   isFirstConversationRef.current = isFirstConversation;
   const onStaleResetRef = useRef(onStaleReset);
   onStaleResetRef.current = onStaleReset;
+  const onConversationEndRef = useRef(onConversationEnd);
+  onConversationEndRef.current = onConversationEnd;
+  const isEndedRef = useRef(isEnded);
+  isEndedRef.current = isEnded;
 
   // Phase 12: Review state
   const reviewInjectedRef = useRef(false);
@@ -111,7 +127,15 @@ export function AssistantChat({
     setReviewDismissed(false);
     setShowReviewConfirm(false);
     setHistoryLoaded(false);
+    setStagedActions([]);
   }, [conversationId]);
+
+  // Notify parent when a locally-triggered conversation end completes
+  useEffect(() => {
+    if (isEnded) {
+      onConversationEndRef.current?.();
+    }
+  }, [isEnded]);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -190,13 +214,13 @@ export function AssistantChat({
     onConversationStart?.();
   }, [reviewContext, sendMessage, onConversationStart]);
 
-  // Phase 13: Feed resolved actions into the execution pipeline
+  // Phase 13: Stage resolved actions for user approval (no auto-execution)
   useEffect(() => {
     if (pendingActions.length > 0) {
-      pipeline.setActions(pendingActions);
+      setStagedActions(pendingActions);
       clearPendingActions();
     }
-  }, [pendingActions, pipeline, clearPendingActions]);
+  }, [pendingActions, clearPendingActions]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView?.({ behavior: "smooth" });
@@ -214,12 +238,30 @@ export function AssistantChat({
     // Cancel any active pipeline (adds remaining actions as canceled to feedback ref)
     pipeline.cancelAll();
     // Consume results for feedback injection, then reset pipeline
-    const feedback = serializeActionFeedback(pipeline.consumeResults());
+    const pipelineResults = pipeline.consumeResults();
+    // Create "skipped by user" results for any staged (not yet started) actions
+    const skippedResults: ActionResult[] = stagedActions.map((a) => ({
+      actionId: a.actionId,
+      originalActionId: a.originalActionId,
+      success: false,
+      error: "Skipped by user (new message sent)",
+      executedAt: new Date().toISOString(),
+    }));
+    const allResults = [...pipelineResults, ...skippedResults];
+    const feedback = serializeActionFeedback(allResults);
     pipeline.reset();
+    setStagedActions([]);
     sendMessage(text, feedback ? { actionFeedback: feedback } : undefined);
     setInputValue("");
     onConversationStart?.();
-  }, [inputValue, isStreaming, sendMessage, onConversationStart, pipeline]);
+  }, [
+    inputValue,
+    isStreaming,
+    sendMessage,
+    onConversationStart,
+    pipeline,
+    stagedActions,
+  ]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -238,6 +280,17 @@ export function AssistantChat({
       startListening();
     }
   }, [isListening, startListening, stopListening]);
+
+  // ── Run/dismiss staged actions ──────────────────────────────────
+  const handleRunActions = useCallback(() => {
+    if (stagedActions.length === 0) return;
+    pipeline.setActions(stagedActions);
+    setStagedActions([]);
+  }, [stagedActions, pipeline]);
+
+  const handleDismissActions = useCallback(() => {
+    setStagedActions([]);
+  }, []);
 
   // ── Phase 13c: Tier 2 action execution helpers ─────────────────
   const makeResult = useCallback(
@@ -406,7 +459,7 @@ export function AssistantChat({
                         remarkPlugins={[remarkGfm]}
                         components={markdownComponents}
                       >
-                        {msg.content}
+                        {stripActions(msg.content)}
                       </Markdown>
                     ) : (
                       msg.content
@@ -461,11 +514,39 @@ export function AssistantChat({
               </div>
             )}
 
+            {/* Staged actions — user must click Run or Dismiss */}
+            {stagedActions.length > 0 && pipeline.state.status === "idle" && (
+              <div className="assistant-chat__run-actions">
+                <div className="assistant-chat__run-actions-summary">
+                  {stagedActions.map((a, i) => (
+                    <span key={i} className="assistant-chat__run-actions-tag">
+                      {a.description ?? a.originalActionId}
+                    </span>
+                  ))}
+                </div>
+                <div className="assistant-chat__run-actions-buttons">
+                  <button
+                    className="assistant-chat__run-actions-btn"
+                    onClick={handleRunActions}
+                  >
+                    Run {stagedActions.length} action
+                    {stagedActions.length !== 1 ? "s" : ""}
+                  </button>
+                  <button
+                    className="assistant-chat__run-actions-dismiss"
+                    onClick={handleDismissActions}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+
             {isStreaming && (
               <div className="assistant-chat__streaming">
                 {currentStreamText ? (
                   <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                    {currentStreamText}
+                    {stripActions(currentStreamText)}
                   </Markdown>
                 ) : null}
                 <span className="assistant-chat__streaming-cursor" />
@@ -530,9 +611,15 @@ export function AssistantChat({
           {error && (
             <div className="assistant-chat__error">
               <span className="assistant-chat__error-text">{error}</span>
-              <button className="assistant-chat__retry-btn" onClick={retry}>
-                Retry
-              </button>
+              {messages.some((m) => m.role === "user") ? (
+                <button className="assistant-chat__retry-btn" onClick={retry}>
+                  Retry
+                </button>
+              ) : (
+                <button className="assistant-chat__retry-btn" onClick={endConversation}>
+                  New Conversation
+                </button>
+              )}
             </div>
           )}
 

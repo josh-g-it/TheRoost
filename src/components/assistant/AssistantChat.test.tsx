@@ -207,6 +207,7 @@ describe("AssistantChat", () => {
         expect.stringContaining("A new conversation has started"),
         true,
         undefined,
+        undefined,
       );
     });
   });
@@ -221,6 +222,7 @@ describe("AssistantChat", () => {
         "a1",
         expect.stringContaining("your very first conversation"),
         true,
+        undefined,
         undefined,
       );
     });
@@ -306,6 +308,7 @@ describe("AssistantChat", () => {
         "a1",
         expect.stringContaining("A new conversation has started"),
         true,
+        undefined,
         undefined,
       );
     });
@@ -655,5 +658,22 @@ describe("AssistantChat", () => {
 
     render(<AssistantChat avatarId="a1" conversationId="c1" />);
     expect(screen.getByText("Execute: shelf-assign:Elden Ring")).toBeInTheDocument();
+  });
+
+  // ── Staged actions / Run Actions button tests ─────────────────
+
+  it("does not auto-execute actions — no pipeline.setActions on mount", async () => {
+    // Simulate pendingActions arriving via useConversation
+    // The mock for useConversation returns pendingActions from the hook,
+    // but since we mock useActionPipeline separately, we just verify
+    // that setActions is NOT called automatically on render
+    mockPipelineState = { actions: [], currentIndex: 0, status: "idle", results: [] };
+    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Hello! How can I help you today?")).toBeInTheDocument();
+    });
+    // setActions should not have been called (no auto-execution)
+    expect(mockSetActions).not.toHaveBeenCalled();
   });
 });

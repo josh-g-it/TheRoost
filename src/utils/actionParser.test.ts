@@ -3,6 +3,8 @@ import {
   createParserState,
   processChunk,
   finalizeStream,
+  stripActions,
+  parseActionsFromContent,
   DELIMITER,
 } from "./actionParser";
 
@@ -309,5 +311,68 @@ describe("end-to-end scenarios", () => {
       stars: 5,
       text: "One of the best games I've ever played.",
     });
+  });
+});
+
+// ── stripActions tests ──────────────────────────────────────────
+
+describe("stripActions", () => {
+  it("returns content unchanged when no delimiter present", () => {
+    expect(stripActions("Hello world")).toBe("Hello world");
+  });
+
+  it("strips everything from delimiter onward", () => {
+    const content = 'Some text\n---ACTIONS---\n[{"actionId":"sort:name","tier":1}]';
+    expect(stripActions(content)).toBe("Some text");
+  });
+
+  it("handles delimiter without newline prefix", () => {
+    expect(stripActions("Text---ACTIONS---leftover")).toBe("Text");
+  });
+
+  it("handles empty content before delimiter", () => {
+    expect(stripActions("---ACTIONS---stuff")).toBe("");
+  });
+});
+
+// ── parseActionsFromContent tests ───────────────────────────────
+
+describe("parseActionsFromContent", () => {
+  it("returns content unchanged when no delimiter", () => {
+    const result = parseActionsFromContent("Just a normal message");
+    expect(result.displayText).toBe("Just a normal message");
+    expect(result.actions).toEqual([]);
+  });
+
+  it("parses actions from a complete message", () => {
+    const content =
+      'Here are your RPGs!\n---ACTIONS---\n[{"actionId":"sort:playtime","tier":1},{"actionId":"genre-filter:RPG","tier":1}]';
+    const result = parseActionsFromContent(content);
+    expect(result.displayText).toBe("Here are your RPGs!");
+    expect(result.actions).toHaveLength(2);
+    expect(result.actions[0].actionId).toBe("sort:playtime");
+    expect(result.actions[1].actionId).toBe("genre-filter:RPG");
+  });
+
+  it("returns empty actions on malformed JSON", () => {
+    const content = "Some text\n---ACTIONS---\nnot valid json";
+    const result = parseActionsFromContent(content);
+    expect(result.displayText).toBe("Some text");
+    expect(result.actions).toEqual([]);
+  });
+
+  it("filters entries missing required fields", () => {
+    const content =
+      'Text\n---ACTIONS---\n[{"actionId":"sort:name","tier":1},{"bad":"entry"}]';
+    const result = parseActionsFromContent(content);
+    expect(result.actions).toHaveLength(1);
+    expect(result.actions[0].actionId).toBe("sort:name");
+  });
+
+  it("returns empty actions when delimiter is present but no JSON follows", () => {
+    const content = "Text\n---ACTIONS---\n";
+    const result = parseActionsFromContent(content);
+    expect(result.displayText).toBe("Text");
+    expect(result.actions).toEqual([]);
   });
 });

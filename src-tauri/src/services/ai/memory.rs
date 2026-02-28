@@ -142,12 +142,11 @@ pub fn prune_vault_if_needed(db: &CacheDb, avatar_id: &str) -> Result<u32, AppEr
     Ok(pruned)
 }
 
-/// Seed the 5 static system memories for a new avatar.
+/// Seed the static system memories for a new avatar.
 pub fn seed_system_memories(
     db: &CacheDb,
     avatar_id: &str,
     avatar_name: &str,
-    username: &str,
     key: &[u8; 32],
 ) -> Result<(), AppError> {
     let system_memories = [
@@ -155,12 +154,8 @@ pub fn seed_system_memories(
             "Your name is {}. You are the user's AI gaming companion in The Roost.",
             avatar_name
         ),
-        format!(
-            "The user's name is {}. Always address them by name when appropriate.",
-            username
-        ),
         "You have access to the user's game library, playtime data, and gaming preferences through context provided with each message.".to_string(),
-        "When the user asks you to perform actions (like filtering games, adding favorites, etc.), respond with the appropriate action format so the system can execute it.".to_string(),
+        "When the user asks you to perform actions (like filtering games, adding favorites, etc.), respond with the appropriate action format so the system can execute it. Always clear existing filters first (action:reset-filters) before applying new filter or sort actions.".to_string(),
         "Keep your responses conversational and gaming-focused. You're a companion, not a generic assistant.".to_string(),
     ];
 
@@ -246,14 +241,13 @@ mod tests {
     fn test_seed_system_memories() {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
-        seed_system_memories(&db, &avatar_id, "TestBot", "Josh", &TEST_KEY).unwrap();
+        seed_system_memories(&db, &avatar_id, "TestBot", &TEST_KEY).unwrap();
         let mems = load_system_memories(&db, &avatar_id, &TEST_KEY).unwrap();
-        assert_eq!(mems.len(), 5);
+        assert_eq!(mems.len(), 4);
         assert!(mems.iter().all(|m| m.is_system));
         assert!(mems.iter().all(|m| m.importance == 10));
         // Check personalization
         assert!(mems.iter().any(|m| m.content.contains("TestBot")));
-        assert!(mems.iter().any(|m| m.content.contains("Josh")));
     }
 
     #[test]
@@ -340,7 +334,7 @@ mod tests {
     fn test_prune_never_touches_system_memories() {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
-        seed_system_memories(&db, &avatar_id, "Bot", "User", &TEST_KEY).unwrap();
+        seed_system_memories(&db, &avatar_id, "Bot", &TEST_KEY).unwrap();
         for i in 0..105 {
             insert_memory(
                 &db,
@@ -356,7 +350,7 @@ mod tests {
         }
         prune_vault_if_needed(&db, &avatar_id).unwrap();
         let system = load_system_memories(&db, &avatar_id, &TEST_KEY).unwrap();
-        assert_eq!(system.len(), 5); // All 5 system memories intact
+        assert_eq!(system.len(), 4); // All 4 system memories intact
     }
 
     #[test]

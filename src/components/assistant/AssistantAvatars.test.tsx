@@ -155,7 +155,7 @@ describe("AssistantAvatars", () => {
     expect(deleteButtons).toHaveLength(1);
   });
 
-  it("delete button hidden when only 1 avatar exists", async () => {
+  it("delete button shown for last avatar (allows reset to first-run)", async () => {
     mockListAvatars.mockResolvedValue([
       makeAiAvatar("a1", { name: "Solo", personalityId: "p1", isActive: true }),
     ]);
@@ -166,7 +166,58 @@ describe("AssistantAvatars", () => {
       expect(screen.getByText("Solo")).toBeInTheDocument();
     });
 
-    expect(screen.queryByTitle("Delete this avatar")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Delete this avatar")).toBeInTheDocument();
+  });
+
+  it("last avatar delete confirmation warns about returning to setup wizard", async () => {
+    const user = userEvent.setup();
+    mockListAvatars.mockResolvedValue([
+      makeAiAvatar("a1", { name: "Solo", personalityId: "p1", isActive: true }),
+    ]);
+
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Solo")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTitle("Delete this avatar"));
+
+    expect(screen.getByText(/returned to the setup wizard/)).toBeInTheDocument();
+  });
+
+  it("deleting last avatar calls onAvatarDeleted callback", async () => {
+    const user = userEvent.setup();
+    const onDeleted = vi.fn();
+    mockListAvatars.mockResolvedValue([
+      makeAiAvatar("a1", { name: "Solo", personalityId: "p1", isActive: true }),
+    ]);
+
+    render(
+      <AssistantAvatars
+        activeAvatarId="a1"
+        onAvatarSwitch={vi.fn()}
+        onAvatarDeleted={onDeleted}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Solo")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTitle("Delete this avatar"));
+    const confirmOverlay = screen
+      .getByText(/All conversations, memories, and journal entries/)
+      .closest(".avatar-item__confirm-overlay")!;
+    const confirmBtn = confirmOverlay.querySelector(
+      ".avatar-item__confirm-btn--danger",
+    ) as HTMLElement;
+    await user.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(mockDeleteAvatar).toHaveBeenCalledWith("a1");
+      expect(onDeleted).toHaveBeenCalledWith("a1");
+    });
   });
 
   it("clicking delete shows confirmation dialog", async () => {

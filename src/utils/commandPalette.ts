@@ -609,6 +609,7 @@ export type ActionExecutor = (ctx: PaletteContext) => void;
 const EXECUTORS: Record<string, ActionExecutor> = {
   // Navigation
   "nav:library": (ctx) => {
+    useUIStore.getState().setViewMode("list");
     ctx.navigate("/library");
     ctx.closeCommandCenter();
   },
@@ -737,6 +738,7 @@ const EXECUTORS: Record<string, ActionExecutor> = {
     ui.setFilterByRated("all");
     ui.setFilterByMinRating(0);
     ui.setShowUpdatePendingOnly(false);
+    ui.setViewMode("list");
     ctx.navigate("/library");
     ctx.closeCommandCenter();
   },
@@ -980,11 +982,24 @@ export function resolveExecutor(actionId: string): ActionExecutor | null {
     };
   }
 
+  // Game detail prefix — navigate to library and open game detail panel
+  if (actionId.startsWith("game:")) {
+    const gameId = actionId.slice(5);
+    return (ctx) => {
+      const ui = useUIStore.getState();
+      ui.selectGame(gameId);
+      ctx.navigate("/library");
+      ctx.closeCommandCenter();
+    };
+  }
+
   // Search prefix — fills library search box
   if (actionId.startsWith("search:")) {
     const query = actionId.slice(7);
     return (ctx) => {
-      useUIStore.getState().setSearchQuery(query);
+      const ui = useUIStore.getState();
+      ui.setSearchQuery(query);
+      ui.setViewMode("list");
       ctx.navigate("/library");
       ctx.closeCommandCenter();
     };

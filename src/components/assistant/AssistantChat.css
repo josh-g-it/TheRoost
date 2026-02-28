@@ -406,3 +406,72 @@
   opacity: 0.9;
   background: var(--color-accent-primary);
 }
+
+/* ── Run Actions Card ─────────────────────────────────── */
+.assistant-chat__run-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+  padding: 0.75rem;
+  background: color-mix(
+    in srgb,
+    var(--color-accent-primary) 8%,
+    var(--color-bg-secondary)
+  );
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.assistant-chat__run-actions-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.assistant-chat__run-actions-tag {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  background: color-mix(in srgb, var(--color-accent-primary) 15%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.assistant-chat__run-actions-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.assistant-chat__run-actions-btn {
+  padding: 0.35rem 0.75rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-primary);
+  color: var(--color-text-on-accent, #fff);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.assistant-chat__run-actions-btn:hover {
+  opacity: 0.9;
+}
+
+.assistant-chat__run-actions-dismiss {
+  padding: 0.35rem 0.75rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.assistant-chat__run-actions-dismiss:hover {
+  background: var(--color-border-subtle);
+}

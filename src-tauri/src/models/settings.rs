@@ -39,6 +39,12 @@ fn default_cloud_ai_context_scope() -> String {
 fn default_cloud_ai_daily_limit() -> u32 {
     100
 }
+fn default_ai_max_tokens_main() -> u32 {
+    8192
+}
+fn default_ai_max_tokens_overlay() -> u32 {
+    2048
+}
 fn default_command_center_slots() -> Vec<String> {
     vec![
         "nav:library".to_string(),
@@ -152,6 +158,10 @@ pub struct AppSettings {
     pub ai_post_session_review_enabled: bool,
     #[serde(default = "default_true")]
     pub ai_conversation_auto_end_enabled: bool,
+    #[serde(default = "default_ai_max_tokens_main")]
+    pub ai_max_tokens_main: u32,
+    #[serde(default = "default_ai_max_tokens_overlay")]
+    pub ai_max_tokens_overlay: u32,
 }
 
 impl Default for AppSettings {
@@ -185,6 +195,8 @@ impl Default for AppSettings {
             cloud_ai_included_games: Vec::new(),
             ai_post_session_review_enabled: false,
             ai_conversation_auto_end_enabled: true,
+            ai_max_tokens_main: default_ai_max_tokens_main(),
+            ai_max_tokens_overlay: default_ai_max_tokens_overlay(),
         }
     }
 }

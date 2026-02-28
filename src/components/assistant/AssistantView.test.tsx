@@ -281,10 +281,10 @@ describe("AssistantView", () => {
     expect(screen.queryByText("In conversation")).not.toBeInTheDocument();
   });
 
-  // ── Phase 10: Orphan Banner Tests ──────────────────────────────
+  // ── Phase 10: Orphan Recovery Tests ──────────────────────────────
 
-  describe("orphan banner", () => {
-    it("shows orphan banner when orphaned conversations exist", async () => {
+  describe("orphan recovery", () => {
+    it("silently resumes orphaned conversation without banner", async () => {
       mockGetActiveAvatar.mockResolvedValue(
         makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
       );
@@ -292,87 +292,15 @@ describe("AssistantView", () => {
 
       render(<AssistantView />);
 
+      // Should NOT show any recovery banner
       await waitFor(() => {
-        expect(
-          screen.getByText("Welcome back! We were in the middle of a conversation."),
-        ).toBeInTheDocument();
-        expect(screen.getByText("Resume")).toBeInTheDocument();
-        expect(screen.getByText("New")).toBeInTheDocument();
+        expect(screen.getByText("Chat")).toBeInTheDocument();
       });
-    });
-
-    it("Resume button dismisses banner and keeps conversationId", async () => {
-      mockGetActiveAvatar.mockResolvedValue(
-        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
-      );
-      mockCheckOrphanedConversations.mockResolvedValue(["orphan-conv-1"]);
-
-      render(<AssistantView />);
-
-      await waitFor(() => {
-        expect(screen.getByText("Resume")).toBeInTheDocument();
-      });
-
-      await act(async () => {
-        fireEvent.click(screen.getByText("Resume"));
-      });
-
-      // Banner should be gone
       expect(
         screen.queryByText("Welcome back! We were in the middle of a conversation."),
       ).not.toBeInTheDocument();
-      // startConversation should NOT have been called (orphan short-circuits)
+      // startConversation should NOT have been called — orphan was silently resumed
       expect(mockStartConversation).not.toHaveBeenCalled();
-    });
-
-    it("New button ends orphan and starts fresh conversation", async () => {
-      mockGetActiveAvatar.mockResolvedValue(
-        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
-      );
-      mockCheckOrphanedConversations.mockResolvedValue(["orphan-conv-1"]);
-      mockStartConversation.mockResolvedValue("new-conv-1");
-
-      render(<AssistantView />);
-
-      await waitFor(() => {
-        expect(screen.getByText("New")).toBeInTheDocument();
-      });
-
-      await act(async () => {
-        fireEvent.click(screen.getByText("New"));
-      });
-
-      await waitFor(() => {
-        expect(mockEndConversation).toHaveBeenCalledWith("orphan-conv-1", "a1");
-        expect(mockStartConversation).toHaveBeenCalledWith("a1");
-      });
-
-      // Banner should be gone
-      expect(
-        screen.queryByText("Welcome back! We were in the middle of a conversation."),
-      ).not.toBeInTheDocument();
-    });
-
-    it("does not show compaction banner when orphan banner is visible", async () => {
-      mockGetActiveAvatar.mockResolvedValue(
-        makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
-      );
-      mockCheckOrphanedConversations.mockResolvedValue(["orphan-conv-1"]);
-      // Even if compaction checks would return data, orphan returns early before reaching them
-      mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
-
-      render(<AssistantView />);
-
-      await waitFor(() => {
-        expect(
-          screen.getByText("Welcome back! We were in the middle of a conversation."),
-        ).toBeInTheDocument();
-      });
-
-      // Compaction banner text should NOT be present
-      expect(
-        screen.queryByText("A previous conversation needs to be processed."),
-      ).not.toBeInTheDocument();
     });
   });
 

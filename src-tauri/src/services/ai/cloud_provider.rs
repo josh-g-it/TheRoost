@@ -50,6 +50,7 @@ pub trait CloudProviderApi: Send + Sync {
         api_key: &str,
         chunk_tx: tokio::sync::mpsc::Sender<StreamChunk>,
         conversation_id: &str,
+        max_output_tokens: Option<u32>,
     ) -> Pin<Box<dyn Future<Output = Result<String, AppError>> + Send + '_>>;
 
     /// Human-readable provider name.

@@ -8,6 +8,7 @@ pub struct GeminiConfig {
     pub max_output_tokens_compact: u32,
     pub temperature_chat: f32,
     pub temperature_compact: f32,
+    pub thinking_budget_chat: u32,
 }
 
 pub const GEMINI_CONFIG: GeminiConfig = GeminiConfig {
@@ -18,6 +19,7 @@ pub const GEMINI_CONFIG: GeminiConfig = GeminiConfig {
     max_output_tokens_compact: 1024,
     temperature_chat: 0.7,
     temperature_compact: 0.3,
+    thinking_budget_chat: 512,
 };
 
 #[cfg(test)]
@@ -31,6 +33,7 @@ mod tests {
         assert_eq!(GEMINI_CONFIG.max_output_tokens_compact, 1024);
         assert!((GEMINI_CONFIG.temperature_chat - 0.7).abs() < f32::EPSILON);
         assert!((GEMINI_CONFIG.temperature_compact - 0.3).abs() < f32::EPSILON);
+        assert_eq!(GEMINI_CONFIG.thinking_budget_chat, 512);
     }
 
     #[test]

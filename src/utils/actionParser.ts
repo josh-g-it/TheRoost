@@ -75,6 +75,50 @@ export function processChunk(state: StreamParserState, chunk: string): string {
 }
 
 /**
+ * Strip the `---ACTIONS---` delimiter and everything after it from a message string.
+ * Use when rendering messages that may contain unparsed action data.
+ */
+export function stripActions(content: string): string {
+  const idx = content.indexOf("---ACTIONS---");
+  return idx >= 0 ? content.substring(0, idx).trimEnd() : content;
+}
+
+/**
+ * Parse actions from a complete (non-streaming) message string.
+ * Used when loading history messages that may contain the delimiter.
+ */
+export function parseActionsFromContent(content: string): {
+  displayText: string;
+  actions: ParsedAiAction[];
+} {
+  const idx = content.indexOf("---ACTIONS---");
+  if (idx < 0) return { displayText: content, actions: [] };
+
+  const displayText = content.substring(0, idx).trimEnd();
+  const actionSection = content.substring(idx + "---ACTIONS---".length).trim();
+
+  if (!actionSection) return { displayText, actions: [] };
+
+  try {
+    const parsed: unknown = JSON.parse(actionSection);
+    if (!Array.isArray(parsed)) return { displayText, actions: [] };
+
+    const actions: ParsedAiAction[] = parsed.filter(
+      (item: unknown): item is ParsedAiAction =>
+        typeof item === "object" &&
+        item !== null &&
+        "actionId" in item &&
+        typeof (item as Record<string, unknown>).actionId === "string" &&
+        "tier" in item &&
+        typeof (item as Record<string, unknown>).tier === "number",
+    );
+    return { displayText, actions };
+  } catch {
+    return { displayText, actions: [] };
+  }
+}
+
+/**
  * Finalize the stream — flush the trailing buffer and parse action JSON.
  * Call this when the stream ends (final chunk received).
  *

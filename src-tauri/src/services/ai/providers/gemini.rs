@@ -61,6 +61,7 @@ impl CloudProviderApi for GeminiProvider {
         api_key: &str,
         chunk_tx: tokio::sync::mpsc::Sender<StreamChunk>,
         conversation_id: &str,
+        max_output_tokens: Option<u32>,
     ) -> Pin<Box<dyn Future<Output = Result<String, AppError>> + Send + '_>> {
         let system_prompt = system_prompt.to_string();
         let messages = messages.to_vec();
@@ -73,6 +74,7 @@ impl CloudProviderApi for GeminiProvider {
                 &api_key,
                 chunk_tx,
                 &conversation_id,
+                max_output_tokens,
             )
             .await
         })
@@ -197,8 +199,10 @@ async fn send_conversation_stream_impl(
     api_key: &str,
     chunk_tx: tokio::sync::mpsc::Sender<StreamChunk>,
     conversation_id: &str,
+    max_output_tokens: Option<u32>,
 ) -> Result<String, AppError> {
     let contents = build_contents(messages);
+    let tokens = max_output_tokens.unwrap_or(GEMINI_CONFIG.max_output_tokens_chat);
 
     let body = serde_json::json!({
         "systemInstruction": {
@@ -206,8 +210,11 @@ async fn send_conversation_stream_impl(
         },
         "contents": contents,
         "generationConfig": {
-            "maxOutputTokens": GEMINI_CONFIG.max_output_tokens_chat,
-            "temperature": GEMINI_CONFIG.temperature_chat
+            "maxOutputTokens": tokens,
+            "temperature": GEMINI_CONFIG.temperature_chat,
+            "thinkingConfig": {
+                "thinkingBudget": GEMINI_CONFIG.thinking_budget_chat
+            }
         }
     });
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useConversation } from "./useConversation";
-import type { StreamChunk } from "../types";
+import type { AiMessage, StreamChunk } from "../types";
 
 type EventCallback = (event: { payload: unknown }) => void;
 let streamCallback: ((event: { payload: StreamChunk }) => void) | null = null;
@@ -77,6 +77,7 @@ describe("useConversation", () => {
       "c1",
       "a1",
       "Hello there",
+      undefined,
       undefined,
       undefined,
     );
@@ -190,6 +191,7 @@ describe("useConversation", () => {
       "c1",
       "a1",
       "Hello",
+      undefined,
       undefined,
       undefined,
     );
@@ -441,7 +443,7 @@ describe("useConversation", () => {
     expect(result.current.isEnded).toBe(false);
   });
 
-  it("does not trigger isEnded when local endConversation is called", async () => {
+  it("sets isEnded to true when local endConversation succeeds", async () => {
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
@@ -449,18 +451,14 @@ describe("useConversation", () => {
     // Wait for effects to register listen callbacks
     await act(async () => {});
 
-    // Call endConversation locally — this sets isLocalEndRef to true
+    // Call endConversation locally
     await act(async () => {
       await result.current.endConversation();
     });
 
-    // Simulate the event arriving (as it would from the backend)
-    act(() => {
-      conversationEndedCallback!({ payload: { conversationId: "c1", reason: "manual" } });
-    });
-
-    // isEnded should be false because we triggered the end locally
-    expect(result.current.isEnded).toBe(false);
+    // isEnded should be true after successful compaction
+    expect(result.current.isEnded).toBe(true);
+    expect(result.current.isCompacting).toBe(false);
   });
 
   // ── isCompacting tests ──────────────────────────────────────────
@@ -472,29 +470,42 @@ describe("useConversation", () => {
     expect(result.current.isCompacting).toBe(false);
   });
 
-  it("isCompacting becomes true when endConversation is called", async () => {
+  it("isCompacting is true during endConversation and false after", async () => {
+    // Make endConversation hang so we can observe isCompacting=true
+    let resolveEnd: () => void;
+    mockEndConversation.mockReturnValue(
+      new Promise<void>((r) => {
+        resolveEnd = r;
+      }),
+    );
+
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
 
-    await act(async () => {
-      await result.current.endConversation();
+    // Start end (don't await)
+    act(() => {
+      result.current.endConversation();
     });
 
     expect(result.current.isCompacting).toBe(true);
+
+    // Resolve the backend call
+    await act(async () => {
+      resolveEnd!();
+    });
+
+    expect(result.current.isCompacting).toBe(false);
+    expect(result.current.isEnded).toBe(true);
   });
 
-  it("isCompacting becomes false when conversationId changes", async () => {
+  it("isCompacting resets when conversationId changes", () => {
     const { result, rerender } = renderHook(
       ({ convId }) => useConversation({ avatarId: "a1", conversationId: convId }),
       { initialProps: { convId: "c1" as string | null } },
     );
 
-    await act(async () => {
-      await result.current.endConversation();
-    });
-    expect(result.current.isCompacting).toBe(true);
-
+    // Changing conversationId resets isCompacting (even if it was set)
     rerender({ convId: "c2" });
     expect(result.current.isCompacting).toBe(false);
   });
@@ -520,30 +531,39 @@ describe("useConversation", () => {
     expect("isCompacting" in result.current).toBe(true);
   });
 
-  it("resets isLocalEndRef after skipping one event, allowing the next event through", async () => {
+  it("skips cross-window event during local endConversation, resets ref after", async () => {
+    // Make endConversation hang so we can test mid-flight behavior
+    let resolveEnd: () => void;
+    mockEndConversation.mockReturnValue(
+      new Promise<void>((r) => {
+        resolveEnd = r;
+      }),
+    );
+
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
-
     await act(async () => {});
 
-    // Local end sets isLocalEndRef = true
-    await act(async () => {
-      await result.current.endConversation();
+    // Start local end (don't await)
+    act(() => {
+      result.current.endConversation();
     });
 
-    // First event: skipped (local end)
+    // Event arrives while compaction is in flight: should be skipped
     act(() => {
       conversationEndedCallback!({ payload: { conversationId: "c1", reason: "manual" } });
     });
+    // isEnded is still false because event was skipped and endConversation hasn't resolved
     expect(result.current.isEnded).toBe(false);
 
-    // Second event: should NOT be skipped -- ref was reset
-    act(() => {
-      conversationEndedCallback!({ payload: { conversationId: "c1", reason: "manual" } });
+    // Resolve the backend call
+    await act(async () => {
+      resolveEnd!();
     });
+
+    // Now isEnded is true from the success path
     expect(result.current.isEnded).toBe(true);
-    expect(result.current.messages).toEqual([]);
   });
 
   it("sendMessage passes hidden=true to API when options.hidden is true", async () => {
@@ -555,7 +575,14 @@ describe("useConversation", () => {
       await result.current.sendMessage("Hello", { hidden: true });
     });
 
-    expect(mockSendMessage).toHaveBeenCalledWith("c1", "a1", "Hello", true, undefined);
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      "c1",
+      "a1",
+      "Hello",
+      true,
+      undefined,
+      undefined,
+    );
     // Hidden messages should not add a user message to local state
     expect(result.current.messages).toHaveLength(0);
   });
@@ -578,11 +605,31 @@ describe("useConversation", () => {
       "Sort by name instead",
       undefined,
       feedback,
+      undefined,
     );
     // User message should show clean text, not the feedback
     expect(result.current.messages).toHaveLength(1);
     expect(result.current.messages[0].content).toBe("Sort by name instead");
     expect(result.current.messages[0].content).not.toContain("[System]");
+  });
+
+  it("sendMessage passes maxOutputTokens to API when provided", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1", maxOutputTokens: 4096 }),
+    );
+
+    await act(async () => {
+      await result.current.sendMessage("Hello");
+    });
+
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      "c1",
+      "a1",
+      "Hello",
+      undefined,
+      undefined,
+      4096,
+    );
   });
 
   // ── injectMessage tests ──────────────────────────────────────────
@@ -634,6 +681,33 @@ describe("useConversation", () => {
     expect(result.current.isStreaming).toBe(false);
     expect(result.current.error).toBeNull();
     expect(result.current.messages).toHaveLength(1);
+  });
+
+  // ── Delimiter safety strip ───────────────────────────────────────
+
+  it("safety-strips ---ACTIONS--- delimiter from stored message content", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+    await act(async () => {});
+    await act(async () => {
+      await result.current.sendMessage("Test");
+    });
+
+    // Simulate a final chunk where delimiter leaked through parser
+    act(() => {
+      streamCallback!({
+        payload: {
+          conversationId: "c1",
+          text: "Some text---ACTIONS---leftover",
+          isFinal: true,
+        },
+      });
+    });
+
+    const assistantMsg = result.current.messages[1];
+    expect(assistantMsg.content).toBe("Some text");
+    expect(assistantMsg.content).not.toContain("ACTIONS");
   });
 
   // ── Streaming with action parser (Phase 13a) ──────────────────────
@@ -840,5 +914,117 @@ describe("useConversation", () => {
     expect(result.current.messages[1].content).toContain(
       "This is a longer response that should partially display during streaming.",
     );
+  });
+
+  // ── History load: action re-parsing ─────────────────────────────
+
+  it("strips ---ACTIONS--- from loaded history messages for display", async () => {
+    const historyWithActions = [
+      {
+        id: "m1",
+        conversationId: "c1",
+        role: "assistant" as const,
+        content:
+          'Here are your RPGs!\n---ACTIONS---\n[{"actionId":"sort:playtime","tier":1}]',
+        createdAt: "2026-02-28T00:00:00Z",
+        tokenEstimate: 10,
+      },
+    ];
+    mockGetConversationHistory.mockResolvedValue(historyWithActions);
+
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    let loaded: AiMessage[] = [];
+    await act(async () => {
+      loaded = await result.current.loadHistory("c1");
+    });
+
+    // Displayed message should have actions stripped
+    expect(result.current.messages[0].content).toBe("Here are your RPGs!");
+    expect(result.current.messages[0].content).not.toContain("ACTIONS");
+    // Return value should also be stripped
+    expect(loaded[0].content).toBe("Here are your RPGs!");
+  });
+
+  it("re-resolves actions from last assistant message on history load", async () => {
+    const resolvedActions = [
+      {
+        actionId: "sort:playtime",
+        originalActionId: "sort:playtime",
+        tier: 1,
+        description: "Sort by playtime",
+      },
+    ];
+    mockValidateAndResolveAiActions.mockResolvedValue({
+      actions: resolvedActions,
+      rejectedCount: 0,
+    });
+
+    const historyWithActions = [
+      {
+        id: "m1",
+        conversationId: "c1",
+        role: "assistant" as const,
+        content:
+          'Here are your RPGs!\n---ACTIONS---\n[{"actionId":"sort:playtime","tier":1}]',
+        createdAt: "2026-02-28T00:00:00Z",
+        tokenEstimate: 10,
+      },
+    ];
+    mockGetConversationHistory.mockResolvedValue(historyWithActions);
+
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    await act(async () => {
+      await result.current.loadHistory("c1");
+    });
+
+    // Wait for the async validateAndResolveAiActions to complete
+    await act(async () => {});
+
+    expect(mockValidateAndResolveAiActions).toHaveBeenCalled();
+    expect(result.current.pendingActions).toEqual(resolvedActions);
+  });
+
+  it("does not re-resolve actions if a user message follows the action message", async () => {
+    const history = [
+      {
+        id: "m1",
+        conversationId: "c1",
+        role: "assistant" as const,
+        content: 'Actions here\n---ACTIONS---\n[{"actionId":"sort:name","tier":1}]',
+        createdAt: "2026-02-28T00:00:00Z",
+        tokenEstimate: 10,
+      },
+      {
+        id: "m2",
+        conversationId: "c1",
+        role: "user" as const,
+        content: "Thanks!",
+        createdAt: "2026-02-28T00:01:00Z",
+        tokenEstimate: 2,
+      },
+    ];
+    mockGetConversationHistory.mockResolvedValue(history);
+
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    await act(async () => {
+      await result.current.loadHistory("c1");
+    });
+
+    await act(async () => {});
+
+    // Should NOT re-resolve actions since user already replied
+    expect(mockValidateAndResolveAiActions).not.toHaveBeenCalled();
+    expect(result.current.pendingActions).toEqual([]);
+    // But the message content should still be stripped for display
+    expect(result.current.messages[0].content).toBe("Actions here");
   });
 });

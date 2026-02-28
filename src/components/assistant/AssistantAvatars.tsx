@@ -221,7 +221,7 @@ export function AssistantAvatars({
                     >
                       <AppIcon name="close" size={12} /> Clear Data
                     </button>
-                    {avatar.id !== activeAvatarId && avatars.length > 1 && (
+                    {(avatar.id !== activeAvatarId || avatars.length === 1) && (
                       <button
                         className="avatar-item__action-btn avatar-item__action-btn--delete"
                         title="Delete this avatar"
@@ -239,6 +239,13 @@ export function AssistantAvatars({
                       Delete <strong>{avatar.name}</strong>? All conversations, memories,
                       and journal entries for this avatar will be permanently deleted.
                       This cannot be undone.
+                      {avatars.length === 1 && (
+                        <>
+                          {" "}
+                          You will be returned to the setup wizard to create a new
+                          assistant.
+                        </>
+                      )}
                     </p>
                     <div className="avatar-item__confirm-actions">
                       <button

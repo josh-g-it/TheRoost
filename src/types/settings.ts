@@ -57,4 +57,6 @@ export interface AppSettings {
   cloudAiIncludedGames?: string[];
   aiPostSessionReviewEnabled?: boolean;
   aiConversationAutoEndEnabled?: boolean;
+  aiMaxTokensMain?: number;
+  aiMaxTokensOverlay?: number;
 }

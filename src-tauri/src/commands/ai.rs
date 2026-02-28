@@ -271,7 +271,6 @@ pub fn create_avatar(
     name: String,
     personality_id: String,
     db: State<'_, CacheDbHandle>,
-    app_handle: tauri::AppHandle,
 ) -> Result<AiAvatar, AppError> {
     if name.trim().is_empty() {
         return Err(AppError::Validation("Avatar name cannot be empty".into()));
@@ -280,19 +279,12 @@ pub fn create_avatar(
     // Load encryption key BEFORE DB lock (keyring I/O)
     let key = encryption::load_encryption_key().ok();
 
-    // Load username from settings, fall back to "User"
-    let username = settings_store::load_settings(&app_handle)
-        .ok()
-        .and(None::<String>)
-        .unwrap_or_else(|| "User".to_string());
-
     let db = db.lock_or_err("DB")?;
     let avatar = db.create_ai_avatar(&name, &personality_id)?;
 
     // Seed system memories if encryption key is available
     if let Some(key) = &key {
-        if let Err(e) = memory::seed_system_memories(&db, &avatar.id, &avatar.name, &username, key)
-        {
+        if let Err(e) = memory::seed_system_memories(&db, &avatar.id, &avatar.name, key) {
             tracing::warn!(error = %e, "Failed to seed system memories for new avatar — they will be seeded later");
         }
     }
@@ -331,19 +323,9 @@ pub fn delete_avatar(avatar_id: String, db: State<'_, CacheDbHandle>) -> Result<
 }
 
 #[tauri::command]
-pub fn wipe_avatar_data(
-    avatar_id: String,
-    db: State<'_, CacheDbHandle>,
-    app_handle: tauri::AppHandle,
-) -> Result<(), AppError> {
+pub fn wipe_avatar_data(avatar_id: String, db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
     // Load encryption key BEFORE acquiring DB lock (keyring I/O)
     let key = encryption::load_encryption_key()?;
-
-    // Load username from settings — no username field exists yet, fall back to "User"
-    let username = settings_store::load_settings(&app_handle)
-        .ok()
-        .and(None::<String>)
-        .unwrap_or_else(|| "User".to_string());
 
     // First lock scope: get avatar name + wipe data
     let avatar_name = {
@@ -361,7 +343,7 @@ pub fn wipe_avatar_data(
     // Second lock scope: re-seed system memories
     {
         let db_guard = db.lock_or_err("DB")?;
-        memory::seed_system_memories(&db_guard, &avatar_id, &avatar_name, &username, &key)?;
+        memory::seed_system_memories(&db_guard, &avatar_id, &avatar_name, &key)?;
     }
 
     tracing::info!(
@@ -493,6 +475,7 @@ pub async fn send_message(
     message: String,
     hidden: Option<bool>,
     action_feedback: Option<String>,
+    max_output_tokens: Option<u32>,
     db: State<'_, CacheDbHandle>,
     cloud: State<'_, CloudConfigHandle>,
     app_handle: tauri::AppHandle,
@@ -532,6 +515,7 @@ pub async fn send_message(
         &settings,
         skip_user_persist,
         action_feedback.as_deref(),
+        max_output_tokens,
     )
     .await?;
 
@@ -584,7 +568,6 @@ pub async fn end_conversation(
     conversation_id: String,
     avatar_id: String,
     db: State<'_, CacheDbHandle>,
-    cloud: State<'_, CloudConfigHandle>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), AppError> {
     // Stop inactivity timer before ending conversation (safe: try_state returns None in tests)
@@ -595,13 +578,11 @@ pub async fn end_conversation(
     let settings = settings_store::load_settings(&app_handle)?;
     let key = encryption::load_encryption_key()?;
 
-    let compacted =
-        conversation::end_conversation(&db, &conversation_id, &avatar_id, &key, &settings).await?;
+    conversation::end_conversation(&db, &conversation_id, &avatar_id, &key, &settings).await?;
 
-    if compacted {
-        let mut config = cloud.lock_or_err("CloudConfig")?;
-        config.record_request();
-    }
+    // Note: compaction is an internal system operation — intentionally not counted
+    // against the daily request limit or rate limiter to avoid blocking the
+    // auto-greeting that fires immediately when the next conversation starts.
 
     // Notify all windows that this conversation has ended
     let payload = ConversationEndedPayload {
@@ -724,25 +705,16 @@ pub fn check_post_session_review(
 // ── Nuclear Wipe ────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn wipe_ai_memory(
-    db: State<'_, CacheDbHandle>,
-    app_handle: tauri::AppHandle,
-) -> Result<(), AppError> {
+pub fn wipe_ai_memory(db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
     // Load key BEFORE lock (keyring I/O)
     let key = encryption::load_encryption_key().ok();
-
-    // Load username from settings — no username field exists yet, fall back to "User"
-    let username = settings_store::load_settings(&app_handle)
-        .ok()
-        .and(None::<String>)
-        .unwrap_or_else(|| "User".to_string());
 
     let db_guard = db.lock_or_err("DB")?;
     db_guard.wipe_ai_data()?;
     // Re-seed system memories for the active avatar if one exists
     if let Some(avatar) = db_guard.get_active_ai_avatar()? {
         if let Some(key) = &key {
-            memory::seed_system_memories(&db_guard, &avatar.id, &avatar.name, &username, key)?;
+            memory::seed_system_memories(&db_guard, &avatar.id, &avatar.name, key)?;
         }
     }
     Ok(())
