@@ -275,7 +275,7 @@
 .settings-view__cloud-usage {
   display: flex;
   align-items: baseline;
-  gap: var(--space-sm);
+  justify-content: space-between;
   margin: var(--space-xs) 0 0;
 }
 
