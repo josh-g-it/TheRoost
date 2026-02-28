@@ -4,9 +4,17 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useConversation } from "../../hooks/useConversation";
 import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
-import { assistantApi } from "../../services/tauri";
+import { assistantApi, ratingsApi } from "../../services/tauri";
+import { parseReviewFromResponse } from "../../utils/reviewParser";
 import { AppIcon } from "../common/AppIcon";
+import { ReviewConfirmation } from "./ReviewConfirmation";
 import "./AssistantChat.css";
+
+interface PendingReview {
+  gameId: string;
+  gameName: string;
+  durationMinutes: number;
+}
 
 interface AssistantChatProps {
   avatarId: string;
@@ -16,6 +24,8 @@ interface AssistantChatProps {
   isFirstConversation?: boolean;
   hideEndButton?: boolean;
   onStaleReset?: () => void;
+  pendingReview?: PendingReview | null;
+  onPendingReviewConsumed?: () => void;
 }
 
 export function AssistantChat({
@@ -26,6 +36,8 @@ export function AssistantChat({
   isFirstConversation,
   hideEndButton,
   onStaleReset,
+  pendingReview,
+  onPendingReviewConsumed,
 }: AssistantChatProps) {
   const {
     messages,
@@ -37,6 +49,7 @@ export function AssistantChat({
     retry,
     endConversation,
     loadHistory,
+    injectMessage,
   } = useConversation({ avatarId, conversationId });
 
   const {
@@ -57,8 +70,26 @@ export function AssistantChat({
   const onStaleResetRef = useRef(onStaleReset);
   onStaleResetRef.current = onStaleReset;
 
+  // Phase 12: Review state
+  const reviewInjectedRef = useRef(false);
+  const [reviewContext, setReviewContext] = useState<PendingReview | null>(null);
+  const [reviewSaved, setReviewSaved] = useState(false);
+  const [reviewDismissed, setReviewDismissed] = useState(false);
+  const [showReviewConfirm, setShowReviewConfirm] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const pendingReviewRef = useRef(pendingReview);
+  pendingReviewRef.current = pendingReview;
+  const onPendingReviewConsumedRef = useRef(onPendingReviewConsumed);
+  onPendingReviewConsumedRef.current = onPendingReviewConsumed;
+
   useEffect(() => {
     introSentRef.current = false;
+    reviewInjectedRef.current = false;
+    setReviewContext(null);
+    setReviewSaved(false);
+    setReviewDismissed(false);
+    setShowReviewConfirm(false);
+    setHistoryLoaded(false);
   }, [conversationId]);
 
   useEffect(() => {
@@ -78,6 +109,7 @@ export function AssistantChat({
 
       // Step 2: Normal flow — load history and optionally send greeting
       const history = await loadHistory(conversationId!);
+      setHistoryLoaded(true);
       if (history.length === 0 && !introSentRef.current) {
         introSentRef.current = true;
         const prompt = isFirstConversationRef.current
@@ -88,6 +120,54 @@ export function AssistantChat({
     }
     loadAndGreet();
   }, [conversationId, loadHistory, sendMessage]);
+
+  // Phase 12: Handle pending review after conversation is ready
+  useEffect(() => {
+    if (!pendingReview || !conversationId || reviewInjectedRef.current || !historyLoaded)
+      return;
+    reviewInjectedRef.current = true;
+    setReviewContext(pendingReview);
+
+    const hasUserMessages = messages.some((m) => m.role === "user");
+
+    if (hasUserMessages) {
+      // Active conversation — show confirmation button instead of auto-injecting
+      setShowReviewConfirm(true);
+    } else {
+      // Fresh conversation — inject a local greeting from the assistant
+      const { gameName, durationMinutes } = pendingReview;
+      const durationDisplay =
+        durationMinutes >= 60
+          ? `${(durationMinutes / 60).toFixed(1)} hours`
+          : `${durationMinutes} minutes`;
+
+      injectMessage({
+        id: crypto.randomUUID(),
+        conversationId,
+        role: "assistant",
+        content: `You just finished playing **${gameName}** for ${durationDisplay}! What did you think? Tell me about your session and I'll help you write a review.`,
+        createdAt: new Date().toISOString(),
+        tokenEstimate: 30,
+      });
+    }
+
+    onPendingReviewConsumedRef.current?.();
+  }, [pendingReview, conversationId, messages, injectMessage, historyLoaded]);
+
+  // Phase 12: Handle review confirmation in active conversation
+  const handleReviewConfirm = useCallback(() => {
+    if (!reviewContext) return;
+    setShowReviewConfirm(false);
+    const { gameName, durationMinutes } = reviewContext;
+    const durationDisplay =
+      durationMinutes >= 60
+        ? `${(durationMinutes / 60).toFixed(1)} hours`
+        : `${durationMinutes} minutes`;
+    sendMessage(
+      `I've just finished my session of ${gameName} that lasted ${durationDisplay} and I'd like to tell you about it so you can help me leave a review.`,
+    );
+    onConversationStart?.();
+  }, [reviewContext, sendMessage, onConversationStart]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView?.({ behavior: "smooth" });
@@ -169,20 +249,89 @@ export function AssistantChat({
                 <p>Start a conversation with your assistant.</p>
               </div>
             )}
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`assistant-chat__message assistant-chat__message--${msg.role}`}
-              >
-                {msg.role === "assistant" ? (
-                  <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                    {msg.content}
-                  </Markdown>
-                ) : (
-                  msg.content
-                )}
+            {(() => {
+              // Find the last assistant message that contains a valid review
+              const lastReviewMsgId =
+                reviewContext && !reviewSaved && !reviewDismissed
+                  ? ([...messages]
+                      .reverse()
+                      .find(
+                        (m) =>
+                          m.role === "assistant" &&
+                          parseReviewFromResponse(m.content) !== null,
+                      )?.id ?? null)
+                  : null;
+
+              return messages.map((msg) => {
+                const parsed =
+                  msg.id === lastReviewMsgId
+                    ? parseReviewFromResponse(msg.content)
+                    : null;
+                return (
+                  <div
+                    key={msg.id}
+                    className={`assistant-chat__message assistant-chat__message--${msg.role}`}
+                  >
+                    {msg.role === "assistant" ? (
+                      <Markdown
+                        remarkPlugins={[remarkGfm]}
+                        components={markdownComponents}
+                      >
+                        {msg.content}
+                      </Markdown>
+                    ) : (
+                      msg.content
+                    )}
+                    {parsed && (
+                      <ReviewConfirmation
+                        gameId={reviewContext!.gameId}
+                        gameName={reviewContext!.gameName}
+                        stars={parsed.stars}
+                        reviewText={parsed.reviewText}
+                        onSave={async (gameId, stars, reviewText) => {
+                          try {
+                            await ratingsApi.saveGameRating(
+                              gameId,
+                              Math.round(stars * 2),
+                              reviewText || null,
+                            );
+                            setReviewSaved(true);
+                          } catch {
+                            // Save failed — keep ReviewConfirmation visible so user can retry
+                          }
+                        }}
+                        onSkip={() => setReviewDismissed(true)}
+                      />
+                    )}
+                  </div>
+                );
+              });
+            })()}
+
+            {/* Phase 12: Review confirmation banner for active conversations */}
+            {showReviewConfirm && reviewContext && (
+              <div className="assistant-chat__review-confirm">
+                <span className="assistant-chat__review-confirm-text">
+                  You just finished playing <strong>{reviewContext.gameName}</strong>.
+                  Want to leave a review?
+                </span>
+                <div className="assistant-chat__review-confirm-actions">
+                  <button
+                    className="assistant-chat__review-confirm-btn assistant-chat__review-confirm-btn--yes"
+                    onClick={handleReviewConfirm}
+                  >
+                    Yes, let's review
+                  </button>
+                  <button
+                    className="assistant-chat__review-confirm-btn"
+                    onClick={() => setShowReviewConfirm(false)}
+                  >
+                    Not now
+                  </button>
+                </div>
               </div>
-            ))}
+            )}
+
             {isStreaming && (
               <div className="assistant-chat__streaming">
                 {currentStreamText ? (

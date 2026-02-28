@@ -36,9 +36,9 @@ Only use action IDs from the types listed above. Use exact tag names and genre I
 }
 
 /// Format a single game line for AI context.
-/// Includes playtime, last-played date, and user rating when available:
-/// "Name (42h, last played Jan 2026, rated 4.5/5) - Genre1, Genre2 - Tag1, Tag2"
-/// Limits tags to top 3 to keep context concise.
+/// Includes playtime, last-played date, user rating, and review excerpt when available:
+/// "Name (42h, last played Jan 2026, rated 4.5/5, review: '...') - Genre1, Genre2 - Tag1, Tag2"
+/// Limits tags to top 3 and review text to ~100 chars to keep context concise.
 fn format_game_line(
     name: &str,
     genres_json: &Option<String>,
@@ -46,6 +46,7 @@ fn format_game_line(
     hours: f64,
     last_played: Option<i64>,
     user_rating: Option<u8>,
+    review_text: Option<&str>,
 ) -> String {
     let genres = genres_json
         .as_deref()
@@ -85,6 +86,18 @@ fn format_game_line(
     }
     if let Some(r) = rating_str {
         parts.push(r);
+    }
+    let review_str = review_text.filter(|t| !t.is_empty()).map(|t| {
+        let char_count = t.chars().count();
+        if char_count > 100 {
+            let truncated: String = t.chars().take(100).collect();
+            format!("review: '{truncated}...'")
+        } else {
+            format!("review: '{t}'")
+        }
+    });
+    if let Some(rv) = review_str {
+        parts.push(rv);
     }
 
     let label = if parts.is_empty() {
@@ -144,12 +157,12 @@ pub fn build_library_summary(db: &CacheDb) -> Result<String, AppError> {
         parts.push(format!("Favorites: {}", names.join(", ")));
     }
 
-    // All games with genres, tags, playtime, and user ratings
+    // All games with genres, tags, playtime, and user ratings/reviews
     let all_games = db.get_games_with_genre_tags()?;
-    let ratings_map: std::collections::HashMap<String, u8> = db
+    let ratings_map: std::collections::HashMap<String, (u8, Option<String>)> = db
         .get_all_ratings()?
         .into_iter()
-        .map(|r| (r.game_id.clone(), r.rating))
+        .map(|r| (r.game_id.clone(), (r.rating, r.review.clone())))
         .collect();
     if !all_games.is_empty() {
         let lines: Vec<String> = all_games
@@ -161,7 +174,8 @@ pub fn build_library_summary(db: &CacheDb) -> Result<String, AppError> {
                     tags,
                     *hours,
                     *lp,
-                    ratings_map.get(id).copied(),
+                    ratings_map.get(id).map(|(r, _)| *r),
+                    ratings_map.get(id).and_then(|(_, t)| t.as_deref()),
                 )
             })
             .collect();
@@ -236,12 +250,12 @@ pub fn build_filtered_library_summary(
         parts.push(format!("Favorites: {}", names.join(", ")));
     }
 
-    // Filtered games with genres, tags, playtime, and user ratings
+    // Filtered games with genres, tags, playtime, and user ratings/reviews
     let all_games = db.get_games_with_genre_tags()?;
-    let ratings_map: std::collections::HashMap<String, u8> = db
+    let ratings_map: std::collections::HashMap<String, (u8, Option<String>)> = db
         .get_all_ratings()?
         .into_iter()
-        .map(|r| (r.game_id.clone(), r.rating))
+        .map(|r| (r.game_id.clone(), (r.rating, r.review.clone())))
         .collect();
 
     // Determine which IDs are in scope
@@ -274,7 +288,8 @@ pub fn build_filtered_library_summary(
                     tags,
                     *hours,
                     *lp,
-                    ratings_map.get(id).copied(),
+                    ratings_map.get(id).map(|(r, _)| *r),
+                    ratings_map.get(id).and_then(|(_, t)| t.as_deref()),
                 )
             })
             .collect();
@@ -302,4 +317,77 @@ pub fn build_action_context(ctx: &QueryContext) -> String {
         .map(|(id, name)| format!("{name}={id}"))
         .collect();
     format!("Genre IDs: {}", genre_list.join(", "))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_game_line_includes_review_text() {
+        let line = format_game_line(
+            "Elden Ring",
+            &None,
+            &None,
+            200.0,
+            None,
+            Some(9), // 4.5/5
+            Some("Masterpiece of open-world design"),
+        );
+        assert!(line.contains("rated 4.5/5"));
+        assert!(line.contains("review: 'Masterpiece of open-world design'"));
+    }
+
+    #[test]
+    fn format_game_line_truncates_long_review() {
+        let long_review = "A".repeat(150);
+        let line = format_game_line(
+            "Game",
+            &None,
+            &None,
+            10.0,
+            None,
+            Some(8),
+            Some(&long_review),
+        );
+        assert!(line.contains("..."));
+        // Should contain the 100-char truncated prefix
+        assert!(line.contains(&"A".repeat(100)));
+    }
+
+    #[test]
+    fn format_game_line_omits_review_when_none() {
+        let line = format_game_line("Game", &None, &None, 10.0, None, Some(8), None);
+        assert!(line.contains("rated 4.0/5"));
+        assert!(!line.contains("review:"));
+    }
+
+    #[test]
+    fn format_game_line_omits_review_when_empty() {
+        let line = format_game_line("Game", &None, &None, 10.0, None, Some(8), Some(""));
+        assert!(!line.contains("review:"));
+    }
+
+    #[test]
+    fn format_game_line_includes_both_rating_and_review() {
+        let line = format_game_line(
+            "Hades",
+            &None,
+            &None,
+            50.0,
+            None,
+            Some(10), // 5.0/5
+            Some("Perfect roguelike"),
+        );
+        assert!(line.contains("rated 5.0/5"));
+        assert!(line.contains("review: 'Perfect roguelike'"));
+    }
+
+    #[test]
+    fn format_game_line_no_rating_no_review() {
+        let line = format_game_line("Game", &None, &None, 5.0, None, None, None);
+        assert!(!line.contains("rated"));
+        assert!(!line.contains("review:"));
+        assert!(line.contains("Game (5h)"));
+    }
 }

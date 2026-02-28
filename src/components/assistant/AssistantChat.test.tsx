@@ -13,6 +13,8 @@ const mockGetConversationHistory = vi.fn();
 const mockCheckConversationStale = vi.fn();
 const mockAbandonConversation = vi.fn();
 
+const mockSaveGameRating = vi.fn();
+
 vi.mock("../../services/tauri", () => ({
   assistantApi: {
     sendMessage: (...args: unknown[]) => mockSendMessage(...args),
@@ -20,6 +22,9 @@ vi.mock("../../services/tauri", () => ({
     getConversationHistory: (...args: unknown[]) => mockGetConversationHistory(...args),
     checkConversationStale: (...args: unknown[]) => mockCheckConversationStale(...args),
     abandonConversation: (...args: unknown[]) => mockAbandonConversation(...args),
+  },
+  ratingsApi: {
+    saveGameRating: (...args: unknown[]) => mockSaveGameRating(...args),
   },
 }));
 
@@ -290,5 +295,120 @@ describe("AssistantChat", () => {
     // End button should be disabled while streaming
     const endBtn = screen.getByText("End Conversation").closest("button")!;
     expect(endBtn).toBeDisabled();
+  });
+
+  // ── Post-session review tests ─────────────────────────────────
+
+  it("injects greeting for fresh conversation when pendingReview is set", async () => {
+    mockGetConversationHistory.mockResolvedValue([]);
+    // Suppress the auto-greeting by keeping intro sent
+    mockSendMessage.mockResolvedValue(undefined);
+
+    render(
+      <AssistantChat
+        avatarId="a1"
+        conversationId="c1"
+        pendingReview={{ gameId: "g1", gameName: "Elden Ring", durationMinutes: 90 }}
+        onPendingReviewConsumed={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Elden Ring/)).toBeInTheDocument();
+      expect(screen.getByText(/1\.5 hours/)).toBeInTheDocument();
+    });
+  });
+
+  it("does not inject greeting when pendingReview is null", async () => {
+    render(<AssistantChat avatarId="a1" conversationId="c1" pendingReview={null} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Hello! How can I help you today?")).toBeInTheDocument();
+    });
+    // Should not contain any review-related text
+    expect(screen.queryByText(/Want to leave a review/)).not.toBeInTheDocument();
+  });
+
+  it("shows review confirmation banner for active conversation", async () => {
+    // History with a user message → active conversation
+    mockGetConversationHistory.mockResolvedValue([
+      existingMessage,
+      {
+        id: "m-user",
+        conversationId: "c1",
+        role: "user" as const,
+        content: "Hello AI",
+        createdAt: "2026-02-27T12:01:00Z",
+        tokenEstimate: 2,
+      },
+    ]);
+
+    render(
+      <AssistantChat
+        avatarId="a1"
+        conversationId="c1"
+        pendingReview={{ gameId: "g1", gameName: "Hades", durationMinutes: 45 }}
+        onPendingReviewConsumed={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Hades/)).toBeInTheDocument();
+      expect(screen.getByText("Yes, let's review")).toBeInTheDocument();
+      expect(screen.getByText("Not now")).toBeInTheDocument();
+    });
+  });
+
+  it("dismisses review confirmation when Not now is clicked", async () => {
+    mockGetConversationHistory.mockResolvedValue([
+      existingMessage,
+      {
+        id: "m-user",
+        conversationId: "c1",
+        role: "user" as const,
+        content: "Hello AI",
+        createdAt: "2026-02-27T12:01:00Z",
+        tokenEstimate: 2,
+      },
+    ]);
+    const user = userEvent.setup();
+
+    render(
+      <AssistantChat
+        avatarId="a1"
+        conversationId="c1"
+        pendingReview={{ gameId: "g1", gameName: "Hades", durationMinutes: 45 }}
+        onPendingReviewConsumed={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Not now")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Not now"));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Yes, let's review")).not.toBeInTheDocument();
+    });
+  });
+
+  it("calls onPendingReviewConsumed after injection", async () => {
+    mockGetConversationHistory.mockResolvedValue([]);
+    mockSendMessage.mockResolvedValue(undefined);
+    const onConsumed = vi.fn();
+
+    render(
+      <AssistantChat
+        avatarId="a1"
+        conversationId="c1"
+        pendingReview={{ gameId: "g1", gameName: "Elden Ring", durationMinutes: 90 }}
+        onPendingReviewConsumed={onConsumed}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onConsumed).toHaveBeenCalled();
+    });
   });
 });

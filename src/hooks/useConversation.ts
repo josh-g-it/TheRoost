@@ -191,6 +191,10 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
     }
   }, [conversationId, avatarId, isCompacting]);
 
+  const injectMessage = useCallback((msg: AiMessage) => {
+    setMessages((prev) => [...prev, msg]);
+  }, []);
+
   return {
     messages,
     isStreaming,
@@ -202,5 +206,6 @@ export function useConversation({ avatarId, conversationId }: UseConversationOpt
     retry,
     endConversation,
     loadHistory,
+    injectMessage,
   };
 }

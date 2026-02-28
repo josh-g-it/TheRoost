@@ -34,6 +34,7 @@ export function ReviewConfirmation({
           value={editText}
           onChange={(e) => setEditText(e.target.value)}
           autoFocus
+          maxLength={2000}
         />
       ) : (
         <p className="review-confirmation__text">{editText || "(No review text)"}</p>

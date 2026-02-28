@@ -525,4 +525,55 @@ describe("useConversation", () => {
     // Hidden messages should not add a user message to local state
     expect(result.current.messages).toHaveLength(0);
   });
+
+  // ── injectMessage tests ──────────────────────────────────────────
+
+  it("injectMessage appends message to existing messages", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    // Add a user message first
+    await act(async () => {
+      await result.current.sendMessage("Hello");
+    });
+    expect(result.current.messages).toHaveLength(1);
+
+    // Inject an assistant message
+    act(() => {
+      result.current.injectMessage({
+        id: "injected-1",
+        conversationId: "c1",
+        role: "assistant",
+        content: "Injected greeting",
+        createdAt: new Date().toISOString(),
+        tokenEstimate: 5,
+      });
+    });
+
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages[1].content).toBe("Injected greeting");
+    expect(result.current.messages[1].role).toBe("assistant");
+  });
+
+  it("injectMessage does not affect streaming state", async () => {
+    const { result } = renderHook(() =>
+      useConversation({ avatarId: "a1", conversationId: "c1" }),
+    );
+
+    act(() => {
+      result.current.injectMessage({
+        id: "injected-1",
+        conversationId: "c1",
+        role: "assistant",
+        content: "Hello!",
+        createdAt: new Date().toISOString(),
+        tokenEstimate: 2,
+      });
+    });
+
+    expect(result.current.isStreaming).toBe(false);
+    expect(result.current.error).toBeNull();
+    expect(result.current.messages).toHaveLength(1);
+  });
 });

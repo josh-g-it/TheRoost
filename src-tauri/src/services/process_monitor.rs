@@ -1,12 +1,16 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use sysinfo::{Pid, ProcessesToUpdate, System};
 use tauri::{Emitter, Manager};
 
 use crate::models::system_metrics::{ProcessMetrics, SystemMetricsSnapshot, SystemSample};
 use crate::services::cache_db::CacheDbHandle;
+
+/// Throttle: max 1 post-session review notification per hour.
+static LAST_REVIEW_NOTIFICATION: std::sync::LazyLock<Mutex<Option<Instant>>> =
+    std::sync::LazyLock::new(|| Mutex::new(None));
 
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -294,6 +298,125 @@ impl SystemMetrics {
 
 pub type SystemMetricsHandle = Arc<Mutex<SystemMetrics>>;
 
+// ── Post-session review notification ────────────────────────────────────────
+
+/// Check conditions and send a notification prompting the user to review a game.
+/// Called as a background task after session-ended events — NEVER blocks the scan cycle.
+fn try_send_review_notification(
+    app_handle: &tauri::AppHandle,
+    db: &CacheDbHandle,
+    game_id: &str,
+    duration_minutes: u32,
+) {
+    // 1. Check throttle — max 1 per hour
+    {
+        let last = LAST_REVIEW_NOTIFICATION.lock().ok();
+        if let Some(Some(instant)) = last.as_deref() {
+            if instant.elapsed() < Duration::from_secs(3600) {
+                tracing::debug!("Post-session review throttled (< 1h since last)");
+                return;
+            }
+        }
+    }
+
+    // 2. Load settings
+    let settings = match crate::services::settings_store::load_settings(app_handle) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::debug!(error = %e, "Post-session review: failed to load settings");
+            return;
+        }
+    };
+
+    // 3. Check setting is enabled
+    if !settings.ai_post_session_review_enabled {
+        return;
+    }
+
+    // 4. Check duration >= 30 minutes
+    if duration_minutes < 30 {
+        return;
+    }
+
+    // 5. Check game has no existing rating + active avatar (single lock scope)
+    let game_name = {
+        let db_guard = match db.lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+        if db_guard.get_game_rating(game_id).ok().flatten().is_some() {
+            return; // Already has a rating
+        }
+        if db_guard.get_active_ai_avatar().ok().flatten().is_none() {
+            return; // No active avatar
+        }
+        let name = db_guard
+            .get_game_name(game_id)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "your game".to_string());
+        // Truncate to prevent oversized notification text
+        if name.chars().count() > 100 {
+            name.chars().take(100).collect::<String>() + "..."
+        } else {
+            name
+        }
+    }; // db lock dropped
+
+    // 6. Check API key is configured
+    if crate::services::credential_store::load_cloud_key(&settings.cloud_ai_provider)
+        .ok()
+        .flatten()
+        .is_none()
+    {
+        return;
+    }
+
+    // 7. Format duration for display
+    let duration_display = if duration_minutes >= 60 {
+        let hours = f64::from(duration_minutes) / 60.0;
+        format!("{hours:.1} hours")
+    } else {
+        format!("{duration_minutes} minutes")
+    };
+
+    // 8. Send notification
+    use tauri_plugin_notification::NotificationExt;
+    let _ = app_handle
+        .notification()
+        .builder()
+        .title("The Roost")
+        .body(format!(
+            "You just played {game_name} for {duration_display}! Want to leave a quick review?"
+        ))
+        .show();
+
+    // 9. Record throttle timestamp
+    if let Ok(mut last) = LAST_REVIEW_NOTIFICATION.lock() {
+        *last = Some(Instant::now());
+    }
+
+    // 10. Emit event for frontend to handle
+    //     (Tauri v2 notification plugin does not support click callbacks on Windows,
+    //      so we emit immediately — the notification serves as a visual prompt while
+    //      the event drives the navigation)
+    let _ = app_handle.emit(
+        "post-session-review",
+        serde_json::json!({
+            "gameId": game_id,
+            "gameName": game_name,
+            "durationMinutes": duration_minutes,
+        }),
+    );
+
+    tracing::info!(
+        game_id = %game_id,
+        game_name = %game_name,
+        duration_minutes,
+        "Post-session review notification sent"
+    );
+}
+
 // ── Main entry point ────────────────────────────────────────────────────────
 
 /// Main entry point — spawned as a background async task.
@@ -554,8 +677,29 @@ fn scan_once(
         } // db_guard dropped here — lock released BEFORE any events or tray refresh
 
         // Now safe to emit events — listeners can freely acquire the db lock
-        for payload in events {
+        for payload in &events {
             let _ = app_handle.emit("session-update", payload);
+        }
+
+        // Post-session review notification check — spawn as background task
+        // to NEVER block the scan cycle
+        for payload in &events {
+            if payload.get("type").and_then(|v| v.as_str()) == Some("ended") {
+                if let (Some(gid), Some(dur)) = (
+                    payload.get("gameId").and_then(|v| v.as_str()),
+                    payload
+                        .get("durationMinutes")
+                        .and_then(|v| v.as_u64())
+                        .map(|d| d as u32),
+                ) {
+                    let app = app_handle.clone();
+                    let db_clone = db.clone();
+                    let gid = gid.to_string();
+                    tauri::async_runtime::spawn(async move {
+                        try_send_review_notification(&app, &db_clone, &gid, dur);
+                    });
+                }
+            }
         }
 
         // Pause/resume conversation timer based on game session transitions

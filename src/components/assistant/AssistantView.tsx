@@ -38,6 +38,25 @@ export function AssistantView() {
   const [hasConversation, setHasConversation] = useState(false);
   const [isFirstConversation, setIsFirstConversation] = useState(false);
 
+  // Phase 12: Post-session review
+  const [pendingReview, setPendingReview] = useState<{
+    gameId: string;
+    gameName: string;
+    durationMinutes: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("pendingReview");
+    if (raw) {
+      sessionStorage.removeItem("pendingReview");
+      try {
+        setPendingReview(JSON.parse(raw));
+      } catch {
+        // Invalid payload, ignore
+      }
+    }
+  }, []);
+
   // Phase 10: Error recovery state
   const [orphanedConvId, setOrphanedConvId] = useState<string | null>(null);
   const [pendingCompactionConvId, setPendingCompactionConvId] = useState<string | null>(
@@ -433,6 +452,8 @@ export function AssistantView() {
                 onConversationStart={handleConversationStart}
                 isFirstConversation={isFirstConversation}
                 onStaleReset={handleStaleReset}
+                pendingReview={pendingReview}
+                onPendingReviewConsumed={() => setPendingReview(null)}
               />
             )}
             {activeTab === "memories" && <AssistantMemories avatarId={activeAvatar.id} />}

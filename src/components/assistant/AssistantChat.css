@@ -352,3 +352,57 @@
     transform: rotate(360deg);
   }
 }
+
+/* ── Review Confirm Banner ─────────────────────────────── */
+.assistant-chat__review-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: color-mix(
+    in srgb,
+    var(--color-accent-primary) 8%,
+    var(--color-bg-secondary)
+  );
+  border: 1px solid color-mix(in srgb, var(--color-accent-primary) 25%, transparent);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+}
+
+.assistant-chat__review-confirm-text {
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.assistant-chat__review-confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.assistant-chat__review-confirm-btn {
+  padding: 0.35rem 0.75rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+  transition:
+    background var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.assistant-chat__review-confirm-btn:hover {
+  background: var(--color-border-subtle);
+}
+
+.assistant-chat__review-confirm-btn--yes {
+  background: var(--color-accent-primary);
+  color: var(--color-text-on-accent, #fff);
+}
+
+.assistant-chat__review-confirm-btn--yes:hover {
+  opacity: 0.9;
+  background: var(--color-accent-primary);
+}

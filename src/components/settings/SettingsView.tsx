@@ -568,10 +568,16 @@ export function SettingsView() {
                           "Do you want to enable Cloud AI?",
                       );
                       if (!ok) return;
+                      // Prompt for post-session reviews feature
+                      const enableReviews = window.confirm(
+                        "Post-Session Reviews: After a 30+ minute gaming session, your assistant can prompt you to share your thoughts and help write a review.\n\n" +
+                          "Would you like to enable this feature?",
+                      );
                       setForm({
                         ...form,
                         cloudAiEnabled: true,
                         cloudAiPrivacyAcknowledged: true,
+                        aiPostSessionReviewEnabled: enableReviews,
                       });
                       cloudAiApi.updateSettings(
                         true,
@@ -931,6 +937,27 @@ export function SettingsView() {
                 <p className="settings-view__field-hint">
                   Automatically end conversations after 1 hour of inactivity. When
                   disabled, conversations stay open until manually ended.
+                </p>
+
+                <div className="settings-view__field-row">
+                  <label className="settings-view__checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={form.aiPostSessionReviewEnabled ?? false}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          aiPostSessionReviewEnabled: e.target.checked,
+                        })
+                      }
+                    />
+                    Ask me to review games after playing
+                  </label>
+                </div>
+                <p className="settings-view__field-hint">
+                  After a gaming session of 30+ minutes, sends a notification prompting
+                  you to share your thoughts. Only triggers for games you haven't reviewed
+                  yet.
                 </p>
               </>
             )}
