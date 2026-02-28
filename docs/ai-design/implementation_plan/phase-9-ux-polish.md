@@ -365,7 +365,7 @@ No changes needed here for the compacting splash — the existing event flow han
 3. `AssistantView` listener fires -> sets `conversationId = null`, `hasConversation = false`
 4. `useConversation` resets `isCompacting = false` via the `conversationId` change effect
 
-However, to provide a smoother UX, auto-start a new conversation after compaction completes:
+**UX Decision (confirmed)**: When the user manually ends a conversation, auto-start a fresh one after compaction completes. This ensures the new conversation has all the latest memories and journal entries in its system prompt (Layer 3 of `assemble_context` loads them on each call). Do NOT auto-restart on timer auto-end — only on user-initiated ends.
 
 ```typescript
 // Existing ai-conversation-ended listener in AssistantView — update to auto-restart
