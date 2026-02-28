@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct RawAiAction {
     pub action_id: String,
+    #[allow(dead_code)]
     pub tier: u8,
     pub description: Option<String>,
     pub payload: Option<serde_json::Value>,

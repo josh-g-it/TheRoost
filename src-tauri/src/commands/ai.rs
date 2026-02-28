@@ -310,21 +310,20 @@ pub fn switch_avatar(avatar_id: String, db: State<'_, CacheDbHandle>) -> Result<
 pub fn delete_avatar(avatar_id: String, db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
     let db_guard = db.lock_or_err("DB")?;
 
-    // Guard: cannot delete the active avatar — must switch away first
-    if let Some(active) = db_guard.get_active_ai_avatar()? {
-        if active.id == avatar_id {
-            return Err(AppError::Validation(
-                "Cannot delete the active avatar. Switch to a different avatar first.".into(),
-            ));
-        }
-    }
-
-    // Guard: must have at least 1 avatar remaining after deletion
     let count = db_guard.count_ai_avatars()?;
-    if count <= 1 {
-        return Err(AppError::Validation(
-            "Cannot delete the last avatar.".into(),
-        ));
+
+    // Guard: cannot delete the active avatar when other avatars exist —
+    // must switch away first. But CAN delete the active avatar if it's
+    // the last one (returns user to the first-run wizard).
+    if count > 1 {
+        if let Some(active) = db_guard.get_active_ai_avatar()? {
+            if active.id == avatar_id {
+                return Err(AppError::Validation(
+                    "Cannot delete the active avatar. Switch to a different avatar first."
+                        .into(),
+                ));
+            }
+        }
     }
 
     db_guard.delete_ai_avatar(&avatar_id)?;
@@ -488,6 +487,7 @@ pub async fn start_conversation(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn send_message(
     conversation_id: String,
     avatar_id: String,
@@ -542,9 +542,12 @@ pub async fn send_message(
         config.record_request();
     }
 
-    // Reset inactivity timer (safe: try_state returns None in tests)
-    if let Some(timer) = app_handle.try_state::<ConversationTimerHandle>() {
-        let _ = conversation_timer::reset_timer(&timer);
+    // Reset inactivity timer only for real user messages — hidden messages
+    // (auto-greetings, system prompts) should not start/reset the timer.
+    if !skip_user_persist {
+        if let Some(timer) = app_handle.try_state::<ConversationTimerHandle>() {
+            let _ = conversation_timer::reset_timer(&timer);
+        }
     }
 
     Ok(())
