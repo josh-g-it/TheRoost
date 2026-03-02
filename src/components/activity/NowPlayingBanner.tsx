@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { GameSession } from "../../types";
 import "./NowPlayingBanner.css";
 
+const PLAYTIME_TICK_MS = 30_000;
+
 interface NowPlayingBannerProps {
   activeSessions: GameSession[];
   gameNames: Map<string, string>;
@@ -22,7 +24,7 @@ export function NowPlayingBanner({ activeSessions, gameNames }: NowPlayingBanner
   // Re-render every 30s to update elapsed times
   useEffect(() => {
     if (activeSessions.length === 0) return;
-    const id = setInterval(() => setTick((t) => t + 1), 30000);
+    const id = setInterval(() => setTick((t) => t + 1), PLAYTIME_TICK_MS);
     return () => clearInterval(id);
   }, [activeSessions.length]);
 

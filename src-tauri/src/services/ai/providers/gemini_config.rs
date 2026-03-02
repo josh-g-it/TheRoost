@@ -17,6 +17,13 @@ pub const GEMINI_CONFIG: GeminiConfig = GeminiConfig {
     endpoint: "https://generativelanguage.googleapis.com/v1beta",
     max_output_tokens_chat: 8192,
     max_output_tokens_compact: 1024,
+    // Temperature rationale:
+    // - Chat (0.7): Higher creativity for conversational tone, game recommendations,
+    //   and personality expression. Balances variety with coherence. Values above 0.8
+    //   produce too much randomness; below 0.5 feels robotic.
+    // - Compact (0.3): Low temperature for compaction — we need deterministic,
+    //   structured JSON output (summary + memories). Higher values risk malformed
+    //   JSON or hallucinated memory content.
     temperature_chat: 0.7,
     temperature_compact: 0.3,
     thinking_budget_chat: 512,

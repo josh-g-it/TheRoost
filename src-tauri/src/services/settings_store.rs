@@ -36,6 +36,15 @@ pub fn load_settings(app_handle: &tauri::AppHandle) -> Result<AppSettings, AppEr
     Ok(settings)
 }
 
+/// Save settings to disk with atomic rename.
+///
+/// **Last-write-wins**: Both the main window and overlay can save settings.
+/// This is acceptable because: (1) the overlay debounces saves by 300ms,
+/// reducing overlap; (2) `notify_settings_changed` causes both windows to
+/// reload from disk after every save, so stale in-memory state is short-lived;
+/// (3) the overlay only modifies panel positions/visibility — disjoint from
+/// the settings the main window edits. A versioned merge is not worth the
+/// complexity given how rarely both windows save concurrently.
 pub fn save_settings(
     app_handle: &tauri::AppHandle,
     settings: &AppSettings,

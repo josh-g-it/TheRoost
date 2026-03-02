@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { assistantApi } from "../services/tauri";
+import { useEventListener } from "./useEventListener";
 
 interface TimerTickPayload {
   remainingSeconds: number;
@@ -47,33 +47,18 @@ export function useInactivityTimer({
   }, [conversationId, avatarId]);
 
   // Listen for tick events from backend
-  useEffect(() => {
-    const unlisten = listen<TimerTickPayload>("conversation-timer-tick", (event) => {
-      setRemaining(event.payload.remainingSeconds);
-      setIsPaused(event.payload.isPaused);
-    });
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, []);
+  useEventListener<TimerTickPayload>("conversation-timer-tick", (event) => {
+    setRemaining(event.payload.remainingSeconds);
+    setIsPaused(event.payload.isPaused);
+  });
 
   // Listen for auto-ended events
-  useEffect(() => {
-    const unlisten = listen<{ conversationId: string }>(
-      "conversation-auto-ended",
-      (event) => {
-        if (event.payload.conversationId === conversationIdRef.current) {
-          setIsActive(false);
-          setRemaining(0);
-        }
-      },
-    );
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, []);
+  useEventListener<{ conversationId: string }>("conversation-auto-ended", (event) => {
+    if (event.payload.conversationId === conversationIdRef.current) {
+      setIsActive(false);
+      setRemaining(0);
+    }
+  });
 
   // resetTimer now calls the backend
   const resetTimer = useCallback(() => {

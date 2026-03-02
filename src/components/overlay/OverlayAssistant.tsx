@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { AiAvatar, AiPersonality, ConversationEndedPayload } from "../../types";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import type {
+  AiAvatar,
+  AiPersonality,
+  ActionResult,
+  ConversationEndedPayload,
+  ResolvedAction,
+} from "../../types";
 import { assistantApi } from "../../services/tauri";
+import { actionNeedsMainWindow } from "../../utils/commandPalette";
 import { getAvatarColor } from "../../utils/avatarColors";
+import { getErrorMessage } from "../../utils/errors";
+import { logger } from "../../utils/logger";
 import { AssistantChat } from "../assistant/AssistantChat";
 import "./OverlayAssistant.css";
 
@@ -18,6 +28,14 @@ export function OverlayAssistant() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(true);
   const isEndingRef = useRef(false);
+  // Ref to track current conversationId for use in focus handler (avoids stale closures)
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
+  // Ref to track current avatar for use in focus handler
+  const activeAvatarRef = useRef(activeAvatar);
+  activeAvatarRef.current = activeAvatar;
+  // Guard to prevent concurrent sync operations
+  const isSyncingRef = useRef(false);
 
   // Load avatar + start conversation on mount
   useEffect(() => {
@@ -36,8 +54,10 @@ export function OverlayAssistant() {
           setPersonalities(personalityList);
           setConversationId(convId);
         }
-      } catch {
-        // Load failed silently — will show no-avatar state
+      } catch (err) {
+        logger.warn("OverlayAssistant", "ui", "Failed to load assistant data", {
+          error: getErrorMessage(err),
+        });
       } finally {
         if (mountedRef.current) {
           setIsLoading(false);
@@ -51,33 +71,101 @@ export function OverlayAssistant() {
     };
   }, []);
 
-  // Listen for cross-window conversation-ended events — auto-restart on manual end
+  // Sync conversation state when the overlay window gains focus.
+  // This prevents stale state when the main window ends/starts a conversation
+  // while the overlay is hidden.
   useEffect(() => {
-    const unlisten = listen<ConversationEndedPayload>(
-      "ai-conversation-ended",
-      async (event) => {
-        const { conversationId: endedConvId, reason } = event.payload;
-        if (endedConvId !== conversationId) return;
-        if (reason === "manual" && activeAvatar) {
-          try {
-            const newConvId = await assistantApi.startConversation(activeAvatar.id);
-            if (mountedRef.current) {
-              setConversationId(newConvId);
-            }
-          } catch {
-            if (mountedRef.current) {
-              setConversationId(null);
+    const win = getCurrentWindow();
+    const unlisten = win.onFocusChanged(({ payload: focused }) => {
+      if (!focused || !mountedRef.current) return;
+
+      const avatar = activeAvatarRef.current;
+      if (!avatar) return;
+      if (isSyncingRef.current) return;
+      isSyncingRef.current = true;
+
+      assistantApi
+        .getActiveConversationId(avatar.id)
+        .then((rustConvId) => {
+          if (!mountedRef.current) return;
+          const localConvId = conversationIdRef.current;
+
+          if (rustConvId !== localConvId) {
+            logger.info("OverlayAssistant", "ai", "Conversation state synced on focus", {
+              from: localConvId,
+              to: rustConvId,
+            });
+            if (rustConvId) {
+              // Rust has an active conversation — adopt it
+              setConversationId(rustConvId);
+            } else {
+              // No active conversation on Rust side — start a fresh one
+              assistantApi
+                .startConversation(avatar.id)
+                .then((newId) => {
+                  if (mountedRef.current) {
+                    setConversationId(newId);
+                  }
+                })
+                .catch(() => {
+                  if (mountedRef.current) {
+                    setConversationId(null);
+                  }
+                });
             }
           }
-        } else {
-          if (mountedRef.current) {
+        })
+        .catch(() => {
+          // Sync failed silently — will retry on next focus
+        })
+        .finally(() => {
+          isSyncingRef.current = false;
+        });
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  // Listen for cross-window conversation-ended events — auto-restart on manual end
+  useEffect(() => {
+    let isMounted = true;
+    let unlistenFn: (() => void) | null = null;
+
+    listen<ConversationEndedPayload>("ai-conversation-ended", async (event) => {
+      if (!isMounted) return;
+      const { conversationId: endedConvId, reason } = event.payload;
+      if (endedConvId !== conversationId) return;
+      if (reason === "manual" && activeAvatar) {
+        try {
+          const newConvId = await assistantApi.startConversation(activeAvatar.id);
+          if (isMounted) {
+            setConversationId(newConvId);
+          }
+        } catch (err) {
+          logger.warn("OverlayAssistant", "ui", "Auto-restart after end failed", {
+            error: getErrorMessage(err),
+          });
+          if (isMounted) {
             setConversationId(null);
           }
         }
-      },
-    );
+      } else {
+        if (isMounted) {
+          setConversationId(null);
+        }
+      }
+    }).then((fn) => {
+      if (isMounted) {
+        unlistenFn = fn;
+      } else {
+        fn(); // Unmounted during setup — clean up immediately
+      }
+    });
+
     return () => {
-      unlisten.then((fn) => fn());
+      isMounted = false;
+      unlistenFn?.();
     };
   }, [conversationId, activeAvatar]);
 
@@ -113,13 +201,50 @@ export function OverlayAssistant() {
       if (mountedRef.current) {
         setConversationId(convId);
       }
-    } catch {
-      // Stale reset failed silently — next mount will retry
+    } catch (err) {
+      logger.warn("OverlayAssistant", "ui", "Stale reset failed", {
+        error: getErrorMessage(err),
+      });
     }
   }, [activeAvatar]);
 
+  const handleNavigate = useCallback((path: string) => {
+    invoke("show_main_and_navigate", { route: path }).catch((err: unknown) => {
+      logger.warn("OverlayAssistant", "ui", "Navigate to main failed", {
+        route: path,
+        error: getErrorMessage(err),
+      });
+    });
+  }, []);
+
+  // Relay Tier 1 AI actions to the main window via IPC.
+  // The overlay has isolated Zustand stores, so actions that modify UI state
+  // (sort, filter, search, game selection) must execute in the main window.
+  const executeTier1 = useCallback((action: ResolvedAction): ActionResult => {
+    invoke("overlay_execute_palette_action", {
+      actionId: action.actionId,
+      gameId: null,
+      showMain: actionNeedsMainWindow(action.actionId),
+    }).catch((err: unknown) => {
+      logger.warn("OverlayAssistant", "ai", "Failed to relay Tier 1 action", {
+        actionId: action.actionId,
+        error: getErrorMessage(err),
+      });
+    });
+    return {
+      actionId: action.actionId,
+      originalActionId: action.originalActionId,
+      success: true,
+      executedAt: new Date().toISOString(),
+    };
+  }, []);
+
   const handleOpenFullAssistant = useCallback(() => {
-    invoke("show_main_and_navigate", { route: "/assistant" }).catch(() => {});
+    invoke("show_main_and_navigate", { route: "/assistant" }).catch((err: unknown) => {
+      logger.warn("OverlayAssistant", "ui", "Failed to open full assistant", {
+        error: getErrorMessage(err),
+      });
+    });
   }, []);
 
   const handleEndConversation = useCallback(async () => {
@@ -129,8 +254,10 @@ export function OverlayAssistant() {
     try {
       await assistantApi.endConversation(conversationId, activeAvatar.id);
       setShowMore(false);
-    } catch {
-      // End conversation failed silently
+    } catch (err) {
+      logger.warn("OverlayAssistant", "ui", "Failed to end conversation", {
+        error: getErrorMessage(err),
+      });
     } finally {
       isEndingRef.current = false;
     }
@@ -193,6 +320,8 @@ export function OverlayAssistant() {
           avatarId={activeAvatar.id}
           conversationId={conversationId}
           onStaleReset={handleStaleReset}
+          navigate={handleNavigate}
+          executeTier1={executeTier1}
         />
       </div>
 

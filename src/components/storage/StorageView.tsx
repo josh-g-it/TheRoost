@@ -25,6 +25,10 @@ import { Header } from "../layout/Header";
 import { StatCard } from "../common/StatCard";
 import { ChartCard } from "../profile/ChartCard";
 import { LoadingSpinner } from "../common/LoadingSpinner";
+import {
+  UNINSTALL_RESCAN_FIRST_MS,
+  UNINSTALL_RESCAN_SECOND_MS,
+} from "../../constants/timings";
 import { AppIcon } from "../common/AppIcon";
 import "./StorageView.css";
 
@@ -183,17 +187,19 @@ function StorageBySource({
   const colors = useChartColors();
 
   // Aggregate by source
-  const bySource = new Map<string, number>();
-  for (const g of games) {
-    bySource.set(g.source, (bySource.get(g.source) ?? 0) + g.sizeBytes);
-  }
-  const data = Array.from(bySource.entries())
-    .map(([source, bytes]) => ({
-      source,
-      label: getSourceDisplayName(source as GameSource),
-      bytes,
-    }))
-    .sort((a, b) => b.bytes - a.bytes);
+  const data = useMemo(() => {
+    const bySource = new Map<string, number>();
+    for (const g of games) {
+      bySource.set(g.source, (bySource.get(g.source) ?? 0) + g.sizeBytes);
+    }
+    return Array.from(bySource.entries())
+      .map(([source, bytes]) => ({
+        source,
+        label: getSourceDisplayName(source as GameSource),
+        bytes,
+      }))
+      .sort((a, b) => b.bytes - a.bytes);
+  }, [games]);
 
   if (data.length === 0) return null;
 
@@ -267,17 +273,21 @@ function GamesBySize({
 }) {
   const colors = useChartColors();
 
-  const sorted = [...games]
-    .filter((g) => g.sizeBytes > 0)
-    .sort((a, b) => b.sizeBytes - a.sizeBytes);
+  const sorted = useMemo(
+    () =>
+      [...games].filter((g) => g.sizeBytes > 0).sort((a, b) => b.sizeBytes - a.sizeBytes),
+    [games],
+  );
 
-  const visible = showAll ? sorted : sorted.slice(0, DEFAULT_VISIBLE);
-  const data = visible.map((g) => ({
-    ...g,
-    gb: Math.round((g.sizeBytes / (1024 * 1024 * 1024)) * 100) / 100,
-    label: getSourceDisplayName(g.source as GameSource),
-    color: getSourceColor(g.source),
-  }));
+  const data = useMemo(() => {
+    const visible = showAll ? sorted : sorted.slice(0, DEFAULT_VISIBLE);
+    return visible.map((g) => ({
+      ...g,
+      gb: Math.round((g.sizeBytes / (1024 * 1024 * 1024)) * 100) / 100,
+      label: getSourceDisplayName(g.source as GameSource),
+      color: getSourceColor(g.source),
+    }));
+  }, [sorted, showAll]);
 
   if (data.length === 0) return null;
 
@@ -394,6 +404,13 @@ export function StorageView() {
   } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const scanInFlight = useRef(false);
+  const uninstallTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    return () => {
+      for (const t of uninstallTimersRef.current) clearTimeout(t);
+    };
+  }, []);
 
   const runScan = useCallback(async () => {
     if (scanInFlight.current) return;
@@ -640,11 +657,16 @@ export function StorageView() {
               className="storage-view__context-item storage-view__context-item--danger"
               onClick={() => {
                 steamInstallApi.uninstallGame(contextMenu.game.sourceId);
-                setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 5000);
-                setTimeout(() => {
-                  useLibraryStore.getState().scanLocalOnly();
-                  runScan();
-                }, 30000);
+                uninstallTimersRef.current.push(
+                  setTimeout(
+                    () => useLibraryStore.getState().scanLocalOnly(),
+                    UNINSTALL_RESCAN_FIRST_MS,
+                  ),
+                  setTimeout(() => {
+                    useLibraryStore.getState().scanLocalOnly();
+                    runScan();
+                  }, UNINSTALL_RESCAN_SECOND_MS),
+                );
                 setContextMenu(null);
               }}
             >

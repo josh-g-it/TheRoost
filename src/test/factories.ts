@@ -9,7 +9,10 @@ import type {
   AiMemory,
   AiPersonality,
   AiDailyLog,
+  AiConversation,
+  ResolvedAction,
 } from "../types";
+import type { BackupManifest } from "../services/tauri";
 import type { ShelfConfig } from "../types/shelf";
 import { DEFAULT_SHELF_FILTERS } from "../types/shelf";
 
@@ -246,6 +249,68 @@ export function makeAiDailyLog(
     logDate: "2026-02-27",
     summary: `Journal entry ${id}`,
     createdAt: "2026-02-27T12:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeAiConversation(
+  id: string,
+  avatarId: string,
+  overrides?: Partial<AiConversation>,
+): AiConversation {
+  return {
+    id,
+    avatarId,
+    startedAt: "2026-02-27T12:00:00Z",
+    endedAt: null,
+    summary: null,
+    messageCount: 0,
+    compacted: 0,
+    ...overrides,
+  };
+}
+
+export interface CompactionResult {
+  summary: string;
+  journalEntry: string | null;
+  memories: { content: string; importance: number; category: string }[];
+  supersededMemories: string[];
+}
+
+export function makeCompactionResult(
+  overrides?: Partial<CompactionResult>,
+): CompactionResult {
+  return {
+    summary: "Conversation summary",
+    journalEntry: null,
+    memories: [],
+    supersededMemories: [],
+    ...overrides,
+  };
+}
+
+export function makeResolvedAction(
+  actionId: string,
+  overrides?: Partial<ResolvedAction>,
+): ResolvedAction {
+  return {
+    actionId,
+    originalActionId: actionId,
+    tier: 1,
+    ...overrides,
+  };
+}
+
+export function makeBackupManifest(overrides?: Partial<BackupManifest>): BackupManifest {
+  return {
+    appVersion: "1.12.0",
+    schemaVersion: 26,
+    createdAt: "2026-02-27T12:00:00Z",
+    dbSizeBytes: 1024000,
+    settingsSizeBytes: 2048,
+    artFileCount: 5,
+    artTotalBytes: 500000,
+    credentialHints: [],
     ...overrides,
   };
 }

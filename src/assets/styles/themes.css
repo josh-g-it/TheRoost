@@ -21,6 +21,10 @@
 /* --- UI Scale overrides (uses html[] selector for higher specificity than :root) --- */
 @import "./ui-scale.css";
 
+/* IMPORTANT: Import order matters for CSS cascade. ui-scale.css must be imported
+   BEFORE theme files so that theme color variables take precedence when both
+   selectors have equal specificity (0,1,1). */
+
 /* --- Theme files (only import *.theme.css files) --- */
 @import "./themes/dark-gaming.theme.css";
 @import "./themes/fae.theme.css";

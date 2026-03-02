@@ -25,7 +25,12 @@ pub async fn fetch_game_news(
 }
 
 #[tauri::command]
-pub async fn fetch_followed_games(api_key: String, steam_id: String) -> Result<Vec<u32>, AppError> {
+pub async fn fetch_followed_games(steam_id: String) -> Result<Vec<u32>, AppError> {
+    let api_key = crate::services::credential_store::load_api_key()?.ok_or_else(|| {
+        AppError::Credential(
+            "Steam API key not configured. Add it in Settings > Connections.".into(),
+        )
+    })?;
     news_service::fetch_followed_games(&api_key, &steam_id).await
 }
 

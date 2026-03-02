@@ -5,7 +5,7 @@ import { AppIcon } from "../common/AppIcon";
 import type { IconName } from "../../utils/icons";
 import "./OverlayAudioMixer.css";
 
-const POLL_INTERVAL_MS = 2000;
+const AUDIO_POLL_MS = 2000;
 const PEAK_THRESHOLD = 0.001;
 
 type DeviceTab = "output" | "input";
@@ -48,7 +48,7 @@ export function OverlayAudioMixer() {
   useEffect(() => {
     mountedRef.current = true;
     fetchSnapshot();
-    const id = setInterval(fetchSnapshot, POLL_INTERVAL_MS);
+    const id = setInterval(fetchSnapshot, AUDIO_POLL_MS);
     return () => {
       mountedRef.current = false;
       clearInterval(id);

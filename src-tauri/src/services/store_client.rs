@@ -7,6 +7,27 @@ use crate::utils::error::AppError;
 const STORE_API_BASE: &str = "https://store.steampowered.com/api";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Sanitize a reqwest error into an AppError::StoreApi without leaking
+/// the request URL. The Steam Store API is public (no API key), but we
+/// follow the project-wide convention of never propagating raw reqwest
+/// errors to the frontend.
+fn sanitize_store_error(err: reqwest::Error, endpoint: &str) -> AppError {
+    if err.is_timeout() {
+        AppError::StoreApi(format!("Steam Store request timed out: {endpoint}"))
+    } else if err.is_connect() {
+        AppError::StoreApi(format!("Failed to connect to Steam Store: {endpoint}"))
+    } else if let Some(status) = err.status() {
+        AppError::StoreApi(format!(
+            "Steam Store returned HTTP {} for {endpoint}",
+            status.as_u16()
+        ))
+    } else if err.is_decode() {
+        AppError::StoreApi(format!("Failed to parse Steam Store response: {endpoint}"))
+    } else {
+        AppError::StoreApi(format!("Steam Store request failed: {endpoint}"))
+    }
+}
+
 pub struct StoreClient {
     client: reqwest::Client,
 }
@@ -25,7 +46,12 @@ impl StoreClient {
     pub async fn fetch_app_details(&self, appid: u32) -> Result<Option<StoreMetadata>, AppError> {
         let url = format!("{}/appdetails?appids={}", STORE_API_BASE, appid);
 
-        let resp = self.client.get(&url).send().await?;
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| sanitize_store_error(e, "appdetails"))?;
 
         if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
             tracing::warn!(appid, "Store API rate limited (429)");
@@ -37,7 +63,10 @@ impl StoreClient {
             return Ok(None);
         }
 
-        let body: serde_json::Value = resp.json().await?;
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| sanitize_store_error(e, "appdetails"))?;
 
         // Response is keyed by appid string: { "123456": { "success": true, "data": {...} } }
         let key = appid.to_string();

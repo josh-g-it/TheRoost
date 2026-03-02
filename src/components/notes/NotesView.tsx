@@ -7,6 +7,8 @@ import type { GameNoteWithName } from "../../types";
 import { AppIcon } from "../common/AppIcon";
 import "./NotesView.css";
 
+const NOTE_AUTOSAVE_DEBOUNCE_MS = 500;
+
 function formatTimestamp(ts: number): string {
   return new Date(ts * 1000).toLocaleDateString(undefined, {
     year: "numeric",
@@ -63,7 +65,7 @@ function NoteCard({
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       onSave(note.gameId, text);
-    }, 500);
+    }, NOTE_AUTOSAVE_DEBOUNCE_MS);
   };
 
   // Cleanup timer

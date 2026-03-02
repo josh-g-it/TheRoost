@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listen } from "@tauri-apps/api/event";
 import type { AiAvatar, AiPersonality, ConversationEndedPayload } from "../../types";
 import { assistantApi } from "../../services/tauri";
 import { useInactivityTimer } from "../../hooks/useInactivityTimer";
+import { useEventListener } from "../../hooks/useEventListener";
 import { getAvatarColor } from "../../utils/avatarColors";
 import { getErrorMessage } from "../../utils/errors";
 import { logger } from "../../utils/logger";
@@ -139,43 +139,39 @@ export function AssistantView() {
   }, [activeAvatar]);
 
   // Listen for conversation-ended events (cross-window manual ends + timer auto-ends)
-  useEffect(() => {
-    const unlisten = listen<ConversationEndedPayload>(
-      "ai-conversation-ended",
-      async (event) => {
-        const { conversationId: endedConvId, reason } = event.payload;
-        if (endedConvId !== conversationId) return;
+  useEventListener<ConversationEndedPayload>(
+    "ai-conversation-ended",
+    async (event) => {
+      const { conversationId: endedConvId, reason } = event.payload;
+      if (endedConvId !== conversationId) return;
 
-        // Skip if this was a locally-triggered manual end (handled by onConversationEnd)
-        if (reason === "manual" && localManualEndRef.current) {
-          localManualEndRef.current = false;
-          return;
-        }
+      // Skip if this was a locally-triggered manual end (handled by onConversationEnd)
+      if (reason === "manual" && localManualEndRef.current) {
+        localManualEndRef.current = false;
+        return;
+      }
 
-        if (reason === "manual" && activeAvatar) {
-          // Cross-window manual end — auto-restart
-          try {
-            const newConvId = await assistantApi.startConversation(activeAvatar.id);
-            setConversationId(newConvId);
-            setHasConversation(true);
-          } catch (err) {
-            logger.error("AssistantView", "api", "Failed to auto-restart conversation", {
-              error: getErrorMessage(err),
-            });
-            setConversationId(null);
-            setHasConversation(false);
-          }
-        } else {
-          // Timer auto-end or other — go idle
+      if (reason === "manual" && activeAvatar) {
+        // Cross-window manual end — auto-restart
+        try {
+          const newConvId = await assistantApi.startConversation(activeAvatar.id);
+          setConversationId(newConvId);
+          setHasConversation(true);
+        } catch (err) {
+          logger.error("AssistantView", "api", "Failed to auto-restart conversation", {
+            error: getErrorMessage(err),
+          });
           setConversationId(null);
           setHasConversation(false);
         }
-      },
-    );
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, [conversationId, activeAvatar]);
+      } else {
+        // Timer auto-end or other — go idle
+        setConversationId(null);
+        setHasConversation(false);
+      }
+    },
+    [conversationId, activeAvatar],
+  );
 
   const handleFirstRunComplete = useCallback(
     async (_avatarId: string, convId: string) => {

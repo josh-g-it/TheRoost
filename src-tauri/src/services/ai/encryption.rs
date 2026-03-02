@@ -20,6 +20,10 @@ pub fn generate_aes_key() -> [u8; 32] {
 
 /// Encrypt a plaintext string using AES-256-GCM.
 /// Returns a base64-encoded string containing `nonce (12 bytes) || ciphertext+tag`.
+///
+/// A fresh 12-byte nonce is generated from the OS CSPRNG (`OsRng`) on every call,
+/// so identical plaintexts produce different ciphertexts. IV/nonce reuse is not
+/// possible unless the OS RNG itself is broken.
 pub fn encrypt_field(plaintext: &str, key: &[u8; 32]) -> Result<String, AppError> {
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|e| AppError::Encryption(format!("Cipher init failed: {e}")))?;

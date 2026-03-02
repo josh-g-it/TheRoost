@@ -15,8 +15,12 @@ static LAST_REVIEW_NOTIFICATION: std::sync::LazyLock<Mutex<Option<Instant>>> =
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 /// How often to reload install paths / exe cache from DB (in scan cycles).
-/// 12 cycles × 5 seconds = 60 seconds.
-const CACHE_RELOAD_INTERVAL: u32 = 12;
+/// 2 cycles × 5 seconds = 10 seconds — fast enough for newly-added games to be detected.
+const CACHE_RELOAD_INTERVAL: u32 = 2;
+
+/// How often to check for stale sessions during scanning (in scan cycles).
+/// 60 cycles × 5 seconds = 5 minutes.
+const STALE_SESSION_CHECK_INTERVAL: u32 = 60;
 
 /// Maximum number of system-wide samples to keep in the rolling buffer.
 /// 60 samples × 5 seconds = 5 minutes of history.
@@ -536,6 +540,82 @@ fn cleanup_stale_sessions(
     state.active_games = running;
 }
 
+/// Periodic lightweight stale session check — compares DB active sessions against
+/// `state.active_games` (which was already updated by the previous scan cycle).
+/// Unlike `cleanup_stale_sessions()`, this does NOT do a full process scan; it simply
+/// catches sessions that the normal start/stop transition logic may have missed
+/// (e.g., a game crashed between scans and the PID was already reaped).
+fn check_stale_sessions(
+    app_handle: &tauri::AppHandle,
+    db: &CacheDbHandle,
+    state: &ProcessMonitorState,
+) {
+    let active_sessions = {
+        let db_guard = match db.lock() {
+            Ok(g) => g,
+            Err(e) => {
+                tracing::warn!(error = %e, "DB lock poisoned during periodic stale session check");
+                return;
+            }
+        };
+        match db_guard.get_all_active_sessions() {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to get active sessions for periodic check");
+                return;
+            }
+        }
+    };
+
+    // Find sessions whose game_id is NOT in the active_games set
+    let stale: Vec<_> = active_sessions
+        .iter()
+        .filter(|s| !state.active_games.contains(&s.game_id))
+        .collect();
+
+    if stale.is_empty() {
+        return;
+    }
+
+    let now = chrono::Utc::now().timestamp();
+    let mut events: Vec<serde_json::Value> = Vec::new();
+
+    {
+        let db_guard = match db.lock() {
+            Ok(g) => g,
+            Err(e) => {
+                tracing::warn!(error = %e, "DB lock poisoned closing stale sessions");
+                return;
+            }
+        };
+
+        for session in &stale {
+            let duration = ((now - session.start_time) / 60).max(1) as u32;
+            if let Err(e) = db_guard.close_session(session.id, now, duration) {
+                tracing::warn!(session_id = session.id, error = %e, "Failed to close stale session (periodic)");
+                continue;
+            }
+            let _ = db_guard.add_manual_playtime(&session.game_id, duration);
+            tracing::warn!(
+                game_id = %session.game_id,
+                session_id = session.id,
+                duration_minutes = duration,
+                "Closed stale session during periodic scan"
+            );
+            events.push(serde_json::json!({
+                "type": "ended",
+                "gameId": session.game_id,
+                "sessionId": session.id,
+                "durationMinutes": duration
+            }));
+        }
+    } // db_guard dropped
+
+    for payload in &events {
+        let _ = app_handle.emit("session-update", payload);
+    }
+}
+
 /// One scan cycle: refresh processes, detect transitions, update sessions.
 fn scan_once(
     app_handle: &tauri::AppHandle,
@@ -560,6 +640,14 @@ fn scan_once(
                 "Process monitor caches reloaded"
             );
         }
+    }
+
+    // Periodically check for stale sessions (e.g., after a game crashes without clean exit)
+    if state
+        .scan_count
+        .is_multiple_of(STALE_SESSION_CHECK_INTERVAL)
+    {
+        check_stale_sessions(app_handle, db, state);
     }
 
     // Full process scan for game detection (session tracking)

@@ -1,3 +1,21 @@
+//! Action resolver — pure function module for fuzzy-matching game names to UUIDs.
+//!
+//! # Lock-free contract
+//!
+//! This module intentionally has **no database dependency**. All game data must
+//! be pre-loaded into a `Vec<(String, String)>` by the caller *before* invoking
+//! any function here. This ensures fuzzy matching (Jaro-Winkler over the full
+//! library) runs entirely outside any Mutex lock scope, preventing lock
+//! contention, poisoning, or deadlock under concurrent AI requests.
+//!
+//! Callers must follow this pattern:
+//! 1. Acquire the DB lock
+//! 2. Load game names into a local `Vec<(String, String)>`
+//! 3. Release the DB lock
+//! 4. Call `resolve_actions()` with the pre-loaded data
+//!
+//! See `commands::ai::validate_and_resolve_ai_actions` for the canonical example.
+
 use serde::Serialize;
 
 use super::action_validator::ValidatedAction;
@@ -58,9 +76,17 @@ fn split_action_prefix(action_id: &str) -> Option<(&str, &str)> {
 
 /// Resolve game-targeting actions by matching game names to UUIDs.
 /// Non-game actions pass through unchanged.
+///
+/// # Lock-free design
+///
+/// `game_library` must be a pre-loaded snapshot of `(game_id, name)` pairs,
+/// fetched from the database and released before calling this function.
+/// All fuzzy matching (Jaro-Winkler) runs on this local snapshot with no
+/// lock held, so it is safe to call from concurrent tasks without risk of
+/// lock contention or poisoning.
 pub fn resolve_actions(
     actions: Vec<ValidatedAction>,
-    game_library: &[(String, String)], // (game_id, name)
+    game_library: &[(String, String)], // (game_id, name) — pre-loaded, no lock held
     rejected_count: u32,
 ) -> ResolvedActionSet {
     let mut resolved = Vec::new();
@@ -127,7 +153,7 @@ pub fn resolve_actions(
 }
 
 /// Resolve a game name to a (game_id, canonical_name) pair.
-/// Uses exact match first, then Jaro-Winkler fuzzy match (0.85+ threshold).
+/// Strategy: exact match → prefix/substring match → Jaro-Winkler fuzzy match (0.82+).
 /// Rejects ambiguous matches (top two within 0.05 similarity).
 fn resolve_game_name(query: &str, library: &[(String, String)]) -> Option<(String, String)> {
     if library.is_empty() {
@@ -136,14 +162,28 @@ fn resolve_game_name(query: &str, library: &[(String, String)]) -> Option<(Strin
 
     let query_lower = query.to_lowercase();
 
-    // Exact match first (case-insensitive)
+    // 1. Exact match (case-insensitive)
     for (id, name) in library {
         if name.to_lowercase() == query_lower {
             return Some((id.clone(), name.clone()));
         }
     }
 
-    // Fuzzy match with Jaro-Winkler
+    // 2. Prefix match — handles series names like "Dark Souls" → "Dark Souls III"
+    //    If query is a prefix of exactly one game name (and covers most of the name),
+    //    accept it. Requires the query to be at least 60% of the full name length.
+    let prefix_matches: Vec<_> = library
+        .iter()
+        .filter(|(_, name)| {
+            let name_lower = name.to_lowercase();
+            name_lower.starts_with(&query_lower) && query_lower.len() >= (name_lower.len() * 3 / 5)
+        })
+        .collect();
+    if prefix_matches.len() == 1 {
+        return Some((prefix_matches[0].0.clone(), prefix_matches[0].1.clone()));
+    }
+
+    // 3. Fuzzy match with Jaro-Winkler
     let mut best_score = 0.0f64;
     let mut best_match: Option<(&str, &str)> = None;
     let mut second_best_score = 0.0f64;
@@ -159,8 +199,9 @@ fn resolve_game_name(query: &str, library: &[(String, String)]) -> Option<(Strin
         }
     }
 
-    // Threshold check
-    if best_score < 0.85 {
+    // Lower threshold from 0.85 to 0.82 — covers more natural abbreviations
+    // while still rejecting clearly different game names
+    if best_score < 0.82 {
         return None;
     }
 
@@ -356,6 +397,43 @@ mod tests {
     }
 
     #[test]
+    fn prefix_match_resolves_series_name() {
+        let library = vec![
+            ("uuid-1".to_string(), "Dark Souls III".to_string()),
+            ("uuid-2".to_string(), "Celeste".to_string()),
+        ];
+        // "Dark Souls" is a prefix of "Dark Souls III" and covers >60% of the length
+        let result = resolve_game_name("Dark Souls", &library);
+        assert!(result.is_some());
+        let (id, _) = result.unwrap();
+        assert_eq!(id, "uuid-1");
+    }
+
+    #[test]
+    fn prefix_match_rejects_too_short_prefix() {
+        let library = vec![(
+            "uuid-1".to_string(),
+            "The Elder Scrolls V: Skyrim".to_string(),
+        )];
+        // "The" is way too short a prefix
+        let result = resolve_game_name("The", &library);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn prefix_match_rejects_ambiguous_series() {
+        let library = vec![
+            ("uuid-1".to_string(), "Dark Souls".to_string()),
+            ("uuid-2".to_string(), "Dark Souls II".to_string()),
+            ("uuid-3".to_string(), "Dark Souls III".to_string()),
+        ];
+        // "Dark Souls" matches exactly, so exact match should win
+        let result = resolve_game_name("Dark Souls", &library);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().0, "uuid-1");
+    }
+
+    #[test]
     fn ambiguous_match_rejected() {
         // Create a library with two very similar names
         let library = vec![
@@ -498,5 +576,215 @@ mod tests {
         assert_eq!(result.actions[1].resolved_name.as_deref(), Some("Hades"));
         assert_eq!(result.actions[2].action_id, "sort:playtime");
         assert_eq!(result.actions[3].action_id, "game:uuid-3");
+    }
+
+    // ── Empty game name ─────────────────────────────────────────────
+
+    #[test]
+    fn test_empty_game_name_rejected() {
+        let library = make_library();
+        let actions = vec![make_validated("favorite:", 2)];
+        let result = resolve_actions(actions, &library, 0);
+        assert_eq!(result.actions.len(), 0);
+        assert_eq!(result.rejected_count, 1);
+    }
+
+    // ── Special characters in game names ────────────────────────────
+
+    #[test]
+    fn test_special_chars_in_game_name() {
+        let library = vec![
+            (
+                "uuid-tc".to_string(),
+                "Tom Clancy's Rainbow Six: Siege".to_string(),
+            ),
+            ("uuid-doom".to_string(), "DOOM (2016)".to_string()),
+        ];
+        // Exact match with apostrophe, colon, parentheses
+        let actions = vec![
+            make_validated("game:Tom Clancy's Rainbow Six: Siege", 1),
+            make_validated("favorite:DOOM (2016)", 2),
+        ];
+        let result = resolve_actions(actions, &library, 0);
+        assert_eq!(result.actions.len(), 2);
+        assert_eq!(result.rejected_count, 0);
+        assert_eq!(result.actions[0].action_id, "game:uuid-tc");
+        assert_eq!(
+            result.actions[0].resolved_name.as_deref(),
+            Some("Tom Clancy's Rainbow Six: Siege")
+        );
+        assert_eq!(result.actions[1].action_id, "favorite:uuid-doom");
+        assert_eq!(
+            result.actions[1].resolved_name.as_deref(),
+            Some("DOOM (2016)")
+        );
+    }
+
+    #[test]
+    fn test_unicode_game_name() {
+        let library = vec![(
+            "uuid-nier".to_string(),
+            "Nier: Automata\u{2122}".to_string(), // ™ symbol
+        )];
+        let actions = vec![make_validated("game:Nier: Automata\u{2122}", 1)];
+        let result = resolve_actions(actions, &library, 0);
+        assert_eq!(result.actions.len(), 1);
+        assert_eq!(result.rejected_count, 0);
+        assert_eq!(result.actions[0].action_id, "game:uuid-nier");
+        assert_eq!(
+            result.actions[0].resolved_name.as_deref(),
+            Some("Nier: Automata\u{2122}")
+        );
+    }
+
+    // ── Threshold boundary tests (0.82) ─────────────────────────────
+
+    #[test]
+    fn test_fuzzy_match_at_threshold_boundary() {
+        // "ori" vs "ore" scores ~0.822 JW — just barely above 0.82 threshold
+        let library = vec![("uuid-ore".to_string(), "Ore".to_string())];
+        let actions = vec![make_validated("game:Ori", 1)];
+        let result = resolve_actions(actions, &library, 0);
+        assert_eq!(
+            result.actions.len(),
+            1,
+            "Score just above 0.82 should resolve"
+        );
+        assert_eq!(result.actions[0].action_id, "game:uuid-ore");
+
+        // Verify the raw JW score is indeed just above 0.82
+        let score = jaro_winkler_similarity("ori", "ore");
+        assert!(
+            score >= 0.82 && score < 0.83,
+            "Expected score near 0.82 boundary, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_fuzzy_match_slightly_below_threshold() {
+        // "celeste" vs "calesto" scores ~0.769 JW — below 0.82 threshold
+        let library = vec![("uuid-x".to_string(), "Calesto".to_string())];
+        let actions = vec![make_validated("game:Celeste", 1)];
+        let result = resolve_actions(actions, &library, 0);
+        assert_eq!(
+            result.actions.len(),
+            0,
+            "Score below 0.82 should be rejected"
+        );
+        assert_eq!(result.rejected_count, 1);
+
+        // Verify the raw JW score is indeed below 0.82
+        let score = jaro_winkler_similarity("celeste", "calesto");
+        assert!(score < 0.82, "Expected score below 0.82, got {score}");
+    }
+
+    // ── No-match fallback ───────────────────────────────────────────
+
+    #[test]
+    fn test_no_match_returns_none_for_completely_unrelated() {
+        let library = make_library();
+        // "Minecraft" has no close match in the default library
+        let actions = vec![make_validated("game:Minecraft", 1)];
+        let result = resolve_actions(actions, &library, 0);
+        assert_eq!(result.actions.len(), 0);
+        assert_eq!(result.rejected_count, 1);
+    }
+
+    #[test]
+    fn test_all_game_prefixes_resolve() {
+        let library = make_library();
+        let prefixes = [
+            "game:",
+            "favorite:",
+            "rate:",
+            "review:",
+            "note:",
+            "shelf-assign:",
+            "hide:",
+        ];
+        let actions: Vec<ValidatedAction> = prefixes
+            .iter()
+            .map(|prefix| make_validated(&format!("{prefix}Elden Ring"), 2))
+            .collect();
+        let result = resolve_actions(actions, &library, 0);
+        assert_eq!(
+            result.actions.len(),
+            prefixes.len(),
+            "All game-targeting prefixes should resolve"
+        );
+        assert_eq!(result.rejected_count, 0);
+        for (i, action) in result.actions.iter().enumerate() {
+            assert_eq!(
+                action.action_id,
+                format!("{}uuid-1", prefixes[i]),
+                "Prefix '{}' should resolve to uuid-1",
+                prefixes[i]
+            );
+            assert_eq!(action.resolved_name.as_deref(), Some("Elden Ring"));
+        }
+    }
+
+    // ── Prefix match edge cases ─────────────────────────────────────
+
+    #[test]
+    fn test_prefix_match_ambiguous_two_matches() {
+        // Library with "Dark Souls II" and "Dark Souls III" but no exact "Dark Souls"
+        let library = vec![
+            ("uuid-ds2".to_string(), "Dark Souls II".to_string()),
+            ("uuid-ds3".to_string(), "Dark Souls III".to_string()),
+        ];
+        // "Dark Souls" is a prefix of both and meets the 60% length threshold for both
+        // (10 >= 13*3/5=7 and 10 >= 14*3/5=8), so prefix_matches.len() == 2 → rejected
+        let actions = vec![make_validated("game:Dark Souls", 1)];
+        let result = resolve_actions(actions, &library, 0);
+        // Prefix match finds 2 matches → skipped. Fuzzy match then finds both too similar
+        // (within 0.05) → ambiguous → rejected.
+        assert_eq!(
+            result.actions.len(),
+            0,
+            "Ambiguous prefix should be rejected"
+        );
+        assert_eq!(result.rejected_count, 1);
+    }
+
+    #[test]
+    fn test_prefix_too_short_for_long_name() {
+        let library = vec![(
+            "uuid-skyrim".to_string(),
+            "The Elder Scrolls V: Skyrim".to_string(),
+        )];
+        // "Elder" (5 chars) doesn't start "the elder scrolls..." (prefix match fails on starts_with).
+        // JW("elder", "the elder scrolls v: skyrim") = ~0.63 — well below 0.82 threshold.
+        // So both prefix match and fuzzy match fail → rejected.
+        let actions = vec![make_validated("game:Elder", 1)];
+        let result = resolve_actions(actions, &library, 0);
+        assert_eq!(
+            result.actions.len(),
+            0,
+            "Short partial name should not match a much longer title"
+        );
+        assert_eq!(result.rejected_count, 1);
+    }
+
+    // ── Multiple resolution behaviors ───────────────────────────────
+
+    #[test]
+    fn test_shelf_assign_prefix_resolves() {
+        let library = make_library();
+        let actions = vec![make_validated("shelf-assign:Hades", 2)];
+        let result = resolve_actions(actions, &library, 0);
+        assert_eq!(result.actions.len(), 1);
+        assert_eq!(result.actions[0].action_id, "shelf-assign:uuid-2");
+        assert_eq!(result.actions[0].resolved_name.as_deref(), Some("Hades"));
+    }
+
+    #[test]
+    fn test_hide_prefix_resolves() {
+        let library = make_library();
+        let actions = vec![make_validated("hide:Celeste", 2)];
+        let result = resolve_actions(actions, &library, 0);
+        assert_eq!(result.actions.len(), 1);
+        assert_eq!(result.actions[0].action_id, "hide:uuid-3");
+        assert_eq!(result.actions[0].resolved_name.as_deref(), Some("Celeste"));
     }
 }

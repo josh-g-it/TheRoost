@@ -4,7 +4,9 @@ import { mediaControlsApi, mediaBookmarksApi } from "../../services/tauri";
 import { AppIcon } from "../common/AppIcon";
 import "./OverlayMediaControls.css";
 
-const POLL_INTERVAL_MS = 500;
+const MEDIA_POLL_MS = 500;
+const RAPID_POLL_FIRST_MS = 150;
+const RAPID_POLL_SECOND_MS = 400;
 
 /** Extracts a friendly source name from the AUMID. */
 function formatSource(sourceAppId: string): string {
@@ -662,15 +664,15 @@ export function OverlayMediaControls() {
   // Rapid poll after transport actions — the media player needs a moment to update state
   const rapidPollAfterAction = useCallback(() => {
     fetchSession();
-    setTimeout(fetchSession, 150);
-    setTimeout(fetchSession, 400);
+    setTimeout(fetchSession, RAPID_POLL_FIRST_MS);
+    setTimeout(fetchSession, RAPID_POLL_SECOND_MS);
   }, [fetchSession]);
 
   useEffect(() => {
     mountedRef.current = true;
     fetchSession();
     fetchBookmarks();
-    const interval = setInterval(fetchSession, POLL_INTERVAL_MS);
+    const interval = setInterval(fetchSession, MEDIA_POLL_MS);
     return () => {
       mountedRef.current = false;
       clearInterval(interval);

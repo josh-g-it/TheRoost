@@ -12,6 +12,11 @@ pub async fn save_filter(
     sort_order: Option<String>,
     db: State<'_, CacheDbHandle>,
 ) -> Result<SavedFilterRow, AppError> {
+    if name.chars().count() > 100 {
+        return Err(AppError::Validation(
+            "Filter name exceeds maximum length of 100 characters".into(),
+        ));
+    }
     tracing::info!(name = %name, "Saving filter preset");
     let db = db.lock_or_err("DB")?;
     db.save_filter(

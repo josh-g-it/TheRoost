@@ -30,7 +30,8 @@ pub struct AiConversation {
     pub ended_at: Option<String>,
     pub summary: Option<String>,
     pub message_count: u32,
-    pub compacted: bool,
+    /// Compaction status: 0 = pending, 1 = success, 2 = failed
+    pub compacted: u8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +77,10 @@ pub struct AiDailyLog {
 #[serde(rename_all = "camelCase")]
 pub struct CompactionResult {
     pub summary: String,
+    /// Optional journal entry — a more personal/narrative account of the conversation.
+    /// Falls back to `summary` if the LLM doesn't provide it.
+    #[serde(default)]
+    pub journal_entry: Option<String>,
     pub memories: Vec<CompactionMemory>,
     pub superseded_memories: Vec<String>,
 }

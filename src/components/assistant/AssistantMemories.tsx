@@ -56,7 +56,9 @@ export function AssistantMemories({ avatarId }: AssistantMemoriesProps) {
 
   const filtered = useMemo(() => {
     let result = memories;
-    if (categoryFilter !== "all") {
+    if (categoryFilter === "all") {
+      result = result.filter((m) => m.category !== "system");
+    } else {
       result = result.filter((m) => m.category === categoryFilter);
     }
     const q = searchQuery.trim().toLowerCase();

@@ -14,6 +14,8 @@ export interface ActionPipelineState {
 
 interface UseActionPipelineOptions {
   navigate: (path: string) => void;
+  /** Override Tier 1 execution (e.g., overlay relays actions to main window via IPC). */
+  executeTier1?: (action: ResolvedAction) => ActionResult;
 }
 
 const INITIAL_STATE: ActionPipelineState = {
@@ -50,7 +52,7 @@ export function serializeActionFeedback(results: ActionResult[]): string {
   return `[System] Previous actions:\n${lines.join("\n")}`;
 }
 
-export function useActionPipeline({ navigate }: UseActionPipelineOptions) {
+export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineOptions) {
   const [state, setState] = useState<ActionPipelineState>(INITIAL_STATE);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -142,11 +144,15 @@ export function useActionPipeline({ navigate }: UseActionPipelineOptions) {
       return;
     }
 
-    // Tier 1: batch-execute all consecutive Tier 1 actions synchronously
+    // Tier 1: batch-execute all consecutive Tier 1 actions synchronously.
+    // When executeTier1 is provided (overlay), actions are relayed to the main
+    // window via IPC instead of executing locally against isolated stores.
     let idx = currentIndex;
     const batchResults: ActionResult[] = [];
     while (idx < actions.length && actions[idx].tier === 1) {
-      batchResults.push(executeAction(actions[idx]));
+      batchResults.push(
+        executeTier1 ? executeTier1(actions[idx]) : executeAction(actions[idx]),
+      );
       idx++;
     }
 
@@ -155,7 +161,7 @@ export function useActionPipeline({ navigate }: UseActionPipelineOptions) {
       currentIndex: idx,
       results: [...prev.results, ...batchResults],
     }));
-  }, [state, executeAction]);
+  }, [state, executeAction, executeTier1]);
 
   const setActions = useCallback((actions: ResolvedAction[]) => {
     feedbackResultsRef.current = [];
@@ -163,14 +169,18 @@ export function useActionPipeline({ navigate }: UseActionPipelineOptions) {
       setState({ ...INITIAL_STATE, status: "completed" });
       return;
     }
+    // Reorder: Tier 2 (confirmation) before Tier 1 (auto-execute).
+    // Tier 1 actions can navigate away from /assistant, which unmounts the
+    // component and destroys pipeline state before Tier 2 cards render.
+    const sorted = [...actions].sort((a, b) => b.tier - a.tier);
     setState({
-      actions,
+      actions: sorted,
       currentIndex: 0,
       status: "running",
       results: [],
     });
     logger.info("useActionPipeline", "ai", "Pipeline started", {
-      actionCount: actions.length,
+      actionCount: sorted.length,
     });
   }, []);
 

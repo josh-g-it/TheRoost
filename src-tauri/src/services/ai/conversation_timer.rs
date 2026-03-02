@@ -56,6 +56,15 @@ pub type ConversationTimerHandle = Arc<Mutex<ConversationTimerState>>;
 
 /// Start (or restart) the conversation inactivity timer.
 /// Cancels any existing timer, then spawns a new tokio background task.
+///
+/// # Timer starts paused (design choice)
+/// The timer starts in a paused state (`is_paused = true`) and only begins
+/// counting down when the user sends their first real message (which calls
+/// `reset_timer`). This is intentional: the initial auto-greeting is a hidden
+/// system message, not user activity, so the inactivity clock should not start
+/// ticking until the user actively engages. Without this, a user who opens
+/// the assistant but gets distracted would see the timer counting down before
+/// they even start talking.
 pub fn start_timer(
     timer: &ConversationTimerHandle,
     conversation_id: &str,
@@ -200,6 +209,8 @@ async fn timer_loop(
 
 /// Auto-end a conversation when the inactivity timer expires.
 /// Loads settings and encryption key, then delegates to conversation::end_conversation.
+/// If the encryption key is unavailable, ends the conversation without compaction —
+/// the orphan scan can retry compaction later.
 async fn auto_end_conversation(
     db: &CacheDbHandle,
     conversation_id: &str,
@@ -207,12 +218,26 @@ async fn auto_end_conversation(
     app_handle: &tauri::AppHandle,
 ) -> Result<(), AppError> {
     let settings = settings_store::load_settings(app_handle)?;
-    let key = encryption::load_encryption_key()?;
 
-    // end_conversation returns whether compaction happened (we don't need to track usage here
-    // since compaction requests are already tracked inside end_conversation via the cloud config)
-    let _compacted =
-        conversation::end_conversation(db, conversation_id, avatar_id, &key, &settings).await?;
+    match encryption::load_encryption_key() {
+        Ok(key) => {
+            // Happy path: end with compaction
+            let _compacted =
+                conversation::end_conversation(db, conversation_id, avatar_id, &key, &settings)
+                    .await?;
+        }
+        Err(e) => {
+            // Key unavailable: end without compaction.
+            // Orphan scan (check_orphaned_conversations) can retry later.
+            tracing::warn!(
+                conversation_id = %conversation_id,
+                error = %e,
+                "Encryption key unavailable during auto-end — ending without compaction"
+            );
+            let db_guard = db.lock_or_err("DB")?;
+            db_guard.end_ai_conversation(conversation_id)?;
+        }
+    }
 
     Ok(())
 }

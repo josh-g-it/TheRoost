@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   AreaChart,
   Area,
@@ -49,11 +50,15 @@ function CustomTooltip({
 export function RecapMonthlyTimeline({ monthlyPlaytime }: RecapMonthlyTimelineProps) {
   const colors = useChartColors();
 
-  const data = monthlyPlaytime.map((minutes, i) => ({
-    month: MONTH_LABELS[i],
-    minutes,
-    hours: Math.round((minutes / 60) * 10) / 10,
-  }));
+  const data = useMemo(
+    () =>
+      monthlyPlaytime.map((minutes, i) => ({
+        month: MONTH_LABELS[i],
+        minutes,
+        hours: Math.round((minutes / 60) * 10) / 10,
+      })),
+    [monthlyPlaytime],
+  );
 
   return (
     <div className="recap-section">

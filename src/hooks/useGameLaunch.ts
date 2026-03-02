@@ -3,6 +3,8 @@ import { gameApi } from "../services/tauri";
 import { getErrorMessage } from "../utils/errors";
 import { logger } from "../utils/logger";
 
+const LAUNCH_CLEAR_DELAY_MS = 1000;
+
 export function useGameLaunch() {
   const [launching, setLaunching] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +32,7 @@ export function useGameLaunch() {
       setError(msg);
     } finally {
       if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setLaunching(null), 1000);
+      timerRef.current = setTimeout(() => setLaunching(null), LAUNCH_CLEAR_DELAY_MS);
     }
   }, []);
 

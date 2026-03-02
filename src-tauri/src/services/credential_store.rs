@@ -1,3 +1,10 @@
+//! Credential store — API keys managed via Windows Credential Manager (keyring crate).
+//!
+//! **SECURITY INVARIANT**: Key *values* must NEVER appear in log output.
+//! Log only metadata (provider names, success/failure status).
+//! HTTP errors that may contain URL query params (including keys) must be
+//! sanitized via `steam_client::sanitize_steam_error()` before logging.
+
 use crate::utils::error::AppError;
 
 const SERVICE_NAME: &str = "app.theroost";

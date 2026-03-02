@@ -7,7 +7,7 @@ import { AppIcon } from "../common/AppIcon";
 import { Sparkline } from "./Sparkline";
 import "./OverlaySystemMonitor.css";
 
-const POLL_INTERVAL_MS = 1000;
+const SYSTEM_METRICS_POLL_MS = 1000;
 
 function formatCpu(value: number): string {
   return value < 10 ? `${value.toFixed(1)}%` : `${Math.round(value)}%`;
@@ -41,12 +41,12 @@ export function OverlaySystemMonitor(_props: OverlaySystemMonitorProps) {
   useEffect(() => {
     mountedRef.current = true;
     fetchMetrics();
-    const interval = setInterval(fetchMetrics, POLL_INTERVAL_MS);
+    const interval = setInterval(fetchMetrics, SYSTEM_METRICS_POLL_MS);
     return () => {
       mountedRef.current = false;
       clearInterval(interval);
     };
-  }, [fetchMetrics]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- fetchMetrics is stable (empty deps)
 
   const handleKill = useCallback(
     (pid: number) => {

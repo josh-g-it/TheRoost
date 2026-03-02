@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import type { GameAchievementSummary } from "../types";
 import { achievementsApi } from "../services/tauri";
-import { useSettingsStore } from "./settingsSlice";
 import { getErrorMessage } from "../utils/errors";
 import { logger } from "../utils/logger";
 
@@ -36,17 +35,10 @@ export const useAchievementsStore = create<AchievementsState>((set, get) => ({
     // Skip if already loading
     if (loading.has(gameId)) return null;
 
-    const settings = useSettingsStore.getState().settings;
-    if (!settings?.steamApiKey || !settings?.steamId) return null;
-
     set({ loading: new Set([...loading, gameId]) });
 
     try {
-      const summary = await achievementsApi.fetchGameAchievements(
-        settings.steamApiKey,
-        settings.steamId,
-        gameId,
-      );
+      const summary = await achievementsApi.fetchGameAchievements(gameId);
 
       const newCache = new Map(get().cache);
       newCache.set(gameId, summary);
@@ -72,11 +64,6 @@ export const useAchievementsStore = create<AchievementsState>((set, get) => ({
   batchFetchAll: async () => {
     if (get().batchFetched) return;
 
-    const settings = useSettingsStore.getState().settings;
-    if (!settings?.steamApiKey || !settings?.steamId) {
-      return;
-    }
-
     set({ batchFetched: true });
 
     logger.info(
@@ -86,10 +73,7 @@ export const useAchievementsStore = create<AchievementsState>((set, get) => ({
     );
 
     try {
-      const count = await achievementsApi.batchFetchAchievements(
-        settings.steamApiKey,
-        settings.steamId,
-      );
+      const count = await achievementsApi.batchFetchAchievements();
       logger.info(
         "achievementsSlice",
         "achievements",

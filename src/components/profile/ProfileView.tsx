@@ -171,11 +171,11 @@ export function ProfileView() {
 
   // Fetch player summary on mount
   useEffect(() => {
-    if (!settings?.steamApiKey || !settings?.steamId) {
+    if (!settings?.steamId) {
       logger.info(
         "ProfileView",
         "profile",
-        "Skipping player summary fetch — missing API key or Steam ID",
+        "Skipping player summary fetch — missing Steam ID",
       );
       return;
     }
@@ -186,7 +186,7 @@ export function ProfileView() {
     });
 
     steamApi
-      .fetchPlayerSummary(settings.steamApiKey, settings.steamId)
+      .fetchPlayerSummary(settings.steamId)
       .then((summary) => {
         setPlayerSummary(summary);
         logger.info("ProfileView", "profile", "Player summary loaded", {
@@ -203,7 +203,7 @@ export function ProfileView() {
       .finally(() => {
         setIsLoading(false);
       });
-  }, [settings?.steamApiKey, settings?.steamId]);
+  }, [settings?.steamId]);
 
   // Load cached achievement stats for profile
   useEffect(() => {

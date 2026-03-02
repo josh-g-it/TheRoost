@@ -27,6 +27,10 @@ import {
 } from "./filtering";
 import { GAME_SOURCE_LABELS } from "../types/game";
 import type { GameSource } from "../types/game";
+import {
+  UNINSTALL_RESCAN_FIRST_MS,
+  UNINSTALL_RESCAN_SECOND_MS,
+} from "../constants/timings";
 
 const MAX_ACTION_RESULTS = 12;
 const MAX_GAME_RESULTS = 8;
@@ -707,10 +711,8 @@ const EXECUTORS: Record<string, ActionExecutor> = {
 
   // Quick actions
   "action:refresh": (ctx) => {
-    if (ctx.settings?.steamApiKey && ctx.settings?.steamId) {
-      useLibraryStore
-        .getState()
-        .refreshLibrary(ctx.settings.steamApiKey, ctx.settings.steamId);
+    if (ctx.settings?.steamId) {
+      useLibraryStore.getState().refreshLibrary(ctx.settings.steamId);
     }
     ctx.closeCommandCenter();
   },
@@ -826,8 +828,14 @@ const EXECUTORS: Record<string, ActionExecutor> = {
       ctx.targetGame.isInstalled
     ) {
       steamInstallApi.uninstallGame(ctx.targetGame.sourceId);
-      setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 5000);
-      setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 30000);
+      setTimeout(
+        () => useLibraryStore.getState().scanLocalOnly(),
+        UNINSTALL_RESCAN_FIRST_MS,
+      );
+      setTimeout(
+        () => useLibraryStore.getState().scanLocalOnly(),
+        UNINSTALL_RESCAN_SECOND_MS,
+      );
       ctx.navigate("/library");
     }
     ctx.closeCommandCenter();
@@ -1477,5 +1485,31 @@ export function executeActionById(
   if (!executor) return false;
 
   executor(ctx);
+  return true;
+}
+
+/**
+ * Determine if an action requires showing/focusing the main window.
+ * Actions that only save settings or trigger background tasks don't need it.
+ * Used by the overlay to decide whether to bring the main window forward.
+ */
+export function actionNeedsMainWindow(actionId: string): boolean {
+  // Theme/appearance — settings save only
+  if (actionId.startsWith("theme:")) return false;
+  if (actionId.startsWith("font:")) return false;
+  if (actionId.startsWith("icons:")) return false;
+  if (actionId.startsWith("scale:")) return false;
+  // Toggle settings — no navigation
+  if (actionId === "settings:tray") return false;
+  if (actionId === "action:toggle-dev-mode") return false;
+  if (actionId === "dev:onboarding") return false;
+  // Background tasks — no navigation
+  if (actionId === "action:refresh") return false;
+  if (actionId === "action:refresh-metadata") return false;
+  if (actionId === "action:scan-external") return false;
+  if (actionId === "action:refresh-library") return false;
+  // Favorite toggle — no navigation
+  if (actionId.startsWith("game:favorite")) return false;
+  // Everything else navigates or opens UI
   return true;
 }

@@ -13,10 +13,11 @@ use super::credential_store;
 use crate::utils::error::AppError;
 
 /// Current schema version the app expects (must match cache_db migrations).
-const CURRENT_SCHEMA_VERSION: u32 = 24;
+const CURRENT_SCHEMA_VERSION: u32 = 26;
 
 /// Block restore if backup schema is more than this many versions ahead.
-const MAX_SCHEMA_FORWARD_COMPAT: u32 = 5;
+/// Kept tight (2) to avoid loading a DB with columns/tables the app can't handle.
+const MAX_SCHEMA_FORWARD_COMPAT: u32 = 2;
 
 // ── Public types ──────────────────────────────────────────────────
 
@@ -435,7 +436,15 @@ pub fn restore_from_backup(
             .map_err(|e| AppError::Backup(format!("Restored database has invalid schema: {e}")))?;
     }
 
-    // 2. Swap database under lock
+    // 2. Remove stale WAL/SHM artifacts BEFORE swapping the database file.
+    // If the old database had an active WAL, stale entries could conflict with
+    // the newly restored database and cause SQLite to apply old WAL entries
+    // to the new file, leading to subtle data corruption.
+    emit_progress(app_handle, "restoring-db", "Cleaning WAL artifacts...");
+    let _ = fs::remove_file(app_data.join("theroost.db-wal"));
+    let _ = fs::remove_file(app_data.join("theroost.db-shm"));
+
+    // 3. Swap database under lock
     emit_progress(app_handle, "restoring-db", "Replacing database...");
     {
         let mut db_guard = db
@@ -447,11 +456,7 @@ pub fn restore_from_backup(
     // Clean up temp file
     let _ = fs::remove_file(&temp_db_path);
 
-    // Remove stale WAL artifacts
-    let _ = fs::remove_file(app_data.join("theroost.db-wal"));
-    let _ = fs::remove_file(app_data.join("theroost.db-shm"));
-
-    // 3. Restore settings.json
+    // 4. Restore settings.json
     emit_progress(app_handle, "extracting-settings", "Restoring settings...");
     if let Ok(mut entry) = archive.by_name("settings.json") {
         let settings_path = app_data.join("settings.json");
@@ -463,7 +468,7 @@ pub fn restore_from_backup(
         fs::rename(&tmp_path, &settings_path)?;
     }
 
-    // 4. Restore art directory
+    // 5. Restore art directory
     emit_progress(app_handle, "extracting-art", "Restoring custom art...");
     let art_dir = app_data.join("art");
     // Clear existing art
@@ -486,7 +491,7 @@ pub fn restore_from_backup(
         }
     }
 
-    // 5. Restore credentials
+    // 6. Restore credentials
     emit_progress(app_handle, "restoring-credentials", "Saving API keys...");
     restore_credentials(credential_values)?;
 

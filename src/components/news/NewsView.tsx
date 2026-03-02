@@ -43,9 +43,10 @@ export function NewsView() {
   }, [feed]);
 
   // Check if feed has both source types (only show filter if relevant)
-  const hasExternal = useMemo(() => feed.some((i) => i.isExternal), [feed]);
-  const hasOfficial = useMemo(() => feed.some((i) => !i.isExternal), [feed]);
-  const showSourceFilter = hasExternal && hasOfficial;
+  const showSourceFilter = useMemo(
+    () => feed.some((i) => i.isExternal) && feed.some((i) => !i.isExternal),
+    [feed],
+  );
 
   // Apply all filters
   const filteredFeed = useMemo(() => {
@@ -62,7 +63,7 @@ export function NewsView() {
   }, [feed, selectedGameIds, sourceFilter]);
 
   const isFiltering = selectedGameIds.size > 0 || sourceFilter !== "all";
-  const unreadCount = feed.filter((i) => !i.isRead).length;
+  const unreadCount = useMemo(() => feed.filter((i) => !i.isRead).length, [feed]);
 
   const handleSelect = useCallback(
     (item: FeedNewsItem) => {

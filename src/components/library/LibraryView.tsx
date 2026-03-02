@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { useEventListener } from "../../hooks/useEventListener";
 import { Header } from "../layout/Header";
 import { LoadingSpinner } from "../common/LoadingSpinner";
 import { LibraryControls } from "./LibraryControls";
@@ -80,8 +81,12 @@ let batchFetchStarted = false;
 
 export function LibraryView() {
   const { library, isLoading, error, refresh } = useSteamLibrary();
-  const { viewMode, sortBy, sortOrder, filters, selectedGameId, selectGame } =
-    useUIStore();
+  const viewMode = useUIStore((s) => s.viewMode);
+  const sortBy = useUIStore((s) => s.sortBy);
+  const sortOrder = useUIStore((s) => s.sortOrder);
+  const filters = useUIStore((s) => s.filters);
+  const selectedGameId = useUIStore((s) => s.selectedGameId);
+  const selectGame = useUIStore((s) => s.selectGame);
   const customGameDialogOpen = useUIStore((s) => s.customGameDialogOpen);
   const editingCustomGameId = useUIStore((s) => s.editingCustomGameId);
   const closeCustomGameDialog = useUIStore((s) => s.closeCustomGameDialog);
@@ -127,23 +132,19 @@ export function LibraryView() {
   ]);
 
   // Listen for install progress and completion events from the backend
-  useEffect(() => {
-    const listeners: (() => void)[] = [];
+  useEventListener<import("../../types/install").InstallProgress[]>(
+    "install-progress",
+    (event) => updateInstallProgress(event.payload),
+  );
 
-    listen<import("../../types/install").InstallProgress[]>("install-progress", (event) =>
-      updateInstallProgress(event.payload),
-    ).then((unlisten) => listeners.push(unlisten));
-
-    listen<import("../../types/install").InstallProgress>("install-complete", (event) => {
+  useEventListener<import("../../types/install").InstallProgress>(
+    "install-complete",
+    (event) => {
       completeInstall(event.payload.sourceId);
       refresh();
       logger.info("LibraryView", "install", `Install complete: ${event.payload.name}`);
-    }).then((unlisten) => listeners.push(unlisten));
-
-    return () => {
-      for (const unlisten of listeners) unlisten();
-    };
-  }, [updateInstallProgress, completeInstall, refresh]);
+    },
+  );
 
   const allGames = useMemo(() => library?.games ?? [], [library?.games]);
 
@@ -236,7 +237,7 @@ export function LibraryView() {
     // Priority ordering: recently played → most played → rest
     const gameIds = prioritizeGameIds(allGames);
     const CHUNK_SIZE = 25;
-    let unlistenPromise: Promise<() => void> | null = null;
+    let isMounted = true;
 
     (async () => {
       try {
@@ -260,9 +261,10 @@ export function LibraryView() {
         // Phase 2: Achievements (starts after metadata finishes)
         startTask("achievements");
 
-        unlistenPromise = listen<{ current: number; total: number }>(
+        const unlistenAchievements = await listen<{ current: number; total: number }>(
           "achievement-batch-progress",
           (event) => {
+            if (!isMounted) return;
             useBackgroundTasksStore
               .getState()
               .updateProgress("achievements", event.payload.current, event.payload.total);
@@ -273,7 +275,7 @@ export function LibraryView() {
           await batchFetchAchievements();
         } finally {
           completeTask("achievements");
-          unlistenPromise?.then((fn) => fn());
+          unlistenAchievements();
         }
 
         // Phase 3: Store API background enrichment (descriptions, screenshots, etc.)
@@ -301,7 +303,7 @@ export function LibraryView() {
     })();
 
     return () => {
-      unlistenPromise?.then((fn) => fn());
+      isMounted = false;
     };
   }, [allGames, fetchBatch, batchFetchAchievements]);
 

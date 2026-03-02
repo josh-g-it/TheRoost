@@ -45,6 +45,8 @@ interface AssistantChatProps {
   onPendingReviewConsumed?: () => void;
   /** Navigate function for action execution — provided by router-based parents. */
   navigate?: (path: string) => void;
+  /** Override Tier 1 action execution (overlay relays to main window via IPC). */
+  executeTier1?: (action: ResolvedAction) => ActionResult;
 }
 
 export function AssistantChat({
@@ -59,6 +61,7 @@ export function AssistantChat({
   pendingReview,
   onPendingReviewConsumed,
   navigate,
+  executeTier1,
 }: AssistantChatProps) {
   const settings = useSettingsStore((s) => s.settings);
   const maxOutputTokens = compact
@@ -82,7 +85,7 @@ export function AssistantChat({
   } = useConversation({ avatarId, conversationId, maxOutputTokens });
 
   const noop = useCallback(() => {}, []);
-  const pipeline = useActionPipeline({ navigate: navigate ?? noop });
+  const pipeline = useActionPipeline({ navigate: navigate ?? noop, executeTier1 });
 
   const {
     transcript,
@@ -98,14 +101,20 @@ export function AssistantChat({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const introSentRef = useRef(false);
-  const isFirstConversationRef = useRef(isFirstConversation);
-  isFirstConversationRef.current = isFirstConversation;
-  const onStaleResetRef = useRef(onStaleReset);
-  onStaleResetRef.current = onStaleReset;
-  const onConversationEndRef = useRef(onConversationEnd);
-  onConversationEndRef.current = onConversationEnd;
-  const isEndedRef = useRef(isEnded);
-  isEndedRef.current = isEnded;
+
+  // Ref-sync for props/callbacks read inside async effects (avoids stale closures)
+  const callbacksRef = useRef({
+    isFirstConversation,
+    onStaleReset,
+    onConversationEnd,
+    onPendingReviewConsumed,
+  });
+  callbacksRef.current = {
+    isFirstConversation,
+    onStaleReset,
+    onConversationEnd,
+    onPendingReviewConsumed,
+  };
 
   // Phase 12: Review state
   const reviewInjectedRef = useRef(false);
@@ -114,10 +123,6 @@ export function AssistantChat({
   const [reviewDismissed, setReviewDismissed] = useState(false);
   const [showReviewConfirm, setShowReviewConfirm] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
-  const pendingReviewRef = useRef(pendingReview);
-  pendingReviewRef.current = pendingReview;
-  const onPendingReviewConsumedRef = useRef(onPendingReviewConsumed);
-  onPendingReviewConsumedRef.current = onPendingReviewConsumed;
 
   useEffect(() => {
     introSentRef.current = false;
@@ -133,7 +138,7 @@ export function AssistantChat({
   // Notify parent when a locally-triggered conversation end completes
   useEffect(() => {
     if (isEnded) {
-      onConversationEndRef.current?.();
+      callbacksRef.current.onConversationEnd?.();
     }
   }, [isEnded]);
 
@@ -145,7 +150,7 @@ export function AssistantChat({
         const isStale = await assistantApi.checkConversationStale(conversationId!);
         if (isStale) {
           await assistantApi.abandonConversation(conversationId!);
-          onStaleResetRef.current?.();
+          callbacksRef.current.onStaleReset?.();
           return;
         }
       } catch {
@@ -157,7 +162,7 @@ export function AssistantChat({
       setHistoryLoaded(true);
       if (history.length === 0 && !introSentRef.current) {
         introSentRef.current = true;
-        const prompt = isFirstConversationRef.current
+        const prompt = callbacksRef.current.isFirstConversation
           ? "This is your very first conversation with the user. They just created you. Introduce yourself warmly — tell them your name, ask what they'd like to be called, and ask how they prefer conversations (casual, detailed, brief). Be yourself and be curious."
           : "A new conversation has started. This message is sent automatically by the system, not by the user. Greet the user warmly as someone you already know. Keep it brief and natural — maybe reference something from your memories or just say hello and ask what's on their mind.";
         sendMessage(prompt, { hidden: true });
@@ -196,7 +201,7 @@ export function AssistantChat({
       });
     }
 
-    onPendingReviewConsumedRef.current?.();
+    callbacksRef.current.onPendingReviewConsumed?.();
   }, [pendingReview, conversationId, messages, injectMessage, historyLoaded]);
 
   // Phase 12: Handle review confirmation in active conversation
@@ -561,11 +566,22 @@ export function AssistantChat({
                 const prefix = action.actionId.split(":")[0];
 
                 if (prefix === "review") {
+                  const desc = action.description ?? "";
+                  const fallbackStars = desc.match(
+                    /(\d+(?:\.\d+)?)\s*(?:\/\s*5|[-\s]star)/i,
+                  );
+                  const fallbackText = desc.match(/['"\u201C](.{10,500})['"\u201D]/);
+                  const reviewStars =
+                    (action.payload?.stars as number) ??
+                    (fallbackStars ? parseFloat(fallbackStars[1]) : 3);
+                  const reviewText =
+                    (action.payload?.text as string) ??
+                    (fallbackText ? fallbackText[1] : "");
                   return (
                     <ReviewConfirmationCard
                       gameName={action.resolvedName ?? action.originalActionId}
-                      stars={(action.payload?.stars as number) ?? 3}
-                      reviewText={(action.payload?.text as string) ?? ""}
+                      stars={reviewStars}
+                      reviewText={reviewText}
                       onConfirm={(stars, text) =>
                         handleReviewConfirmAction(action, stars, text)
                       }

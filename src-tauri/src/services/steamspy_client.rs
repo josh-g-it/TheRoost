@@ -32,6 +32,27 @@ const COOLDOWN_BATCH_SIZE: usize = 50;
 /// Duration of the cooldown pause between batches.
 const COOLDOWN_DURATION: Duration = Duration::from_secs(3);
 
+/// Sanitize a reqwest error into an AppError::StoreApi without leaking
+/// the request URL. SteamSpy URLs contain appids (not secrets) but we
+/// still follow the project-wide convention of never propagating raw
+/// reqwest errors to the frontend.
+fn sanitize_steamspy_error(err: reqwest::Error, endpoint: &str) -> AppError {
+    if err.is_timeout() {
+        AppError::StoreApi(format!("SteamSpy request timed out: {endpoint}"))
+    } else if err.is_connect() {
+        AppError::StoreApi(format!("Failed to connect to SteamSpy: {endpoint}"))
+    } else if let Some(status) = err.status() {
+        AppError::StoreApi(format!(
+            "SteamSpy returned HTTP {} for {endpoint}",
+            status.as_u16()
+        ))
+    } else if err.is_decode() {
+        AppError::StoreApi(format!("Failed to parse SteamSpy response: {endpoint}"))
+    } else {
+        AppError::StoreApi(format!("SteamSpy request failed: {endpoint}"))
+    }
+}
+
 pub struct SteamSpyClient {
     client: reqwest::Client,
 }
@@ -59,7 +80,11 @@ impl SteamSpyClient {
     ) -> Result<Vec<SteamTagInfo>, AppError> {
         let url = format!("{}?request=appdetails&appid={}", STEAMSPY_API_BASE, appid);
 
-        let resp = client.get(&url).send().await?;
+        let resp = client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| sanitize_steamspy_error(e, "appdetails"))?;
 
         if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
             tracing::warn!(appid, "SteamSpy rate limited (429)");
@@ -71,7 +96,10 @@ impl SteamSpyClient {
             return Ok(Vec::new());
         }
 
-        let body: serde_json::Value = resp.json().await?;
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| sanitize_steamspy_error(e, "appdetails"))?;
 
         // SteamSpy returns: { "tags": { "TagName": voteCount, ... }, ... }
         let tags = match body.get("tags") {
@@ -257,7 +285,11 @@ impl SteamSpyClient {
     ) -> Result<Option<SteamSpyAppData>, AppError> {
         let url = format!("{}?request=appdetails&appid={}", STEAMSPY_API_BASE, appid);
 
-        let resp = client.get(&url).send().await?;
+        let resp = client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| sanitize_steamspy_error(e, "appdetails"))?;
 
         if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
             tracing::warn!(appid, "SteamSpy rate limited (429)");
@@ -269,7 +301,10 @@ impl SteamSpyClient {
             return Ok(None);
         }
 
-        let body: serde_json::Value = resp.json().await?;
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| sanitize_steamspy_error(e, "appdetails"))?;
 
         let name = body
             .get("name")

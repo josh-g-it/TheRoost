@@ -58,9 +58,7 @@ impl CoverArtService {
         // 5. For GOG games, try GOG public API first (no key needed)
         if source == "gog" {
             if let Ok(Some(url)) = fetch_gog_image(&source_id).await {
-                let db = self.db.lock().map_err(|e| {
-                    AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string()))
-                })?;
+                let db = self.db.lock_or_err("DB")?;
                 db.cache_game_image(game_id, image_type, &url, "gog_api", false)?;
                 return Ok(Some(url));
             }
@@ -77,9 +75,7 @@ impl CoverArtService {
                     _ => client.fetch_hero_url(sgdb_id).await,
                 };
                 if let Ok(Some(url)) = image_url {
-                    let db = self.db.lock().map_err(|e| {
-                        AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string()))
-                    })?;
+                    let db = self.db.lock_or_err("DB")?;
                     db.cache_game_image(game_id, image_type, &url, "steamgriddb", false)?;
                     return Ok(Some(url));
                 }

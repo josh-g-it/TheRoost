@@ -20,7 +20,16 @@ pub fn load_settings(app_handle: tauri::AppHandle) -> Result<AppSettings, AppErr
 }
 
 #[tauri::command]
-pub fn save_settings(app_handle: tauri::AppHandle, settings: AppSettings) -> Result<(), AppError> {
+pub fn save_settings(
+    app_handle: tauri::AppHandle,
+    settings: serde_json::Value,
+) -> Result<(), AppError> {
+    // Manual deserialization gives us a clear, full error message instead of
+    // Tauri's generic "invalid args" format which truncates the serde error.
+    let settings: AppSettings = serde_json::from_value(settings).map_err(|e| {
+        tracing::error!(error = %e, "Settings deserialization failed");
+        AppError::Parse(format!("Settings deserialization: {}", e))
+    })?;
     tracing::info!(theme = %settings.theme, "Saving settings");
     let result = settings_store::save_settings(&app_handle, &settings);
     match &result {

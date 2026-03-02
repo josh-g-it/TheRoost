@@ -16,6 +16,39 @@ const SGDB_BASE: &str = "https://www.steamgriddb.com/api/v2";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const BATCH_DELAY: Duration = Duration::from_millis(500);
 
+/// Sanitize a reqwest error into an AppError::StoreApi without leaking the
+/// Authorization header or request URL. Raw reqwest errors include the full
+/// URL in their Display impl, so we must never propagate them directly.
+fn sanitize_sgdb_error(err: reqwest::Error, endpoint: &str) -> AppError {
+    if err.is_timeout() {
+        AppError::StoreApi(format!("SteamGridDB request timed out: {endpoint}"))
+    } else if err.is_connect() {
+        AppError::StoreApi(format!("Failed to connect to SteamGridDB: {endpoint}"))
+    } else if let Some(status) = err.status() {
+        AppError::StoreApi(format!(
+            "SteamGridDB returned HTTP {} for {endpoint}",
+            status.as_u16()
+        ))
+    } else if err.is_decode() {
+        AppError::StoreApi(format!("Failed to parse SteamGridDB response: {endpoint}"))
+    } else {
+        AppError::StoreApi(format!("SteamGridDB request failed: {endpoint}"))
+    }
+}
+
+/// Sanitize a reqwest error for the GOG product API.
+fn sanitize_gog_error(err: reqwest::Error, endpoint: &str) -> AppError {
+    if err.is_timeout() {
+        AppError::StoreApi(format!("GOG API request timed out: {endpoint}"))
+    } else if err.is_connect() {
+        AppError::StoreApi(format!("Failed to connect to GOG API: {endpoint}"))
+    } else if err.is_decode() {
+        AppError::StoreApi(format!("Failed to parse GOG API response: {endpoint}"))
+    } else {
+        AppError::StoreApi(format!("GOG API request failed: {endpoint}"))
+    }
+}
+
 pub struct SteamGridDbClient {
     client: reqwest::Client,
     api_key: String,
@@ -39,7 +72,8 @@ impl SteamGridDbClient {
             .get(&url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
-            .await?;
+            .await
+            .map_err(|e| sanitize_sgdb_error(e, "search"))?;
 
         if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
             tracing::warn!("SteamGridDB rate limited (429)");
@@ -51,7 +85,10 @@ impl SteamGridDbClient {
             return Ok(None);
         }
 
-        let body: serde_json::Value = resp.json().await?;
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| sanitize_sgdb_error(e, "search"))?;
 
         // Response: { "success": true, "data": [{ "id": 12345, "name": "...", ... }] }
         let sgdb_id = body
@@ -129,7 +166,8 @@ impl SteamGridDbClient {
             .get(url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
-            .await?;
+            .await
+            .map_err(|e| sanitize_sgdb_error(e, "image_options"))?;
 
         if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
             return Err(AppError::StoreApi("SteamGridDB rate limited".to_string()));
@@ -138,7 +176,10 @@ impl SteamGridDbClient {
             return Ok(vec![]);
         }
 
-        let body: serde_json::Value = resp.json().await?;
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| sanitize_sgdb_error(e, "image_options"))?;
         let results: Vec<SgdbImageOption> = body
             .get("data")
             .and_then(|d| d.as_array())
@@ -173,7 +214,8 @@ impl SteamGridDbClient {
             .get(url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
-            .await?;
+            .await
+            .map_err(|e| sanitize_sgdb_error(e, image_type))?;
 
         if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
             tracing::warn!("SteamGridDB rate limited (429)");
@@ -185,7 +227,10 @@ impl SteamGridDbClient {
             return Ok(None);
         }
 
-        let body: serde_json::Value = resp.json().await?;
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| sanitize_sgdb_error(e, image_type))?;
 
         // Response: { "success": true, "data": [{ "url": "https://cdn2.steamgriddb.com/...", ... }] }
         let image_url = body
@@ -218,14 +263,21 @@ pub async fn fetch_gog_image(product_id: &str) -> Result<Option<String>, AppErro
         .timeout(REQUEST_TIMEOUT)
         .build()?;
 
-    let resp = client.get(&url).send().await?;
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| sanitize_gog_error(e, "product_images"))?;
 
     if !resp.status().is_success() {
         tracing::debug!(product_id, status = %resp.status(), "GOG product API returned non-success");
         return Ok(None);
     }
 
-    let body: serde_json::Value = resp.json().await?;
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| sanitize_gog_error(e, "product_images"))?;
 
     // GOG response: { "images": { "logo2x": "//images-1.gog.com/...", ... } }
     let image_url = body

@@ -18,6 +18,11 @@ pub async fn create_tag(
     request: CreateTagRequest,
     db: State<'_, CacheDbHandle>,
 ) -> Result<Tag, AppError> {
+    if request.name.chars().count() > 30 {
+        return Err(AppError::Validation(
+            "Tag name exceeds maximum length of 30 characters".into(),
+        ));
+    }
     tracing::info!(name = %request.name, color_index = request.color_index, "Creating tag");
     let db = db.lock_or_err("DB")?;
     db.create_tag(&request.name, request.color_index)
@@ -28,6 +33,11 @@ pub async fn update_tag(
     request: UpdateTagRequest,
     db: State<'_, CacheDbHandle>,
 ) -> Result<(), AppError> {
+    if request.name.chars().count() > 30 {
+        return Err(AppError::Validation(
+            "Tag name exceeds maximum length of 30 characters".into(),
+        ));
+    }
     tracing::info!(id = request.id, name = %request.name, "Updating tag");
     let db = db.lock_or_err("DB")?;
     db.update_tag(request.id, &request.name, request.color_index)

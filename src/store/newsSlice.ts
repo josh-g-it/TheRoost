@@ -72,13 +72,10 @@ export const useNewsStore = create<NewsState>((set, get) => ({
 
   fetchFollowedGames: async () => {
     const settings = useSettingsStore.getState().settings;
-    if (!settings?.steamApiKey || !settings?.steamId) return;
+    if (!settings?.steamId) return;
 
     try {
-      const ids = await newsApi.fetchFollowedGames(
-        settings.steamApiKey,
-        settings.steamId,
-      );
+      const ids = await newsApi.fetchFollowedGames(settings.steamId);
       set({ followedGameIds: ids });
       logger.info("newsSlice", "news", "Followed games fetched", {
         count: ids.length,

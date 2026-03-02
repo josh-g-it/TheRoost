@@ -16,6 +16,13 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }));
 
+const mockOnFocusChanged = vi.fn().mockReturnValue(Promise.resolve(vi.fn()));
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({
+    onFocusChanged: mockOnFocusChanged,
+  }),
+}));
+
 const mockGetActiveAvatar = vi.fn();
 const mockListPersonalities = vi.fn();
 const mockStartConversation = vi.fn();
@@ -24,6 +31,7 @@ const mockGetConversationHistory = vi.fn();
 const mockSendMessage = vi.fn();
 const mockCheckConversationStale = vi.fn();
 const mockAbandonConversation = vi.fn();
+const mockGetActiveConversationId = vi.fn();
 
 vi.mock("../../services/tauri", () => ({
   assistantApi: {
@@ -35,6 +43,7 @@ vi.mock("../../services/tauri", () => ({
     sendMessage: (...args: unknown[]) => mockSendMessage(...args),
     checkConversationStale: (...args: unknown[]) => mockCheckConversationStale(...args),
     abandonConversation: (...args: unknown[]) => mockAbandonConversation(...args),
+    getActiveConversationId: (...args: unknown[]) => mockGetActiveConversationId(...args),
   },
 }));
 
@@ -43,16 +52,21 @@ vi.mock("../../store/settingsSlice", () => ({
     selector({ settings: { iconSet: "classic" } }),
 }));
 
+let capturedNavigate: ((path: string) => void) | null = null;
+
 vi.mock("../../hooks/useActionPipeline", () => ({
-  useActionPipeline: () => ({
-    state: { actions: [], currentIndex: 0, status: "idle", results: [] },
-    setActions: vi.fn(),
-    confirmTier2: vi.fn(),
-    denyTier2: vi.fn(),
-    cancelAll: vi.fn(),
-    consumeResults: vi.fn().mockReturnValue([]),
-    reset: vi.fn(),
-  }),
+  useActionPipeline: (opts: { navigate: (path: string) => void }) => {
+    capturedNavigate = opts.navigate;
+    return {
+      state: { actions: [], currentIndex: 0, status: "idle", results: [] },
+      setActions: vi.fn(),
+      confirmTier2: vi.fn(),
+      denyTier2: vi.fn(),
+      cancelAll: vi.fn(),
+      consumeResults: vi.fn().mockReturnValue([]),
+      reset: vi.fn(),
+    };
+  },
   serializeActionFeedback: () => "",
 }));
 
@@ -62,6 +76,7 @@ const personality = makeAiPersonality("p1", { name: "Friendly" });
 describe("OverlayAssistant", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    capturedNavigate = null;
     // Clear captured listen callbacks
     for (const key in listenCallbacks) {
       delete listenCallbacks[key];
@@ -422,5 +437,31 @@ describe("OverlayAssistant", () => {
     await waitFor(() => {
       expect(mockStartConversation).toHaveBeenCalledTimes(2);
     });
+  });
+
+  // P0-1: Navigate callback invokes show_main_and_navigate
+  it("passes navigate callback that invokes show_main_and_navigate", async () => {
+    render(<OverlayAssistant />);
+    await waitFor(() => {
+      expect(screen.getByText("Buddy")).toBeInTheDocument();
+    });
+
+    expect(capturedNavigate).toBeInstanceOf(Function);
+    capturedNavigate!("/library");
+    expect(invoke).toHaveBeenCalledWith("show_main_and_navigate", {
+      route: "/library",
+    });
+  });
+
+  // P0-1: Navigate callback does not crash on invoke rejection
+  it("navigate callback handles invoke rejection gracefully", async () => {
+    vi.mocked(invoke).mockRejectedValue(new Error("IPC failed"));
+    render(<OverlayAssistant />);
+    await waitFor(() => {
+      expect(screen.getByText("Buddy")).toBeInTheDocument();
+    });
+
+    // Should not throw
+    expect(() => capturedNavigate!("/library")).not.toThrow();
   });
 });

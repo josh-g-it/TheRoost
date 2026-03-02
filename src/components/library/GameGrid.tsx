@@ -1,3 +1,4 @@
+import { memo, useCallback } from "react";
 import { GameCard } from "./GameCard";
 import { useMetadataStore } from "../../store/metadataSlice";
 import { useTagsStore } from "../../store/tagsSlice";
@@ -15,7 +16,11 @@ interface GameGridProps {
   onPersistShelves: () => void;
 }
 
-export function GameGrid({ games, onSelectGame, onPersistShelves }: GameGridProps) {
+export const GameGrid = memo(function GameGrid({
+  games,
+  onSelectGame,
+  onPersistShelves,
+}: GameGridProps) {
   const getMetadata = useMetadataStore((s) => s.getMetadata);
   const tags = useTagsStore((s) => s.tags);
   const getGameTagIds = useTagsStore((s) => s.getGameTagIds);
@@ -28,10 +33,13 @@ export function GameGrid({ games, onSelectGame, onPersistShelves }: GameGridProp
 
   const gridMinWidth = GRID_SIZE_CONFIG[cardDisplay.gridSize].minWidth;
 
-  const getGameTags = (gameId: string) => {
-    const ids = getGameTagIds(gameId);
-    return tags.filter((t) => ids.includes(t.id));
-  };
+  const getGameTags = useCallback(
+    (gameId: string) => {
+      const ids = getGameTagIds(gameId);
+      return tags.filter((t) => ids.includes(t.id));
+    },
+    [getGameTagIds, tags],
+  );
 
   if (games.length === 0) {
     return (
@@ -64,4 +72,4 @@ export function GameGrid({ games, onSelectGame, onPersistShelves }: GameGridProp
       ))}
     </div>
   );
-}
+});

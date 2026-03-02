@@ -27,17 +27,13 @@ async fn sync_once(
     app_handle: &tauri::AppHandle,
     db: &CacheDbHandle,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Load settings to get API key + Steam ID
-    let settings = settings_store::load_settings(app_handle)?;
-
-    let api_key = match settings.steam_api_key {
-        Some(ref k) if !k.is_empty() => k.clone(),
-        _ => match credential_store::load_api_key()? {
-            Some(k) if !k.is_empty() => k,
-            _ => return Ok(()), // No API key configured, skip silently
-        },
+    // Load API key from credential store (never from settings JSON)
+    let api_key = match credential_store::load_api_key()? {
+        Some(k) if !k.is_empty() => k,
+        _ => return Ok(()), // No API key configured, skip silently
     };
 
+    let settings = settings_store::load_settings(app_handle)?;
     let steam_id = match settings.steam_id {
         Some(ref id) if !id.is_empty() => id.clone(),
         _ => return Ok(()),

@@ -5,7 +5,7 @@ use tauri::State;
 
 use crate::models::game::{Game, GameLibrary, GameSource};
 use crate::services::cache_db::CacheDbHandle;
-use crate::services::{registry, steam_client, vdf_parser};
+use crate::services::{credential_store, registry, steam_client, vdf_parser};
 use crate::utils::error::{AppError, MutexExt};
 
 /// Scan the local filesystem for installed Steam games.
@@ -84,7 +84,6 @@ pub async fn scan_local_library() -> Result<Vec<Game>, AppError> {
 /// Fetch the full library by merging local scan data with Steam API data.
 #[tauri::command]
 pub async fn get_full_library(
-    api_key: String,
     steam_id: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<GameLibrary, AppError> {
@@ -108,6 +107,13 @@ pub async fn get_full_library(
         .iter()
         .map(|g| (g.source_id.as_str(), g))
         .collect();
+
+    // Load API key from credential store (never passed from frontend)
+    let api_key = credential_store::load_api_key()?.ok_or_else(|| {
+        AppError::Credential(
+            "Steam API key not configured. Add it in Settings > Connections.".into(),
+        )
+    })?;
 
     // Fetch API data (owned games with playtime)
     let api_games = steam_client::fetch_owned_games(&api_key, &steam_id).await?;

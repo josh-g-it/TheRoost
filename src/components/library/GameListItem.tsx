@@ -10,6 +10,10 @@ import { useInstallStore } from "../../store/installSlice";
 import { useLibraryStore } from "../../store/librarySlice";
 import { steamInstallApi } from "../../services/tauri";
 import { formatPlaytime, formatBytes, formatLastPlayed } from "../../utils/formatters";
+import {
+  UNINSTALL_RESCAN_FIRST_MS,
+  UNINSTALL_RESCAN_SECOND_MS,
+} from "../../constants/timings";
 import type { Game, GenreInfo, Tag, CardDisplayOptions } from "../../types";
 import "./GameListItem.css";
 
@@ -45,6 +49,13 @@ export function GameListItem({
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const uninstallTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    return () => {
+      for (const t of uninstallTimersRef.current) clearTimeout(t);
+    };
+  }, []);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -177,8 +188,16 @@ export function GameListItem({
                     className="game-list-item__context-item game-list-item__context-item--danger"
                     onClick={() => {
                       steamInstallApi.uninstallGame(game.sourceId);
-                      setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 5000);
-                      setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 30000);
+                      uninstallTimersRef.current.push(
+                        setTimeout(
+                          () => useLibraryStore.getState().scanLocalOnly(),
+                          UNINSTALL_RESCAN_FIRST_MS,
+                        ),
+                        setTimeout(
+                          () => useLibraryStore.getState().scanLocalOnly(),
+                          UNINSTALL_RESCAN_SECOND_MS,
+                        ),
+                      );
                       setContextMenu(null);
                     }}
                   >

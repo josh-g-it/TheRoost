@@ -14,6 +14,10 @@ import { useLibraryStore } from "../../store/librarySlice";
 import { InstallProgressOverlay } from "./InstallProgressOverlay";
 import { steamInstallApi } from "../../services/tauri";
 import { formatPlaytime } from "../../utils/formatters";
+import {
+  UNINSTALL_RESCAN_FIRST_MS,
+  UNINSTALL_RESCAN_SECOND_MS,
+} from "../../constants/timings";
 import type { Game, GenreInfo, Tag, CardDisplayOptions } from "../../types";
 import "./GameCard.css";
 
@@ -58,9 +62,15 @@ export function GameCard({
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const uninstallTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
-    if (!contextMenu) return;
+    return () => {
+      for (const t of uninstallTimersRef.current) clearTimeout(t);
+    };
+  }, []);
+
+  useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setContextMenu(null);
@@ -68,7 +78,7 @@ export function GameCard({
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [contextMenu]);
+  }, []);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -203,8 +213,16 @@ export function GameCard({
                     className="game-card__context-item game-card__context-item--danger"
                     onClick={() => {
                       steamInstallApi.uninstallGame(game.sourceId);
-                      setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 5000);
-                      setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 30000);
+                      uninstallTimersRef.current.push(
+                        setTimeout(
+                          () => useLibraryStore.getState().scanLocalOnly(),
+                          UNINSTALL_RESCAN_FIRST_MS,
+                        ),
+                        setTimeout(
+                          () => useLibraryStore.getState().scanLocalOnly(),
+                          UNINSTALL_RESCAN_SECOND_MS,
+                        ),
+                      );
                       setContextMenu(null);
                     }}
                   >

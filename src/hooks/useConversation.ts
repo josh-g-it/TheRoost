@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 import type {
   AiMessage,
   ConversationEndedPayload,
@@ -17,6 +16,7 @@ import {
   parseActionsFromContent,
 } from "../utils/actionParser";
 import type { StreamParserState } from "../utils/actionParser";
+import { useEventListener } from "./useEventListener";
 
 interface UseConversationOptions {
   avatarId: string;
@@ -54,10 +54,9 @@ export function useConversation({
     parserStateRef.current = null;
   }, [conversationId]);
 
-  useEffect(() => {
-    if (!conversationId) return;
-
-    const unlisten = listen<StreamChunk>("ai-stream-chunk", (event) => {
+  useEventListener<StreamChunk>(
+    "ai-stream-chunk",
+    (event) => {
       const chunk = event.payload;
       if (chunk.conversationId !== convIdRef.current) return;
 
@@ -124,40 +123,32 @@ export function useConversation({
         const displayText = processChunk(parserStateRef.current, chunk.text);
         setCurrentStreamText((prev) => prev + displayText);
       }
-    });
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, [conversationId]);
+    },
+    [conversationId],
+    { enabled: !!conversationId },
+  );
 
   // Listen for cross-window conversation-ended events
-  useEffect(() => {
-    if (!conversationId) return;
-
-    const unlisten = listen<ConversationEndedPayload>(
-      "ai-conversation-ended",
-      (event) => {
-        const endedConvId = event.payload.conversationId;
-        if (endedConvId !== convIdRef.current) return;
-        // Skip if we are the one who triggered the end
-        if (isLocalEndRef.current) {
-          isLocalEndRef.current = false;
-          return;
-        }
-        setMessages([]);
-        setCurrentStreamText("");
-        setIsStreaming(false);
-        isStreamingRef.current = false;
-        setIsEnded(true);
-        setPendingActions([]);
-      },
-    );
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, [conversationId]);
+  useEventListener<ConversationEndedPayload>(
+    "ai-conversation-ended",
+    (event) => {
+      const endedConvId = event.payload.conversationId;
+      if (endedConvId !== convIdRef.current) return;
+      // Skip if we are the one who triggered the end
+      if (isLocalEndRef.current) {
+        isLocalEndRef.current = false;
+        return;
+      }
+      setMessages([]);
+      setCurrentStreamText("");
+      setIsStreaming(false);
+      isStreamingRef.current = false;
+      setIsEnded(true);
+      setPendingActions([]);
+    },
+    [conversationId],
+    { enabled: !!conversationId },
+  );
 
   const loadHistory = useCallback(async (convId: string): Promise<AiMessage[]> => {
     try {

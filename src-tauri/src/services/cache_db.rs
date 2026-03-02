@@ -160,6 +160,14 @@ impl CacheDb {
             );",
         )?;
 
+        // NOTE: We intentionally do NOT wrap the entire migration chain in a transaction.
+        // apply_v5() and apply_v24() create their own transactions, and SQLite does not
+        // support nested BEGIN. Concurrent process safety is handled by SQLite's write
+        // serialization (WAL mode + busy_timeout) and idempotent migrations (IF NOT EXISTS).
+        //
+        // Sentinel: COALESCE(MAX(version), 0) returns 0 when schema_version is empty
+        // (fresh DB). This ensures all migrations run on first launch. The unwrap_or(0)
+        // handles the edge case where the schema_version table itself doesn't exist yet.
         let current: u32 = self
             .conn
             .query_row(
@@ -240,6 +248,12 @@ impl CacheDb {
         }
         if current < 24 {
             self.apply_v24()?;
+        }
+        if current < 25 {
+            self.apply_v25()?;
+        }
+        if current < 26 {
+            self.apply_v26()?;
         }
 
         // Repair: restore any entries invalidated by cache invalidation (cached_at = 0).
@@ -924,6 +938,258 @@ impl CacheDb {
         Ok(())
     }
 
+    /// v25: Add foreign key constraints on 13 tables referencing games(game_id),
+    /// clean up orphaned records, and add missing game_executables.game_id index.
+    /// game_notes is excluded from FK rebuild due to __general__ sentinel.
+    fn apply_v25(&self) -> Result<(), AppError> {
+        let tx = self.conn.unchecked_transaction()?;
+
+        // ── Phase A: Orphan cleanup ─────────────────────────────────
+        // Delete rows where game_id doesn't exist in games.
+        // Must run BEFORE table rebuilds to avoid FK violations.
+        let orphan_tables = [
+            "store_metadata",
+            "favorites",
+            "hidden_games",
+            "game_ratings",
+            "game_achievement_freshness",
+            "playtime_snapshots",
+            "game_sessions",
+            "game_executables",
+            "game_images",
+            "game_achievements",
+            "game_news",
+            "game_tags",
+            "news_read",
+        ];
+
+        for table in orphan_tables {
+            let deleted: usize = tx.execute(
+                &format!(
+                    "DELETE FROM {} WHERE game_id NOT IN (SELECT game_id FROM games)",
+                    table
+                ),
+                [],
+            )?;
+            if deleted > 0 {
+                tracing::warn!(table, deleted, "v25: cleaned up orphaned records");
+            }
+        }
+
+        // game_notes: preserve __general__ sentinel (no games table entry)
+        let notes_deleted: usize = tx.execute(
+            "DELETE FROM game_notes WHERE game_id != '__general__'
+             AND game_id NOT IN (SELECT game_id FROM games)",
+            [],
+        )?;
+        if notes_deleted > 0 {
+            tracing::warn!(
+                deleted = notes_deleted,
+                "v25: cleaned up orphaned game_notes records"
+            );
+        }
+
+        // ── Phase B: Table rebuilds with FK constraints ─────────────
+        // SQLite has no ALTER TABLE ADD FOREIGN KEY — must rebuild each table.
+        // Pattern: CREATE _new with FK → INSERT SELECT → DROP old → RENAME.
+        tx.execute_batch(
+            "-- ═══ Group 1: Simple PK tables (game_id is PRIMARY KEY) ═══
+
+             CREATE TABLE store_metadata_new (
+                 game_id            TEXT PRIMARY KEY REFERENCES games(game_id) ON DELETE CASCADE,
+                 name               TEXT NOT NULL,
+                 short_description  TEXT,
+                 header_image_url   TEXT,
+                 developers         TEXT,
+                 publishers         TEXT,
+                 genres             TEXT,
+                 categories         TEXT,
+                 screenshots        TEXT,
+                 release_date       TEXT,
+                 metacritic_score   INTEGER,
+                 metacritic_url     TEXT,
+                 cached_at          INTEGER NOT NULL,
+                 steam_tags         TEXT
+             );
+             INSERT INTO store_metadata_new SELECT * FROM store_metadata;
+             DROP TABLE store_metadata;
+             ALTER TABLE store_metadata_new RENAME TO store_metadata;
+
+             CREATE TABLE favorites_new (
+                 game_id TEXT PRIMARY KEY REFERENCES games(game_id) ON DELETE CASCADE
+             );
+             INSERT INTO favorites_new SELECT * FROM favorites;
+             DROP TABLE favorites;
+             ALTER TABLE favorites_new RENAME TO favorites;
+
+             CREATE TABLE hidden_games_new (
+                 game_id TEXT PRIMARY KEY REFERENCES games(game_id) ON DELETE CASCADE
+             );
+             INSERT INTO hidden_games_new SELECT * FROM hidden_games;
+             DROP TABLE hidden_games;
+             ALTER TABLE hidden_games_new RENAME TO hidden_games;
+
+             CREATE TABLE game_ratings_new (
+                 game_id    TEXT PRIMARY KEY REFERENCES games(game_id) ON DELETE CASCADE,
+                 rating     INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 10),
+                 review     TEXT,
+                 updated_at INTEGER NOT NULL
+             );
+             INSERT INTO game_ratings_new SELECT * FROM game_ratings;
+             DROP TABLE game_ratings;
+             ALTER TABLE game_ratings_new RENAME TO game_ratings;
+
+             CREATE TABLE game_achievement_freshness_new (
+                 game_id    TEXT PRIMARY KEY REFERENCES games(game_id) ON DELETE CASCADE,
+                 checked_at INTEGER NOT NULL
+             );
+             INSERT INTO game_achievement_freshness_new SELECT * FROM game_achievement_freshness;
+             DROP TABLE game_achievement_freshness;
+             ALTER TABLE game_achievement_freshness_new RENAME TO game_achievement_freshness;
+
+             -- ═══ Group 2: AUTOINCREMENT PK tables ═══
+
+             CREATE TABLE playtime_snapshots_new (
+                 id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                 game_id          TEXT NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
+                 playtime_minutes INTEGER NOT NULL,
+                 snapshot_at      INTEGER NOT NULL
+             );
+             INSERT INTO playtime_snapshots_new SELECT * FROM playtime_snapshots;
+             DROP TABLE playtime_snapshots;
+             ALTER TABLE playtime_snapshots_new RENAME TO playtime_snapshots;
+
+             CREATE TABLE game_sessions_new (
+                 id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                 game_id          TEXT NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
+                 start_time       INTEGER NOT NULL,
+                 end_time         INTEGER,
+                 duration_minutes INTEGER
+             );
+             INSERT INTO game_sessions_new SELECT * FROM game_sessions;
+             DROP TABLE game_sessions;
+             ALTER TABLE game_sessions_new RENAME TO game_sessions;
+
+             CREATE TABLE game_executables_new (
+                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                 game_id       TEXT NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
+                 exe_path      TEXT NOT NULL,
+                 exe_name      TEXT NOT NULL,
+                 discovered_at INTEGER NOT NULL,
+                 UNIQUE(game_id, exe_path)
+             );
+             INSERT INTO game_executables_new SELECT * FROM game_executables;
+             DROP TABLE game_executables;
+             ALTER TABLE game_executables_new RENAME TO game_executables;
+
+             -- ═══ Group 3: Composite PK tables ═══
+
+             CREATE TABLE game_images_new (
+                 game_id       TEXT NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
+                 image_type    TEXT NOT NULL,
+                 image_url     TEXT NOT NULL,
+                 source        TEXT NOT NULL,
+                 cached_at     INTEGER NOT NULL,
+                 user_selected INTEGER NOT NULL DEFAULT 0,
+                 local_path    TEXT DEFAULT NULL,
+                 PRIMARY KEY (game_id, image_type)
+             );
+             INSERT INTO game_images_new SELECT * FROM game_images;
+             DROP TABLE game_images;
+             ALTER TABLE game_images_new RENAME TO game_images;
+
+             CREATE TABLE game_achievements_new (
+                 game_id        TEXT NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
+                 api_name       TEXT NOT NULL,
+                 display_name   TEXT NOT NULL DEFAULT '',
+                 description    TEXT,
+                 icon_url       TEXT,
+                 icon_gray_url  TEXT,
+                 hidden         INTEGER NOT NULL DEFAULT 0,
+                 achieved       INTEGER NOT NULL DEFAULT 0,
+                 unlock_time    INTEGER,
+                 global_percent REAL,
+                 cached_at      INTEGER NOT NULL,
+                 PRIMARY KEY (game_id, api_name)
+             );
+             INSERT INTO game_achievements_new SELECT * FROM game_achievements;
+             DROP TABLE game_achievements;
+             ALTER TABLE game_achievements_new RENAME TO game_achievements;
+
+             CREATE TABLE game_news_new (
+                 game_id     TEXT NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
+                 news_id     TEXT NOT NULL,
+                 title       TEXT NOT NULL,
+                 url         TEXT,
+                 author      TEXT,
+                 contents    TEXT,
+                 date        INTEGER NOT NULL,
+                 feed_label  TEXT,
+                 cached_at   INTEGER NOT NULL,
+                 is_external INTEGER NOT NULL DEFAULT 0,
+                 PRIMARY KEY (game_id, news_id)
+             );
+             INSERT INTO game_news_new SELECT * FROM game_news;
+             DROP TABLE game_news;
+             ALTER TABLE game_news_new RENAME TO game_news;
+
+             CREATE TABLE game_tags_new (
+                 game_id TEXT NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
+                 tag_id  INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+                 PRIMARY KEY (game_id, tag_id)
+             );
+             INSERT INTO game_tags_new SELECT * FROM game_tags;
+             DROP TABLE game_tags;
+             ALTER TABLE game_tags_new RENAME TO game_tags;
+
+             CREATE TABLE news_read_new (
+                 news_id TEXT PRIMARY KEY,
+                 game_id TEXT NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
+                 read_at TEXT NOT NULL DEFAULT (datetime('now'))
+             );
+             INSERT INTO news_read_new SELECT * FROM news_read;
+             DROP TABLE news_read;
+             ALTER TABLE news_read_new RENAME TO news_read;
+
+             -- ═══ Phase C: Recreate all indexes (dropped with old tables) ═══
+
+             CREATE INDEX idx_snapshots_game_time
+                 ON playtime_snapshots(game_id, snapshot_at DESC);
+             CREATE INDEX idx_sessions_game ON game_sessions(game_id);
+             CREATE INDEX idx_sessions_time ON game_sessions(start_time DESC);
+             CREATE INDEX idx_game_exe_name ON game_executables(exe_name);
+             CREATE INDEX idx_game_executables_game_id ON game_executables(game_id);
+             CREATE INDEX idx_achievements_game ON game_achievements(game_id);
+             CREATE INDEX idx_news_game ON game_news(game_id);
+             CREATE INDEX idx_game_tags_tag ON game_tags(tag_id);
+             CREATE INDEX idx_news_read_game ON news_read(game_id);
+
+             -- ═══ Version stamp ═══
+
+             INSERT OR REPLACE INTO schema_version (version, applied_at)
+                 VALUES (25, datetime('now'));",
+        )?;
+
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// v26: Add UNIQUE constraints on ai_avatars.name and ai_personalities.name
+    /// to prevent duplicate names (UI already disallows, this enforces at DB level).
+    fn apply_v26(&self) -> Result<(), AppError> {
+        self.conn.execute_batch(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_avatars_name
+                ON ai_avatars(name);
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_personalities_name
+                ON ai_personalities(name);
+
+            INSERT OR REPLACE INTO schema_version (version, applied_at)
+                VALUES (26, datetime('now'));",
+        )?;
+        Ok(())
+    }
+
     // ── Manual Playtime ─────────────────────────────────────────────
 
     /// Get the manual playtime for a game (in minutes).
@@ -1350,33 +1616,20 @@ impl CacheDb {
         Ok(())
     }
 
-    /// Delete a game and all related data from every table.
-    /// Wrapped in a transaction to prevent partial deletes on failure.
+    /// Delete a game and all related data.
+    /// 13 child tables have ON DELETE CASCADE FKs (v25), so deleting from `games`
+    /// automatically removes their rows. game_notes has no FK (due to __general__
+    /// sentinel), so it's deleted manually first.
     pub fn delete_game(&self, game_id: &str) -> Result<(), AppError> {
         let tx = self.conn.unchecked_transaction()?;
-        // Table names are compile-time constants — not user input. game_id is parameterized.
-        let tables = [
-            "game_executables",
-            "game_images",
-            "game_tags",
-            "game_notes",
-            "game_ratings",
-            "game_achievements",
-            "game_achievement_freshness",
-            "game_news",
-            "news_read",
-            "favorites",
-            "hidden_games",
-            "playtime_snapshots",
-            "game_sessions",
-            "store_metadata",
-        ];
-        for table in tables {
-            tx.execute(
-                &format!("DELETE FROM {} WHERE game_id = ?1", table),
-                params![game_id],
-            )?;
-        }
+        // game_notes has no FK constraint (preserves __general__ sentinel row)
+        tx.execute(
+            "DELETE FROM game_notes WHERE game_id = ?1",
+            params![game_id],
+        )?;
+        // CASCADE handles: store_metadata, favorites, hidden_games, game_ratings,
+        // game_achievement_freshness, playtime_snapshots, game_sessions,
+        // game_executables, game_images, game_achievements, game_news, game_tags, news_read
         tx.execute("DELETE FROM games WHERE game_id = ?1", params![game_id])?;
         tx.commit()?;
         Ok(())
@@ -2321,15 +2574,18 @@ impl CacheDb {
     }
 
     pub fn bulk_set_game_tags(&self, game_ids: &[String], tag_ids: &[i64]) -> Result<(), AppError> {
+        if game_ids.is_empty() || tag_ids.is_empty() {
+            return Ok(());
+        }
         let tx = self.conn.unchecked_transaction()?;
+        let mut stmt =
+            tx.prepare("INSERT OR IGNORE INTO game_tags (game_id, tag_id) VALUES (?1, ?2)")?;
         for game_id in game_ids {
             for &tag_id in tag_ids {
-                tx.execute(
-                    "INSERT OR IGNORE INTO game_tags (game_id, tag_id) VALUES (?1, ?2)",
-                    params![game_id, tag_id],
-                )?;
+                stmt.execute(params![game_id, tag_id])?;
             }
         }
+        drop(stmt);
         tx.commit()?;
         Ok(())
     }
@@ -3644,16 +3900,20 @@ impl CacheDb {
         Ok(())
     }
 
-    /// Soft-delete a batch of memories in a single transaction (used by pruning).
+    /// Soft-delete a batch of memories in a single statement (used by pruning).
     pub fn soft_delete_memories_batch(&self, ids: &[String]) -> Result<(), AppError> {
-        let tx = self.conn.unchecked_transaction()?;
-        for id in ids {
-            tx.execute(
-                "UPDATE ai_memories SET active = 0 WHERE id = ?1",
-                params![id],
-            )?;
+        if ids.is_empty() {
+            return Ok(());
         }
-        tx.commit().map_err(AppError::Database)
+        let placeholders = vec!["?"; ids.len()].join(", ");
+        let sql = format!(
+            "UPDATE ai_memories SET active = 0 WHERE id IN ({})",
+            placeholders
+        );
+        let params: Vec<&dyn rusqlite::ToSql> =
+            ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+        self.conn.execute(&sql, params.as_slice())?;
+        Ok(())
     }
 
     /// Count active non-system memories for an avatar.
@@ -3666,7 +3926,10 @@ impl CacheDb {
         Ok(count)
     }
 
-    /// Get IDs of the lowest-importance active vault memories (for pruning).
+    /// Get IDs of the lowest-value active vault memories for pruning.
+    /// Ranks by importance (primary), then by recency — memories that were never
+    /// referenced and are old get pruned first. Uses `COALESCE(last_referenced,
+    /// created_at)` so unreferenced memories sort by creation date.
     pub fn get_lowest_importance_memories(
         &self,
         avatar_id: &str,
@@ -3675,13 +3938,43 @@ impl CacheDb {
         let mut stmt = self.conn.prepare(
             "SELECT id FROM ai_memories
              WHERE avatar_id = ?1 AND active = 1 AND is_system = 0
-             ORDER BY importance ASC, created_at ASC
+             ORDER BY importance ASC, COALESCE(last_referenced, created_at) ASC
              LIMIT ?2",
         )?;
         let ids = stmt
             .query_map(params![avatar_id, limit], |row| row.get(0))?
             .collect::<Result<Vec<String>, _>>()?;
         Ok(ids)
+    }
+
+    /// Hard-delete inactive (superseded) memories older than `before` date.
+    /// Returns the number of rows deleted.
+    pub fn hard_delete_old_inactive_memories(
+        &self,
+        avatar_id: &str,
+        before: &str,
+    ) -> Result<u32, AppError> {
+        let deleted = self.conn.execute(
+            "DELETE FROM ai_memories
+             WHERE avatar_id = ?1 AND active = 0 AND created_at < ?2",
+            params![avatar_id, before],
+        )?;
+        Ok(deleted as u32)
+    }
+
+    /// Delete journal entries older than `before` date.
+    /// Returns the number of rows deleted.
+    pub fn prune_old_journal_entries(
+        &self,
+        avatar_id: &str,
+        before: &str,
+    ) -> Result<u32, AppError> {
+        let deleted = self.conn.execute(
+            "DELETE FROM ai_daily_log
+             WHERE avatar_id = ?1 AND created_at < ?2",
+            params![avatar_id, before],
+        )?;
+        Ok(deleted as u32)
     }
 
     // ── AI Journal CRUD (raw — summary is encrypted) ────────────────
@@ -3784,7 +4077,7 @@ impl CacheDb {
                     ended_at: row.get(3)?,
                     summary: row.get(4)?,
                     message_count: row.get(5)?,
-                    compacted: row.get::<_, i32>(6)? != 0,
+                    compacted: row.get::<_, u8>(6)?,
                 })
             },
         );
@@ -3815,7 +4108,7 @@ impl CacheDb {
             ended_at: None,
             summary: None,
             message_count: 0,
-            compacted: false,
+            compacted: 0,
         })
     }
 
@@ -3823,6 +4116,17 @@ impl CacheDb {
     pub fn end_ai_conversation(&self, conversation_id: &str) -> Result<(), AppError> {
         self.conn.execute(
             "UPDATE ai_conversations SET ended_at = datetime('now') WHERE id = ?1",
+            params![conversation_id],
+        )?;
+        Ok(())
+    }
+
+    /// Mark a conversation's compaction as failed (compacted = 2).
+    /// Distinguishes from pending (0) so retry logic can differentiate
+    /// never-attempted from genuinely-failed compactions.
+    pub fn mark_compaction_failed(&self, conversation_id: &str) -> Result<(), AppError> {
+        self.conn.execute(
+            "UPDATE ai_conversations SET compacted = 2 WHERE id = ?1",
             params![conversation_id],
         )?;
         Ok(())
@@ -3920,11 +4224,15 @@ impl CacheDb {
     /// Delete specific messages by ID (for mid-session summarization).
     #[allow(dead_code)]
     pub fn delete_ai_messages_by_ids(&self, ids: &[String]) -> Result<(), AppError> {
-        let tx = self.conn.unchecked_transaction()?;
-        for id in ids {
-            tx.execute("DELETE FROM ai_messages WHERE id = ?1", params![id])?;
+        if ids.is_empty() {
+            return Ok(());
         }
-        tx.commit().map_err(AppError::Database)
+        let placeholders = vec!["?"; ids.len()].join(", ");
+        let sql = format!("DELETE FROM ai_messages WHERE id IN ({})", placeholders);
+        let params: Vec<&dyn rusqlite::ToSql> =
+            ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+        self.conn.execute(&sql, params.as_slice())?;
+        Ok(())
     }
 
     /// Find un-ended conversations for a specific avatar (crash recovery).
@@ -4193,7 +4501,7 @@ impl CacheDb {
             ended_at: None,
             summary: None,
             message_count: 0,
-            compacted: false,
+            compacted: 0,
         })
     }
 
@@ -4253,6 +4561,16 @@ mod tests {
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("test.db");
         CacheDb::new(&path).unwrap()
+    }
+
+    /// Helper: ensure a game exists in the games table for FK constraints.
+    fn ensure_game(db: &CacheDb, game_id: &str) {
+        db.conn
+            .execute(
+                "INSERT OR IGNORE INTO games (game_id, source, source_id, name, created_at) VALUES (?1, 'Steam', ?1, 'Test Game', 0)",
+                rusqlite::params![game_id],
+            )
+            .unwrap();
     }
 
     fn make_metadata(game_id: &str) -> StoreMetadata {
@@ -4341,7 +4659,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 24);
+        assert_eq!(version, 26);
     }
 
     #[test]
@@ -4382,7 +4700,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 24);
+        assert_eq!(version, 26);
     }
 
     #[test]
@@ -4402,6 +4720,8 @@ mod tests {
             "idx_ai_messages_conv",
             "idx_ai_memories_active",
             "idx_ai_daily_log_avatar_date",
+            "idx_ai_avatars_name",
+            "idx_ai_personalities_name",
         ];
         for idx in &expected {
             assert!(
@@ -4587,6 +4907,7 @@ mod tests {
     #[test]
     fn test_metadata_roundtrip() {
         let db = test_db();
+        ensure_game(&db, "test-440");
         let meta = make_metadata("test-440");
         db.cache_store_metadata(&meta).unwrap();
 
@@ -4640,6 +4961,7 @@ mod tests {
     #[test]
     fn test_metadata_fresh() {
         let db = test_db();
+        ensure_game(&db, "test-440");
         let meta = make_metadata("test-440");
         db.cache_store_metadata(&meta).unwrap();
         assert!(db.is_metadata_fresh("test-440").unwrap());
@@ -4648,6 +4970,7 @@ mod tests {
     #[test]
     fn test_invalidate_metadata() {
         let db = test_db();
+        ensure_game(&db, "test-440");
         let meta = make_metadata("test-440");
         db.cache_store_metadata(&meta).unwrap();
         assert!(db.is_metadata_fresh("test-440").unwrap());
@@ -4659,6 +4982,8 @@ mod tests {
     #[test]
     fn test_game_ids_missing_tags() {
         let db = test_db();
+        ensure_game(&db, "test-440");
+        ensure_game(&db, "test-730");
         // Cache one with steam_tags populated (via make_metadata)
         let meta = make_metadata("test-440");
         db.cache_store_metadata(&meta).unwrap();
@@ -4680,6 +5005,7 @@ mod tests {
     #[test]
     fn test_update_steam_tags() {
         let db = test_db();
+        ensure_game(&db, "test-440");
         let meta = make_metadata("test-440");
         db.cache_store_metadata(&meta).unwrap();
 
@@ -4708,6 +5034,7 @@ mod tests {
     #[test]
     fn test_session_start_and_active() {
         let db = test_db();
+        ensure_game(&db, "test-440");
         let now = chrono::Utc::now().timestamp();
         let id = db.start_session("test-440", now).unwrap();
         assert!(id > 0);
@@ -4725,6 +5052,7 @@ mod tests {
     #[test]
     fn test_session_close() {
         let db = test_db();
+        ensure_game(&db, "test-440");
         let now = chrono::Utc::now().timestamp();
         let id = db.start_session("test-440", now).unwrap();
 
@@ -4744,6 +5072,8 @@ mod tests {
     #[test]
     fn test_all_active_sessions() {
         let db = test_db();
+        ensure_game(&db, "test-440");
+        ensure_game(&db, "test-730");
         let now = chrono::Utc::now().timestamp();
 
         let id1 = db.start_session("test-440", now).unwrap();
@@ -4760,6 +5090,7 @@ mod tests {
     #[test]
     fn test_get_sessions_limit() {
         let db = test_db();
+        ensure_game(&db, "test-440");
         let now = chrono::Utc::now().timestamp();
 
         for i in 0..5 {
@@ -4774,6 +5105,8 @@ mod tests {
     #[test]
     fn test_recent_sessions_includes_active() {
         let db = test_db();
+        ensure_game(&db, "test-440");
+        ensure_game(&db, "test-730");
         let now = chrono::Utc::now().timestamp();
 
         // Session 1: closed
@@ -4799,30 +5132,15 @@ mod tests {
         let db = test_db();
         let now = chrono::Utc::now().timestamp();
 
-        // Register games so the JOIN has entries
-        db.register_game("steam", "440", "Team Fortress 2").unwrap();
-        db.register_game("steam", "730", "CS2").unwrap();
-        db.register_game("steam", "570", "Dota 2").unwrap();
-
-        // Create completed sessions for game 440 (older) and 730 (newer)
-        let id1 = db.start_session("test-440", now).unwrap();
-        db.close_session(id1, now + 3600, 60).unwrap();
-        let id2 = db.start_session("test-730", now + 5000).unwrap();
-        db.close_session(id2, now + 8600, 60).unwrap();
-
-        let recent = db.get_recently_played_games(5).unwrap();
-        // test-440 and test-730 are NOT registered game_ids, so JOIN won't match
-        // Need to use the actual registered game_ids
-        assert_eq!(recent.len(), 0); // no sessions for registered game_ids
-
-        // Now create sessions using registered game_ids
+        // Register games and create sessions using their registered game_ids
         let gid_440 = db.register_game("steam", "440", "Team Fortress 2").unwrap();
         let gid_730 = db.register_game("steam", "730", "CS2").unwrap();
+        db.register_game("steam", "570", "Dota 2").unwrap();
 
-        let id3 = db.start_session(&gid_440, now + 10000).unwrap();
-        db.close_session(id3, now + 13600, 60).unwrap();
-        let id4 = db.start_session(&gid_730, now + 20000).unwrap();
-        db.close_session(id4, now + 23600, 60).unwrap();
+        let id1 = db.start_session(&gid_440, now).unwrap();
+        db.close_session(id1, now + 3600, 60).unwrap();
+        let id2 = db.start_session(&gid_730, now + 5000).unwrap();
+        db.close_session(id2, now + 8600, 60).unwrap();
 
         let recent = db.get_recently_played_games(5).unwrap();
         assert_eq!(recent.len(), 2);
@@ -4937,6 +5255,7 @@ mod tests {
     #[test]
     fn test_tag_delete_cascades() {
         let db = test_db();
+        ensure_game(&db, "test-440");
         let tag = db.create_tag("ToDelete", 0).unwrap();
         db.set_game_tags("test-440", &[tag.id]).unwrap();
 
@@ -4978,6 +5297,7 @@ mod tests {
     #[test]
     fn test_set_game_tags() {
         let db = test_db();
+        ensure_game(&db, "test-440");
         let t1 = db.create_tag("A", 0).unwrap();
         let t2 = db.create_tag("B", 1).unwrap();
 
@@ -4995,6 +5315,7 @@ mod tests {
     #[test]
     fn test_set_game_tags_replaces() {
         let db = test_db();
+        ensure_game(&db, "test-440");
         let t1 = db.create_tag("A", 0).unwrap();
         let t2 = db.create_tag("B", 1).unwrap();
         let t3 = db.create_tag("C", 2).unwrap();
@@ -5009,6 +5330,8 @@ mod tests {
     #[test]
     fn test_get_all_game_tags() {
         let db = test_db();
+        ensure_game(&db, "test-440");
+        ensure_game(&db, "test-730");
         let t1 = db.create_tag("A", 0).unwrap();
         let t2 = db.create_tag("B", 1).unwrap();
 
@@ -5024,6 +5347,8 @@ mod tests {
     #[test]
     fn test_bulk_set_game_tags() {
         let db = test_db();
+        ensure_game(&db, "test-440");
+        ensure_game(&db, "test-730");
         let t1 = db.create_tag("A", 0).unwrap();
         let t2 = db.create_tag("B", 1).unwrap();
 
@@ -5043,6 +5368,7 @@ mod tests {
     #[test]
     fn test_favorite_toggle() {
         let db = test_db();
+        ensure_game(&db, "test-440");
 
         db.set_favorite("test-440", true).unwrap();
         let favs = db.get_all_favorites().unwrap();
@@ -5058,6 +5384,7 @@ mod tests {
     #[test]
     fn test_hidden_toggle() {
         let db = test_db();
+        ensure_game(&db, "test-440");
 
         db.set_hidden("test-440", true).unwrap();
         let hidden = db.get_all_hidden().unwrap();
@@ -5119,6 +5446,7 @@ mod tests {
     #[test]
     fn test_insert_snapshot() {
         let db = test_db();
+        ensure_game(&db, "test-440");
         let now = chrono::Utc::now().timestamp();
         let result = db.insert_snapshot("test-440", 120, now);
         assert!(result.is_ok());
@@ -5127,6 +5455,7 @@ mod tests {
     #[test]
     fn test_cleanup_old_snapshots() {
         let db = test_db();
+        ensure_game(&db, "test-440");
         let now = chrono::Utc::now().timestamp();
 
         // Old snapshot (timestamp = 0, well beyond any cleanup cutoff)
@@ -5313,6 +5642,7 @@ mod tests {
     #[test]
     fn test_cache_game_image_roundtrip() {
         let db = test_db();
+        ensure_game(&db, "game-1");
         db.cache_game_image(
             "game-1",
             "grid",
@@ -5328,6 +5658,7 @@ mod tests {
     #[test]
     fn test_cache_game_image_upsert() {
         let db = test_db();
+        ensure_game(&db, "game-1");
         db.cache_game_image(
             "game-1",
             "grid",
@@ -5386,6 +5717,7 @@ mod tests {
     #[test]
     fn test_cache_game_image_user_selected() {
         let db = test_db();
+        ensure_game(&db, "game-1");
         db.cache_game_image(
             "game-1",
             "grid",
@@ -5403,6 +5735,7 @@ mod tests {
     #[test]
     fn test_user_selected_skips_ttl() {
         let db = test_db();
+        ensure_game(&db, "game-1");
         // Insert with user_selected = true and a very old cached_at
         db.conn
             .execute(
@@ -5419,6 +5752,7 @@ mod tests {
     #[test]
     fn test_is_user_selected_image() {
         let db = test_db();
+        ensure_game(&db, "game-1");
         // Not found → false
         assert!(!db.is_user_selected_image("game-1", "grid").unwrap());
         // Auto-selected → false
@@ -5448,6 +5782,7 @@ mod tests {
     #[test]
     fn test_cache_game_image_local() {
         let db = test_db();
+        ensure_game(&db, "g1");
         db.cache_game_image_local("g1", "grid", "C:\\art\\g1_grid.png", "custom_upload", true)
             .unwrap();
         let path = db.get_game_image_local_path("g1", "grid").unwrap();
@@ -5458,6 +5793,7 @@ mod tests {
     #[test]
     fn test_get_game_image_with_local_remote() {
         let db = test_db();
+        ensure_game(&db, "g1");
         // No image → None
         assert!(db
             .get_game_image_with_local("g1", "grid")
@@ -5475,6 +5811,7 @@ mod tests {
     #[test]
     fn test_get_game_image_with_local_custom() {
         let db = test_db();
+        ensure_game(&db, "g1");
         db.cache_game_image_local("g1", "grid", "C:\\art\\g1.png", "custom_upload", true)
             .unwrap();
         let result = db.get_game_image_with_local("g1", "grid").unwrap().unwrap();
@@ -5484,6 +5821,7 @@ mod tests {
     #[test]
     fn test_delete_game_image() {
         let db = test_db();
+        ensure_game(&db, "g1");
         db.cache_game_image("g1", "grid", "https://cdn.com/img.jpg", "sgdb", true)
             .unwrap();
         assert!(db.get_game_image("g1", "grid").unwrap().is_some());
@@ -5494,6 +5832,7 @@ mod tests {
     #[test]
     fn test_get_all_game_images() {
         let db = test_db();
+        ensure_game(&db, "g1");
         db.cache_game_image("g1", "grid", "https://grid.jpg", "sgdb", false)
             .unwrap();
         db.cache_game_image("g1", "hero", "https://hero.jpg", "sgdb", true)
@@ -5507,6 +5846,7 @@ mod tests {
     #[test]
     fn test_local_image_replaces_remote() {
         let db = test_db();
+        ensure_game(&db, "g1");
         // First set a remote image
         db.cache_game_image("g1", "grid", "https://remote.jpg", "sgdb", false)
             .unwrap();
@@ -5721,6 +6061,7 @@ mod tests {
     #[test]
     fn test_is_game_enriched() {
         let db = test_db();
+        ensure_game(&db, "g1");
         let now = chrono::Utc::now().timestamp();
 
         // Non-existent game → false
@@ -5750,6 +6091,7 @@ mod tests {
         use crate::models::metadata::*;
 
         let db = test_db();
+        ensure_game(&db, "g1");
         let now = chrono::Utc::now().timestamp();
 
         // Start with SteamSpy-only data including tags
@@ -6769,6 +7111,9 @@ mod tests {
     #[test]
     fn test_get_sessions_in_range() {
         let db = test_db();
+        ensure_game(&db, "game-a");
+        ensure_game(&db, "game-b");
+        ensure_game(&db, "game-c");
 
         // Create sessions at different timestamps
         // Session 1: start_time = 1000, inside range [1000, 2000)
@@ -6801,6 +7146,9 @@ mod tests {
     #[test]
     fn test_get_first_session_per_game() {
         let db = test_db();
+        ensure_game(&db, "game-a");
+        ensure_game(&db, "game-b");
+        ensure_game(&db, "game-c");
 
         // game-a: sessions at 1000 and 2000 => first = 1000
         let id1 = db.start_session("game-a", 1000).unwrap();
@@ -7189,7 +7537,7 @@ mod tests {
         assert!(!conv.id.is_empty());
         assert_eq!(conv.avatar_id, avatar.id);
         assert_eq!(conv.message_count, 0);
-        assert!(!conv.compacted);
+        assert_eq!(conv.compacted, 0);
         assert!(conv.ended_at.is_none());
         assert!(conv.summary.is_none());
         assert!(!conv.started_at.is_empty());
@@ -7595,5 +7943,221 @@ mod tests {
             AppError::NotFound(msg) => assert!(msg.contains("Conversation not found")),
             other => panic!("Expected NotFound, got: {:?}", other),
         }
+    }
+
+    // ── v25 FK constraint tests ─────────────────────────────────────
+
+    #[test]
+    fn test_v25_fk_cascade_delete() {
+        let db = test_db();
+        let game_id = db.register_game("Steam", "12345", "Test Game").unwrap();
+
+        // Insert child rows in multiple FK-constrained tables
+        db.add_game_executable(&game_id, "/path/to/game.exe", "game.exe")
+            .unwrap();
+        db.set_favorite(&game_id, true).unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO hidden_games (game_id) VALUES (?1)",
+                params![game_id],
+            )
+            .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO playtime_snapshots (game_id, playtime_minutes, snapshot_at) VALUES (?1, 60, 1000)",
+                params![game_id],
+            )
+            .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO game_sessions (game_id, start_time) VALUES (?1, 1000)",
+                params![game_id],
+            )
+            .unwrap();
+        db.save_game_note(&game_id, "Test note").unwrap();
+
+        // Verify data exists
+        let exes = db.get_all_game_executables().unwrap();
+        assert!(exes.iter().any(|(gid, _, _)| gid == &game_id));
+
+        // Delete the game — CASCADE should clean up all FK-constrained tables
+        db.delete_game(&game_id).unwrap();
+
+        // Verify all child rows are gone
+        let count: u32 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM game_executables WHERE game_id = ?1",
+                params![game_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0, "game_executables should be cascaded");
+
+        let count: u32 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM favorites WHERE game_id = ?1",
+                params![game_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0, "favorites should be cascaded");
+
+        let count: u32 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM hidden_games WHERE game_id = ?1",
+                params![game_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0, "hidden_games should be cascaded");
+
+        let count: u32 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM playtime_snapshots WHERE game_id = ?1",
+                params![game_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0, "playtime_snapshots should be cascaded");
+
+        let count: u32 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM game_sessions WHERE game_id = ?1",
+                params![game_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0, "game_sessions should be cascaded");
+
+        // game_notes should also be deleted (manual delete in delete_game)
+        let note = db.get_game_note(&game_id).unwrap();
+        assert!(note.is_none(), "game_notes should be manually deleted");
+    }
+
+    #[test]
+    fn test_v25_fk_rejects_orphan_insert() {
+        let db = test_db();
+        let fake_id = "nonexistent-game-id";
+
+        // Inserting into an FK-constrained table with a nonexistent game_id should fail
+        let result = db.conn.execute(
+            "INSERT INTO favorites (game_id) VALUES (?1)",
+            params![fake_id],
+        );
+        assert!(
+            result.is_err(),
+            "FK should reject orphan insert into favorites"
+        );
+
+        let result = db.conn.execute(
+            "INSERT INTO game_executables (game_id, exe_path, exe_name, discovered_at) VALUES (?1, '/x', 'x', 0)",
+            params![fake_id],
+        );
+        assert!(
+            result.is_err(),
+            "FK should reject orphan insert into game_executables"
+        );
+
+        let result = db.conn.execute(
+            "INSERT INTO store_metadata (game_id, name, cached_at) VALUES (?1, 'X', 0)",
+            params![fake_id],
+        );
+        assert!(
+            result.is_err(),
+            "FK should reject orphan insert into store_metadata"
+        );
+    }
+
+    #[test]
+    fn test_v25_general_note_survives() {
+        let db = test_db();
+
+        // The __general__ sentinel has no entry in games — it should still work
+        // because game_notes has no FK constraint
+        db.save_game_note("__general__", "My general note").unwrap();
+        let note = db.get_game_note("__general__").unwrap();
+        assert!(note.is_some());
+        assert_eq!(note.unwrap().content, "My general note");
+    }
+
+    #[test]
+    fn test_v25_game_executables_game_id_index() {
+        let db = test_db();
+        let indexes: Vec<String> = db
+            .conn
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'game_executables'")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<String>, _>>()
+            .unwrap();
+
+        assert!(
+            indexes.contains(&"idx_game_executables_game_id".to_string()),
+            "game_executables should have game_id index, found: {:?}",
+            indexes
+        );
+        assert!(
+            indexes.contains(&"idx_game_exe_name".to_string()),
+            "game_executables should still have exe_name index, found: {:?}",
+            indexes
+        );
+    }
+
+    #[test]
+    fn test_v25_fk_constraints_exist() {
+        let db = test_db();
+
+        // Verify FK constraints are present on all 13 rebuilt tables
+        let tables_with_fk = [
+            "store_metadata",
+            "favorites",
+            "hidden_games",
+            "game_ratings",
+            "game_achievement_freshness",
+            "playtime_snapshots",
+            "game_sessions",
+            "game_executables",
+            "game_images",
+            "game_achievements",
+            "game_news",
+            "game_tags",
+            "news_read",
+        ];
+
+        for table in tables_with_fk {
+            let fk_count: u32 = db
+                .conn
+                .query_row(
+                    &format!("SELECT COUNT(*) FROM pragma_foreign_key_list('{}')", table),
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(
+                fk_count > 0,
+                "Table '{}' should have at least one FK constraint",
+                table
+            );
+        }
+
+        // game_notes should NOT have an FK constraint
+        let notes_fk: u32 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_foreign_key_list('game_notes')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            notes_fk, 0,
+            "game_notes should NOT have FK (due to __general__ sentinel)"
+        );
     }
 }

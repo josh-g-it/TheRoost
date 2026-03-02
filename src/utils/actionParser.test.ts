@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   createParserState,
   processChunk,
@@ -7,6 +7,15 @@ import {
   parseActionsFromContent,
   DELIMITER,
 } from "./actionParser";
+
+vi.mock("./logger", () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
 
 describe("createParserState", () => {
   it("returns clean initial state", () => {

@@ -22,7 +22,8 @@ export interface AiConversation {
   endedAt: string | null;
   summary: string | null;
   messageCount: number;
-  compacted: boolean;
+  /** Compaction status: 0 = pending, 1 = success, 2 = failed */
+  compacted: number;
 }
 
 export interface AiMessage {

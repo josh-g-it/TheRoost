@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useEventListener } from "./hooks/useEventListener";
 import type { AppSettings, Game, GameSession, StoreMetadata } from "./types";
 import type {
   AppSettings as SettingsType,
@@ -128,37 +128,47 @@ export function OverlayApp() {
   // after a short delay — unless we intentionally hid the overlay.
   useEffect(() => {
     const win = getCurrentWindow();
+    let isMounted = true;
     let focusTimer: ReturnType<typeof setTimeout> | null = null;
-    const unlisten = win.onFocusChanged(({ payload: focused }) => {
-      if (focused) {
-        hidingRef.current = false;
-        // loadData has its own debounce guard — safe to call on focus
-        loadData();
-      } else if (!hidingRef.current) {
-        // Focus was stolen by another overlay — reclaim after a short delay
-        if (focusTimer) clearTimeout(focusTimer);
-        focusTimer = setTimeout(() => {
-          if (!hidingRef.current) {
-            win.setFocus().catch(() => {});
-          }
-        }, 150);
-      }
-    });
+    let unlistenFn: (() => void) | null = null;
+
+    win
+      .onFocusChanged(({ payload: focused }) => {
+        if (!isMounted) return;
+        if (focused) {
+          hidingRef.current = false;
+          // loadData has its own debounce guard — safe to call on focus
+          loadData();
+        } else if (!hidingRef.current) {
+          // Focus was stolen by another overlay — reclaim after a short delay
+          if (focusTimer) clearTimeout(focusTimer);
+          focusTimer = setTimeout(() => {
+            if (!hidingRef.current) {
+              win.setFocus().catch(() => {});
+            }
+          }, 150);
+        }
+      })
+      .then((fn) => {
+        if (isMounted) unlistenFn = fn;
+        else fn();
+      });
+
     return () => {
+      isMounted = false;
       if (focusTimer) clearTimeout(focusTimer);
-      unlisten.then((fn) => fn());
+      unlistenFn?.();
     };
   }, [loadData]);
 
   // Re-fetch when a game session starts or stops (process monitor broadcasts this)
-  useEffect(() => {
-    const unlisten = listen("session-update", () => {
+  useEventListener(
+    "session-update",
+    () => {
       loadData();
-    });
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, [loadData]);
+    },
+    [loadData],
+  );
 
   // Apply theme + sync to Zustand so AppIcon reads the correct icon set
   useEffect(() => {
@@ -185,16 +195,11 @@ export function OverlayApp() {
   }, [settings]);
 
   // Reload settings when the main window notifies us of a change
-  useEffect(() => {
-    const unlisten = listen("settings-changed", () => {
-      invoke<AppSettings>("load_settings")
-        .then((s) => setSettings(s))
-        .catch(() => {});
-    });
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, []);
+  useEventListener("settings-changed", () => {
+    invoke<AppSettings>("load_settings")
+      .then((s) => setSettings(s))
+      .catch(() => {});
+  });
 
   // ── Panel orchestration ────────────────────────────────────────
 

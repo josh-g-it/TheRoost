@@ -31,6 +31,10 @@ import { useInstallStore } from "../../store/installSlice";
 import { InstallProgressOverlay } from "./InstallProgressOverlay";
 import { steamInstallApi } from "../../services/tauri";
 import { StarRating } from "../common/StarRating";
+import {
+  UNINSTALL_RESCAN_FIRST_MS,
+  UNINSTALL_RESCAN_SECOND_MS,
+} from "../../constants/timings";
 import type { Game } from "../../types";
 import type { ScreenshotInfo } from "../../types/metadata";
 import "./GameDetail.css";
@@ -208,6 +212,13 @@ export function GameDetail({ game, onClose, onPersistShelves }: GameDetailProps)
   const [showReview, setShowReview] = useState(false);
   const [reviewContent, setReviewContent] = useState("");
   const reviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const uninstallTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    return () => {
+      for (const t of uninstallTimersRef.current) clearTimeout(t);
+    };
+  }, []);
 
   const [isEditingPlaytime, setIsEditingPlaytime] = useState(false);
   const [playtimeHours, setPlaytimeHours] = useState("");
@@ -360,8 +371,16 @@ export function GameDetail({ game, onClose, onPersistShelves }: GameDetailProps)
                   size="sm"
                   onClick={() => {
                     steamInstallApi.uninstallGame(game.sourceId);
-                    setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 5000);
-                    setTimeout(() => useLibraryStore.getState().scanLocalOnly(), 30000);
+                    uninstallTimersRef.current.push(
+                      setTimeout(
+                        () => useLibraryStore.getState().scanLocalOnly(),
+                        UNINSTALL_RESCAN_FIRST_MS,
+                      ),
+                      setTimeout(
+                        () => useLibraryStore.getState().scanLocalOnly(),
+                        UNINSTALL_RESCAN_SECOND_MS,
+                      ),
+                    );
                   }}
                 >
                   Uninstall

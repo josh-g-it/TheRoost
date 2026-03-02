@@ -10,6 +10,8 @@ import { useAppVersion } from "../../hooks/useAppVersion";
 import type { LogEvent, LogLevel, LogCategory } from "../../types";
 import "./DebugPanel.css";
 
+const UPTIME_TICK_MS = 1000;
+
 const ALL_LEVELS: LogLevel[] = ["debug", "info", "warn", "error"];
 const ALL_CATEGORIES: LogCategory[] = [
   "api",
@@ -166,7 +168,10 @@ function Dashboard() {
   const [uptime, setUptime] = useState(() => formatUptime(startTime));
 
   useEffect(() => {
-    const interval = setInterval(() => setUptime(formatUptime(startTime)), 1000);
+    const interval = setInterval(
+      () => setUptime(formatUptime(startTime)),
+      UPTIME_TICK_MS,
+    );
     return () => clearInterval(interval);
   }, [startTime]);
 

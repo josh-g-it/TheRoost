@@ -21,15 +21,12 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
 
   fetchFriends: async () => {
     const settings = useSettingsStore.getState().settings;
-    if (!settings?.steamApiKey || !settings?.steamId) return;
+    if (!settings?.steamId) return;
 
     set({ isLoading: true });
 
     try {
-      const friends = await friendsApi.fetchFriendsList(
-        settings.steamApiKey,
-        settings.steamId,
-      );
+      const friends = await friendsApi.fetchFriendsList(settings.steamId);
       set({ friends });
       logger.info("friendsSlice", "friends", "Friends list fetched", {
         count: friends.length,
@@ -50,16 +47,8 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
     const cached = friendLibraries.get(friendSteamId);
     if (cached) return cached;
 
-    const settings = useSettingsStore.getState().settings;
-    if (!settings?.steamApiKey) {
-      return null;
-    }
-
     try {
-      const library = await friendsApi.fetchFriendLibrary(
-        settings.steamApiKey,
-        friendSteamId,
-      );
+      const library = await friendsApi.fetchFriendLibrary(friendSteamId);
       const newMap = new Map(get().friendLibraries);
       newMap.set(friendSteamId, library);
       set({ friendLibraries: newMap });

@@ -19,15 +19,27 @@ pub fn hide_overlay(app: AppHandle) {
 }
 
 /// Show the main window, navigate it to a route, and hide the overlay.
+///
+/// Returns an error if the main window is not available (06-F7).
 #[tauri::command]
-pub fn show_main_and_navigate(app: AppHandle, route: String) {
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.unminimize();
-        let _ = win.show();
-        let _ = win.set_focus();
+pub fn show_main_and_navigate(app: AppHandle, route: String) -> Result<(), AppError> {
+    let win = app
+        .get_webview_window("main")
+        .ok_or_else(|| AppError::Validation("Main window is not available".to_string()))?;
+    if let Err(e) = win.unminimize() {
+        tracing::warn!(error = %e, "Failed to unminimize main window");
     }
-    let _ = app.emit_to("main", "navigate-to-route", &route);
+    if let Err(e) = win.show() {
+        tracing::warn!(error = %e, "Failed to show main window");
+    }
+    if let Err(e) = win.set_focus() {
+        tracing::warn!(error = %e, "Failed to focus main window");
+    }
+    if let Err(e) = app.emit_to("main", "navigate-to-route", &route) {
+        tracing::warn!(error = %e, window = "main", event = "navigate-to-route", "emit_to failed");
+    }
     overlay::hide_overlay(&app);
+    Ok(())
 }
 
 /// Re-register the overlay global shortcut (called when user changes setting).
@@ -37,37 +49,69 @@ pub fn update_overlay_shortcut(app: AppHandle, shortcut: String) {
 }
 
 /// Show the main window, navigate to library, select a game, and hide the overlay.
+///
+/// Returns an error if the main window is not available (06-F7).
 #[tauri::command]
-pub fn overlay_select_game(app: AppHandle, game_id: String) {
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.unminimize();
-        let _ = win.show();
-        let _ = win.set_focus();
+pub fn overlay_select_game(app: AppHandle, game_id: String) -> Result<(), AppError> {
+    let win = app
+        .get_webview_window("main")
+        .ok_or_else(|| AppError::Validation("Main window is not available".to_string()))?;
+    if let Err(e) = win.unminimize() {
+        tracing::warn!(error = %e, "Failed to unminimize main window");
     }
-    let _ = app.emit_to("main", "navigate-to-route", "/library");
-    let _ = app.emit_to("main", "navigate-to-game", &game_id);
+    if let Err(e) = win.show() {
+        tracing::warn!(error = %e, "Failed to show main window");
+    }
+    if let Err(e) = win.set_focus() {
+        tracing::warn!(error = %e, "Failed to focus main window");
+    }
+    if let Err(e) = app.emit_to("main", "navigate-to-route", "/library") {
+        tracing::warn!(error = %e, window = "main", event = "navigate-to-route", "emit_to failed");
+    }
+    if let Err(e) = app.emit_to("main", "navigate-to-game", &game_id) {
+        tracing::warn!(error = %e, window = "main", event = "navigate-to-game", "emit_to failed");
+    }
     overlay::hide_overlay(&app);
+    Ok(())
 }
 
 /// Notify both windows that settings were changed.
 /// Each listener reloads from disk — no loop since loading doesn't trigger save.
 #[tauri::command]
 pub fn notify_settings_changed(app: AppHandle) {
-    let _ = app.emit_to("main", "settings-changed", ());
-    let _ = app.emit_to("overlay", "settings-changed", ());
+    if let Err(e) = app.emit_to("main", "settings-changed", ()) {
+        tracing::warn!(error = %e, window = "main", event = "settings-changed", "emit_to failed");
+    }
+    if let Err(e) = app.emit_to("overlay", "settings-changed", ()) {
+        tracing::warn!(error = %e, window = "overlay", event = "settings-changed", "emit_to failed");
+    }
 }
 
 /// Apply tag filters: show main window, navigate to library, emit tag filter event, hide overlay.
+///
+/// Returns an error if the main window is not available (06-F7).
 #[tauri::command]
-pub fn overlay_apply_tag_filter(app: AppHandle, tag_ids: Vec<i64>) {
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.unminimize();
-        let _ = win.show();
-        let _ = win.set_focus();
+pub fn overlay_apply_tag_filter(app: AppHandle, tag_ids: Vec<i64>) -> Result<(), AppError> {
+    let win = app
+        .get_webview_window("main")
+        .ok_or_else(|| AppError::Validation("Main window is not available".to_string()))?;
+    if let Err(e) = win.unminimize() {
+        tracing::warn!(error = %e, "Failed to unminimize main window");
     }
-    let _ = app.emit_to("main", "navigate-to-route", "/library");
-    let _ = app.emit_to("main", "apply-tag-filter", &tag_ids);
+    if let Err(e) = win.show() {
+        tracing::warn!(error = %e, "Failed to show main window");
+    }
+    if let Err(e) = win.set_focus() {
+        tracing::warn!(error = %e, "Failed to focus main window");
+    }
+    if let Err(e) = app.emit_to("main", "navigate-to-route", "/library") {
+        tracing::warn!(error = %e, window = "main", event = "navigate-to-route", "emit_to failed");
+    }
+    if let Err(e) = app.emit_to("main", "apply-tag-filter", &tag_ids) {
+        tracing::warn!(error = %e, window = "main", event = "apply-tag-filter", "emit_to failed");
+    }
     overlay::hide_overlay(&app);
+    Ok(())
 }
 
 /// Execute a command palette action on the main window.
@@ -75,26 +119,47 @@ pub fn overlay_apply_tag_filter(app: AppHandle, tag_ids: Vec<i64>) {
 /// (filters, view mode, sort) must be relayed to the main window for execution.
 /// `show_main` controls whether the main window is brought to focus — false for
 /// settings-only actions (theme, font, etc.) that don't require navigation.
+///
+/// Returns an error if the main window is not available (06-F7).
 #[tauri::command]
 pub fn overlay_execute_palette_action(
     app: AppHandle,
     action_id: String,
     game_id: Option<String>,
     show_main: bool,
-) {
+) -> Result<(), AppError> {
+    // Settings-only actions (theme, font, etc.) are emitted globally
+    // and don't require the main window to be present.
+    let main_available = app.get_webview_window("main").is_some();
     if show_main {
-        if let Some(win) = app.get_webview_window("main") {
-            let _ = win.unminimize();
-            let _ = win.show();
-            let _ = win.set_focus();
+        let win = app
+            .get_webview_window("main")
+            .ok_or_else(|| AppError::Validation("Main window is not available".to_string()))?;
+        if let Err(e) = win.unminimize() {
+            tracing::warn!(error = %e, "Failed to unminimize main window");
         }
+        if let Err(e) = win.show() {
+            tracing::warn!(error = %e, "Failed to show main window");
+        }
+        if let Err(e) = win.set_focus() {
+            tracing::warn!(error = %e, "Failed to focus main window");
+        }
+    } else if !main_available {
+        // Non-navigation action but main is gone — still emit, it will just warn
+        tracing::warn!(
+            action_id,
+            "Main window unavailable for palette action relay"
+        );
     }
     let payload = serde_json::json!({
         "actionId": action_id,
         "gameId": game_id,
     });
-    let _ = app.emit_to("main", "execute-palette-action", &payload);
+    if let Err(e) = app.emit_to("main", "execute-palette-action", &payload) {
+        tracing::warn!(error = %e, window = "main", event = "execute-palette-action", "emit_to failed");
+    }
     overlay::hide_overlay(&app);
+    Ok(())
 }
 
 /// Lightweight library read for the overlay — reads from SQLite, no API calls.

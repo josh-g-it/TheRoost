@@ -25,19 +25,24 @@ use crate::utils::error::{AppError, MutexExt};
 
 /// Validate and resolve AI actions in a single IPC round-trip.
 /// Validates tiers (rejects blacklisted/unknown) and fuzzy-resolves game names to UUIDs.
+///
+/// Lock scope: game names are loaded into a local Vec under a short DB lock,
+/// then the lock is dropped before fuzzy matching runs. This prevents lock
+/// contention during the O(n) Jaro-Winkler scan over the full game library.
 #[tauri::command]
 pub fn validate_and_resolve_ai_actions(
     actions: Vec<RawAiAction>,
     db: State<'_, CacheDbHandle>,
 ) -> Result<action_resolver::ResolvedActionSet, AppError> {
-    // Step 1: Validate tiers
+    // Step 1: Validate tiers (no DB access needed)
     let (validated, rejected_count) = action_validator::validate_actions(actions);
 
-    // Step 2: Resolve game names to UUIDs
+    // Step 2: Load game names into local Vec, then release DB lock immediately.
+    // Fuzzy matching in resolve_actions() runs entirely outside the lock scope.
     let game_library = {
         let db_guard = db.lock_or_err("DB")?;
         db_guard.get_all_game_names()?
-    };
+    }; // DB lock dropped here — before any fuzzy matching begins
 
     Ok(action_resolver::resolve_actions(
         validated,
@@ -200,31 +205,21 @@ pub fn update_cloud_ai_settings(
     provider: String,
     daily_limit: u32,
     cloud: State<'_, CloudConfigHandle>,
-    app_handle: tauri::AppHandle,
 ) -> Result<(), AppError> {
     let cloud_provider = CloudProvider::from_str(&provider).unwrap_or(CloudProvider::Gemini);
 
     let clamped_limit = daily_limit.max(1);
 
-    {
-        let mut config = cloud.lock_or_err("CloudConfig")?;
-        config.enabled = enabled;
-        config.provider = cloud_provider;
-        config.daily_limit = clamped_limit;
-    } // drop lock before disk I/O
-
-    // Persist cloud AI fields to settings.json so they survive app restart
-    let mut settings = settings_store::load_settings(&app_handle)?;
-    settings.cloud_ai_enabled = enabled;
-    settings.cloud_ai_provider = provider.clone();
-    settings.cloud_ai_daily_limit = clamped_limit;
-    settings_store::save_settings(&app_handle, &settings)?;
+    let mut config = cloud.lock_or_err("CloudConfig")?;
+    config.enabled = enabled;
+    config.provider = cloud_provider;
+    config.daily_limit = clamped_limit;
 
     tracing::info!(
         enabled,
         provider = provider.as_str(),
         daily_limit = clamped_limit,
-        "Cloud AI settings updated and persisted"
+        "Cloud AI in-memory config updated"
     );
     Ok(())
 }
@@ -246,6 +241,16 @@ pub fn create_personality(
     if name.trim().is_empty() {
         return Err(AppError::Validation(
             "Personality name cannot be empty".into(),
+        ));
+    }
+    if name.chars().count() > 100 {
+        return Err(AppError::Validation(
+            "Personality name exceeds maximum length of 100 characters".into(),
+        ));
+    }
+    if prompt_text.chars().count() > 10_000 {
+        return Err(AppError::Validation(
+            "Prompt text exceeds maximum length of 10,000 characters".into(),
         ));
     }
     let db = db.lock_or_err("DB")?;
@@ -274,6 +279,11 @@ pub fn create_avatar(
 ) -> Result<AiAvatar, AppError> {
     if name.trim().is_empty() {
         return Err(AppError::Validation("Avatar name cannot be empty".into()));
+    }
+    if name.chars().count() > 100 {
+        return Err(AppError::Validation(
+            "Avatar name exceeds maximum length of 100 characters".into(),
+        ));
     }
 
     // Load encryption key BEFORE DB lock (keyring I/O)
@@ -467,6 +477,18 @@ pub async fn start_conversation(
     conversation::start_or_resume(&db_guard, &avatar_id)
 }
 
+/// Get the active (un-ended) conversation ID for an avatar, if any.
+/// Used by the overlay to synchronize its local state with the Rust-side truth.
+#[tauri::command]
+pub fn get_active_conversation_id(
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<Option<String>, AppError> {
+    let db_guard = db.lock_or_err("DB")?;
+    let conv = db_guard.get_active_conversation(&avatar_id)?;
+    Ok(conv.map(|c| c.id))
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn send_message(
@@ -545,22 +567,32 @@ pub fn abandon_conversation(
     db_guard.abandon_conversation(&conversation_id)
 }
 
+/// Check if a conversation is stale and should be silently discarded.
+/// Greeting-only conversations (no user messages) are stale after 1 hour —
+/// this matches `start_or_resume`'s timeout and avoids accumulating empty
+/// conversations from sessions where the user opened the assistant but
+/// never interacted.
 #[tauri::command]
 pub fn check_conversation_stale(
     conversation_id: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<bool, AppError> {
     let db_guard = db.lock_or_err("DB")?;
-    if db_guard.has_user_messages(&conversation_id)? {
-        return Ok(false);
-    }
+    let has_user_msgs = db_guard.has_user_messages(&conversation_id)?;
     let started_at = db_guard.get_conversation_started_at(&conversation_id)?;
     let started = chrono::NaiveDateTime::parse_from_str(&started_at, "%Y-%m-%d %H:%M:%S")
         .map_err(|e| AppError::Parse(format!("Invalid conversation timestamp: {}", e)))?;
     let age = chrono::Utc::now()
         .naive_utc()
         .signed_duration_since(started);
-    Ok(age.num_hours() >= 24)
+
+    if has_user_msgs {
+        // Active conversation — stale only after 24 hours of inactivity
+        Ok(age.num_hours() >= 24)
+    } else {
+        // Greeting-only / no engagement — stale after 1 hour
+        Ok(age.num_hours() >= 1)
+    }
 }
 
 #[tauri::command]

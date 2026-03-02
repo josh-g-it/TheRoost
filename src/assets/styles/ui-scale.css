@@ -7,9 +7,10 @@
 
    Applied via data-ui-scale attribute on <html>.
 
-   Uses html[data-ui-scale] selector (specificity 0,1,1) to
-   reliably override :root (specificity 0,1,0) regardless of
-   source order.
+   Uses html[data-ui-scale] selector (specificity 0,1,1) to override :root
+   (specificity 0,1,0). Theme files are imported AFTER this file in themes.css,
+   so theme color variables take precedence over any overlapping definitions here
+   via CSS cascade order. Do NOT reorder imports in themes.css.
    ============================================================= */
 
 /* ── Minimal ─ Tight, information-dense ──────────────────────── */

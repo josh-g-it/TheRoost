@@ -47,6 +47,13 @@ pub fn register_shortcut(app: &AppHandle, shortcut_str: &str) {
 }
 
 /// Create the overlay window (hidden). Called lazily on first toggle.
+///
+/// **No explicit "ready" handshake** is used between windows. This is acceptable
+/// because: (1) the overlay loads settings from disk on mount, so a missed
+/// `settings-changed` event just means it has the same data it loaded; (2) all
+/// cross-window events (`session-update`, `settings-changed`) are idempotent —
+/// the next periodic event will correct any stale state; (3) the overlay is
+/// built with `visible(false)` and only shown after the webview loads.
 pub fn create_overlay(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     if app.get_webview_window(OVERLAY_LABEL).is_some() {
         return Ok(());

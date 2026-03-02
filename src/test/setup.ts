@@ -1,7 +1,50 @@
 import "@testing-library/jest-dom/vitest";
 
+// ── Command-specific invoke mock registry ──────────────────────────────
+// Supports per-command responses while remaining backward compatible:
+// - Unregistered commands return `undefined` (same as before)
+// - Tests can register specific responses via `mockInvokeCommand()`
+// - Tests can register errors via `mockInvokeError()`
+// - Registry is cleared in `clearInvokeMocks()` or manually per test
+
+const invokeRegistry = new Map<string, { response?: unknown; error?: string }>();
+
+/**
+ * Register a mock response for a specific Tauri invoke command.
+ * When `invoke(command, ...)` is called, the registered response will be returned.
+ */
+export function mockInvokeCommand(command: string, response: unknown): void {
+  invokeRegistry.set(command, { response });
+}
+
+/**
+ * Register a mock error for a specific Tauri invoke command.
+ * When `invoke(command, ...)` is called, the returned promise will reject with the error.
+ */
+export function mockInvokeError(command: string, error: string): void {
+  invokeRegistry.set(command, { error });
+}
+
+/**
+ * Clear all registered command-specific mock responses and errors.
+ * Call this in `beforeEach` if you use per-command mocks.
+ */
+export function clearInvokeMocks(): void {
+  invokeRegistry.clear();
+}
+
 // Mock Tauri API for tests — prevents errors when components call invoke()
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(),
+  invoke: vi.fn((command: string) => {
+    const entry = invokeRegistry.get(command);
+    if (entry) {
+      if (entry.error !== undefined) {
+        return Promise.reject(new Error(entry.error));
+      }
+      return Promise.resolve(entry.response);
+    }
+    // Backward compatible: unregistered commands return undefined
+    return undefined;
+  }),
   convertFileSrc: (path: string) => `http://asset.localhost/${encodeURIComponent(path)}`,
 }));

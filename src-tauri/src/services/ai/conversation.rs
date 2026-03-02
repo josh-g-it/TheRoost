@@ -10,10 +10,39 @@ use crate::services::credential_store;
 use crate::utils::error::{AppError, MutexExt};
 use tauri::Emitter;
 
-const CHARS_PER_TOKEN: usize = 4;
-const TOKEN_BUDGET_LAYER4: usize = 4000; // ~16000 chars
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
+const CHARS_PER_TOKEN: usize = 3;
+const TOKEN_BUDGET_LAYER4: usize = 4000; // ~12000 chars
 #[allow(dead_code)]
 const MID_SESSION_THRESHOLD: usize = 20;
+/// Maximum messages (user + assistant) per conversation before auto-ending.
+/// Prevents unbounded message table growth. Token budget already limits what's
+/// sent to the LLM, but old messages remain in the DB. 200 messages ≈ 100 turns.
+const MAX_MESSAGES_PER_CONVERSATION: usize = 200;
+
+/// Per-conversation async mutex to serialize send_message_and_stream calls.
+type ConversationLocks = std::sync::Mutex<HashMap<String, std::sync::Arc<tokio::sync::Mutex<()>>>>;
+
+fn conversation_locks() -> &'static ConversationLocks {
+    static LOCKS: OnceLock<ConversationLocks> = OnceLock::new();
+    LOCKS.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+fn acquire_conversation_lock(conv_id: &str) -> std::sync::Arc<tokio::sync::Mutex<()>> {
+    let mut map = conversation_locks()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    std::sync::Arc::clone(map.entry(conv_id.to_string()).or_default())
+}
+
+fn release_conversation_lock(conv_id: &str) {
+    let mut map = conversation_locks()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    map.remove(conv_id);
+}
 
 fn build_conversation_system_prompt(personality_prompt: &str) -> String {
     let actions_prompt = context_builder::build_actions_system_prompt();
@@ -24,6 +53,11 @@ You have deep knowledge of the user's gaming library, playtime, and preferences 
 
 ## Your Personality
 {}
+
+## Important Guidelines
+- If you don't have enough information to answer a question, say so honestly. It's better to say "I don't have that information" than to guess or make something up. You only know what's in the library context and memory vault provided to you.
+- The library context you receive is a snapshot taken when the conversation started. If the user makes changes to their library mid-conversation (installing games, adding favorites, etc.), your context will not reflect those changes until the next conversation.
+- When executing filter or sort actions across multiple turns, always include action:reset-filters before new filter/sort actions — even if the previous turn already set filters. Each turn's filters should be a fresh set, not additive on top of whatever the previous turn applied.
 
 {}
 
@@ -44,12 +78,15 @@ A conversation has just ended. Your job is to create a structured summary.
 
 Analyze the conversation and produce a JSON object with:
 
-1. `summary` (string): A 1-2 paragraph description of what was discussed.
-   Include the main topics, any decisions made, recommendations given,
-   and the general tone. This serves as a journal entry.
+1. `summary` (string): A concise technical summary of the conversation topics.
+   Include the main topics, decisions, and recommendations. Keep under 300 chars.
+
+2. `journalEntry` (string): A more personal, narrative account written from
+   the assistant's perspective, as if writing a diary entry about the conversation.
+   Mention the user's mood, interests discussed, and any fun moments.
    Keep under 500 characters.
 
-2. `memories` (array): Key facts learned about the user or noteworthy
+3. `memories` (array): Key facts learned about the user or noteworthy
    discussion points. Each memory is an object with:
    - `content` (string): The memory, 1-2 sentences max.
    - `importance` (integer 1-10): How important is this for future conversations?
@@ -59,9 +96,9 @@ Analyze the conversation and produce a JSON object with:
      1-3 = minor detail, okay to forget eventually
    - `category` (string): One of "preference", "opinion", "fact", "general"
 
-3. `supersededMemories` (array of strings): IDs of existing memories from
-   the vault that are contradicted or outdated based on this conversation.
-   Only include IDs that should be replaced.
+4. `supersededMemories` (array of strings): Short IDs (e.g., "mem-1", "mem-3")
+   of existing memories from the vault that are contradicted or outdated based
+   on this conversation. Only include IDs that should be replaced.
 
 ## Rules
 - Maximum 10 memories per conversation (focus on quality over quantity)
@@ -93,6 +130,7 @@ pub fn start_or_resume(db: &CacheDb, avatar_id: &str) -> Result<String, AppError
         }
         // Stale — just end it (no compaction for auto-timeout)
         db.end_ai_conversation(&conv.id)?;
+        release_conversation_lock(&conv.id);
     }
     let new_conv = db.create_ai_conversation(avatar_id)?;
     Ok(new_conv.id)
@@ -121,13 +159,17 @@ pub fn assemble_context(
         &settings.cloud_ai_included_games,
     )?;
     if !library_ctx.is_empty() {
-        system_prompt.push_str("\n\n## Your Knowledge of the User's Library\n");
+        system_prompt
+            .push_str("\n\n## Your Knowledge of the User's Library\n<user-library-data>\n");
         system_prompt.push_str(&library_ctx);
+        system_prompt.push_str("\n</user-library-data>");
     }
 
-    // Layer 3: Memory context
+    // Layer 3: Memory context — rank by keyword relevance from recent conversation
     let system_mems = memory::load_system_memories(db, avatar_id, key)?;
-    let vault_mems = memory::load_vault_memories(db, avatar_id, key, 50)?;
+    // Extract keywords from recent user messages for relevance ranking
+    let recent_keywords = extract_recent_keywords(db, conv_id, key);
+    let vault_mems = memory::load_vault_memories_ranked(db, avatar_id, key, 50, &recent_keywords)?;
     let cross_mems = memory::load_cross_avatar_memories(db, avatar_id, key, 20)?;
     let journal = memory::load_recent_journal(db, avatar_id, key, 7)?;
     let memory_ctx =
@@ -145,12 +187,14 @@ pub fn assemble_context(
         let start_str = chrono::DateTime::from_timestamp(start_time, 0)
             .map(|dt| dt.format("%H:%M").to_string())
             .unwrap_or_else(|| "unknown".to_string());
-        // Sanitize game name: collapse to single line, cap length
-        let safe_name: String = game_name
-            .chars()
-            .filter(|c| *c != '\n' && *c != '\r')
-            .take(200)
-            .collect();
+        // Sanitize game name: collapse to single line, cap length, defang injection
+        let safe_name = context_builder::sanitize_for_prompt_context(
+            &game_name
+                .chars()
+                .filter(|c| *c != '\n' && *c != '\r')
+                .take(200)
+                .collect::<String>(),
+        );
         system_prompt.push_str(&format!(
             "\n\n## Current Activity\nThe user is currently playing \"{}\". Session started at {}, {} minutes ago.",
             safe_name, start_str, duration_minutes
@@ -236,6 +280,21 @@ pub async fn send_message_and_stream(
     action_feedback: Option<&str>,
     max_output_tokens: Option<u32>,
 ) -> Result<(), AppError> {
+    // Serialize concurrent calls to the same conversation
+    let conv_lock = acquire_conversation_lock(conv_id);
+    let _guard = conv_lock.lock().await;
+
+    // Step 0: Check message count cap
+    {
+        let db_guard = db.lock_or_err("DB")?;
+        let msg_count = db_guard.get_ai_messages_raw(conv_id)?.len();
+        if msg_count >= MAX_MESSAGES_PER_CONVERSATION {
+            return Err(AppError::Validation(
+                "Conversation has reached the message limit. Please end this conversation and start a new one.".into(),
+            ));
+        }
+    }
+
     // Step 1: Build context (under lock)
     let (system_prompt, mut messages) = {
         let db_guard = db.lock_or_err("DB")?;
@@ -283,7 +342,9 @@ pub async fn send_message_and_stream(
     let mut full_response = String::new();
     while let Some(chunk) = rx.recv().await {
         full_response.push_str(&chunk.text);
-        let _ = app_handle.emit("ai-stream-chunk", &chunk);
+        if let Err(e) = app_handle.emit("ai-stream-chunk", &chunk) {
+            tracing::warn!(error = %e, "Failed to emit ai-stream-chunk");
+        }
     }
 
     // Check if the streaming task failed
@@ -346,6 +407,7 @@ pub async fn end_conversation(
         let raw = db_guard.get_ai_messages_raw(conv_id)?;
         if raw.len() < 3 {
             db_guard.end_ai_conversation(conv_id)?;
+            release_conversation_lock(conv_id);
             return Ok(false); // Too short
         }
         let mut decrypted = Vec::with_capacity(raw.len());
@@ -371,6 +433,7 @@ pub async fn end_conversation(
 
     // Step 2: Build compaction prompt (no lock)
     let vault_context = format_vault_for_compaction(&vault_for_compaction);
+    let id_map = build_compaction_id_map(&vault_for_compaction);
     let compaction_prompt = build_compaction_prompt(&vault_context);
     let transcript = format_conversation_transcript(&all_messages_decrypted);
 
@@ -384,15 +447,20 @@ pub async fn end_conversation(
     // Step 4: Store results (re-acquire lock)
     match result {
         None => {
-            // Compaction failed — set ended_at, leave compacted=0 (pending_compaction)
+            // Compaction failed — end conversation and mark as failed (compacted=2)
+            // so retry logic can distinguish from never-attempted (compacted=0)
             let db_guard = db.lock_or_err("DB")?;
             db_guard.end_ai_conversation(conv_id)?;
+            db_guard.mark_compaction_failed(conv_id)?;
+            release_conversation_lock(conv_id);
             Ok(false)
         }
         Some(cr) => {
             // Encrypt content for storage
             let summary_enc = encrypt_field(&cr.summary, key)?;
-            let journal_enc = encrypt_field(&cr.summary, key)?;
+            // Use dedicated journal entry if provided, otherwise fall back to summary
+            let journal_text = cr.journal_entry.as_deref().unwrap_or(&cr.summary);
+            let journal_enc = encrypt_field(journal_text, key)?;
             let memories: Vec<(String, u32, String)> = cr
                 .memories
                 .iter()
@@ -402,6 +470,23 @@ pub async fn end_conversation(
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
+            // Map short IDs (mem-1, mem-2, ...) back to real UUIDs
+            let real_superseded: Vec<String> = cr
+                .superseded_memories
+                .iter()
+                .filter_map(|short_id| {
+                    id_map.get(short_id).cloned().or_else(|| {
+                        // Also accept raw UUIDs for backwards compatibility
+                        if short_id.len() > 8 {
+                            Some(short_id.clone())
+                        } else {
+                            tracing::warn!(short_id, "Unknown memory ID in supersededMemories");
+                            None
+                        }
+                    })
+                })
+                .collect();
+
             {
                 let db_guard = db.lock_or_err("DB")?;
                 db_guard.complete_compaction(
@@ -410,12 +495,13 @@ pub async fn end_conversation(
                     &summary_enc,
                     &journal_enc,
                     &memories,
-                    &cr.superseded_memories,
+                    &real_superseded,
                 )?;
                 // Prune vault (separate — OK outside transaction, it's independent cleanup)
                 memory::prune_vault_if_needed(&db_guard, avatar_id)?;
             }
 
+            release_conversation_lock(conv_id);
             Ok(true)
         }
     }
@@ -446,20 +532,83 @@ pub fn format_transcript_public(messages: &[AiMessage]) -> String {
 
 // ── Internal Helpers ────────────────────────────────────────────────
 
-/// Format vault memories with IDs for compaction prompt.
+/// Format vault memories for compaction prompt.
+/// Uses sequential short IDs (mem-1, mem-2, ...) instead of raw UUIDs to save tokens
+/// and reduce LLM confusion. Caller must use `build_compaction_id_map()` to map back.
 fn format_vault_for_compaction(vault: &[AiMemory]) -> String {
     let mut out = String::new();
+    let mut idx = 1;
     for mem in vault {
         if mem.is_system {
             out.push_str(&format!("[SYSTEM] [{}] {}\n", mem.importance, mem.content));
         } else {
             out.push_str(&format!(
-                "[id: {}] [{}] {}\n",
-                mem.id, mem.importance, mem.content
+                "[mem-{}] [{}] {}\n",
+                idx, mem.importance, mem.content
             ));
+            idx += 1;
         }
     }
     out
+}
+
+/// Extract keywords from the last few user messages for memory relevance ranking.
+/// Returns lowercased tokens of 3+ characters, excluding common stop words.
+fn extract_recent_keywords(db: &CacheDb, conv_id: &str, key: &[u8; 32]) -> Vec<String> {
+    let raw = match db.get_ai_messages_raw(conv_id) {
+        Ok(msgs) => msgs,
+        Err(_) => return Vec::new(),
+    };
+
+    // Take last 4 user messages
+    let user_msgs: Vec<_> = raw
+        .iter()
+        .rev()
+        .filter(|m| m.role == "user")
+        .take(4)
+        .collect();
+
+    let stop_words = [
+        "the", "and", "for", "are", "but", "not", "you", "all", "can", "her", "was", "one", "our",
+        "out", "has", "have", "from", "been", "had", "its", "that", "this", "with", "what", "show",
+        "sort", "filter", "most", "any", "some", "more", "than", "like", "about", "which", "would",
+        "should", "could", "just", "also", "into", "them", "then", "been", "when", "will", "each",
+        "make", "many", "much", "very", "game", "games", "play", "played", "playing",
+    ];
+
+    let mut keywords = Vec::new();
+    for msg in user_msgs {
+        if let Ok(content) = decrypt_field(&msg.content, key) {
+            for word in content.split_whitespace() {
+                let clean: String = word
+                    .to_lowercase()
+                    .chars()
+                    .filter(|c| c.is_alphanumeric())
+                    .collect();
+                if clean.len() >= 3 && !stop_words.contains(&clean.as_str()) {
+                    keywords.push(clean);
+                }
+            }
+        }
+    }
+
+    keywords.dedup();
+    // Cap at 20 keywords to avoid excessive matching
+    keywords.truncate(20);
+    keywords
+}
+
+/// Build a map from short compaction IDs (mem-1, mem-2, ...) to real memory UUIDs.
+fn build_compaction_id_map(vault: &[AiMemory]) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    let mut idx = 1;
+    for mem in vault {
+        if !mem.is_system {
+            map.insert(format!("mem-{}", idx), mem.id.clone());
+            idx += 1;
+        }
+    }
+    map
 }
 
 /// Format conversation messages as a transcript for compaction.
@@ -782,9 +931,14 @@ mod tests {
             active: true,
         };
 
-        let output = format_vault_for_compaction(&[system_mem, user_mem]);
+        let output = format_vault_for_compaction(&[system_mem.clone(), user_mem.clone()]);
         assert!(output.contains("[SYSTEM] [10] System instruction"));
-        assert!(output.contains("[id: u1] [8] Loves RPGs"));
+        assert!(output.contains("[mem-1] [8] Loves RPGs"));
+
+        // Verify ID map
+        let id_map = build_compaction_id_map(&[system_mem, user_mem]);
+        assert_eq!(id_map.get("mem-1"), Some(&"u1".to_string()));
+        assert!(!id_map.contains_key("mem-0")); // system memories not mapped
     }
 
     #[test]
@@ -838,11 +992,28 @@ mod tests {
         assert!(result.is_ok());
         let cr = result.unwrap();
         assert_eq!(cr.summary, "Discussed RPGs and recommendations.");
+        assert!(cr.journal_entry.is_none()); // Optional, defaults to None
         assert_eq!(cr.memories.len(), 1);
         assert_eq!(cr.memories[0].content, "User loves RPGs");
         assert_eq!(cr.memories[0].importance, 8);
         assert_eq!(cr.superseded_memories.len(), 1);
         assert_eq!(cr.superseded_memories[0], "old-mem-1");
+    }
+
+    #[test]
+    fn test_compaction_result_with_journal_entry() {
+        let json = r#"{
+            "summary": "Talked about RPGs.",
+            "journalEntry": "Had a wonderful chat about the user's love of RPGs today!",
+            "memories": [],
+            "supersededMemories": []
+        }"#;
+        let cr: CompactionResult = serde_json::from_str(json).unwrap();
+        assert_eq!(cr.summary, "Talked about RPGs.");
+        assert_eq!(
+            cr.journal_entry.as_deref(),
+            Some("Had a wonderful chat about the user's love of RPGs today!")
+        );
     }
 
     #[test]
@@ -856,6 +1027,12 @@ mod tests {
         assert!(prompt.contains("AVAILABLE ACTIONS"));
         // REVIEW BEHAVIOR was removed — rule #8 now enforces actions only on explicit request
         assert!(prompt.contains("EXAMPLES"));
+        // 02-P1: "I don't know" guidance
+        assert!(prompt.contains("I don't have that information"));
+        // 02-P3: Context freshness
+        assert!(prompt.contains("snapshot"));
+        // 02-P2: Multi-turn filter reset
+        assert!(prompt.contains("Each turn's filters should be a fresh set"));
     }
 
     #[test]
@@ -947,7 +1124,7 @@ mod tests {
 
     #[test]
     fn test_build_compaction_prompt_public_matches_internal() {
-        let vault_ctx = "[id: m1] [8] Likes RPGs\n";
+        let vault_ctx = "[mem-1] [8] Likes RPGs\n";
         let internal = build_compaction_prompt(vault_ctx);
         let public = build_compaction_prompt_public(vault_ctx);
         assert_eq!(internal, public);
@@ -966,5 +1143,31 @@ mod tests {
         let internal = format_conversation_transcript(&messages);
         let public = format_transcript_public(&messages);
         assert_eq!(internal, public);
+    }
+
+    #[test]
+    fn acquire_and_release_conversation_lock() {
+        let lock = acquire_conversation_lock("test-lock-conv-1");
+        assert!(lock.try_lock().is_ok());
+        release_conversation_lock("test-lock-conv-1");
+        let map = conversation_locks().lock().unwrap();
+        assert!(!map.contains_key("test-lock-conv-1"));
+    }
+
+    #[test]
+    fn separate_conversations_get_separate_locks() {
+        let lock_a = acquire_conversation_lock("lock-conv-a");
+        let lock_b = acquire_conversation_lock("lock-conv-b");
+        assert!(!std::sync::Arc::ptr_eq(&lock_a, &lock_b));
+        release_conversation_lock("lock-conv-a");
+        release_conversation_lock("lock-conv-b");
+    }
+
+    #[test]
+    fn same_conversation_gets_same_lock() {
+        let lock1 = acquire_conversation_lock("lock-conv-same");
+        let lock2 = acquire_conversation_lock("lock-conv-same");
+        assert!(std::sync::Arc::ptr_eq(&lock1, &lock2));
+        release_conversation_lock("lock-conv-same");
     }
 }

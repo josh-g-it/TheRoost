@@ -16,6 +16,8 @@ import { steamInstallApi } from "../../services/tauri";
 import type { SortBy, LibraryFilters, SortOrder } from "../../types";
 import "./LibraryControls.css";
 
+const SEARCH_DEBOUNCE_MS = 300;
+
 interface LibraryControlsProps {
   totalGames: number;
   onRefresh: () => void;
@@ -44,25 +46,23 @@ export function LibraryControls({
   shelvesEnabled = false,
   updatePendingCount,
 }: LibraryControlsProps) {
-  const {
-    viewMode,
-    sortBy,
-    sortOrder,
-    filters,
-    setViewMode,
-    setSorting,
-    setSearchQuery,
-    setShowInstalledOnly,
-    setShowFavoritesOnly,
-    setFilterByTagIds,
-    setShowHiddenOnly,
-    setFilterByGenreIds,
-    setFilterBySteamTagNames,
-    setFilterByCategoryIds,
-    setFilterBySource,
-    setFilterByRated,
-    setShowUpdatePendingOnly,
-  } = useUIStore();
+  const viewMode = useUIStore((s) => s.viewMode);
+  const sortBy = useUIStore((s) => s.sortBy);
+  const sortOrder = useUIStore((s) => s.sortOrder);
+  const filters = useUIStore((s) => s.filters);
+  const setViewMode = useUIStore((s) => s.setViewMode);
+  const setSorting = useUIStore((s) => s.setSorting);
+  const setSearchQuery = useUIStore((s) => s.setSearchQuery);
+  const setShowInstalledOnly = useUIStore((s) => s.setShowInstalledOnly);
+  const setShowFavoritesOnly = useUIStore((s) => s.setShowFavoritesOnly);
+  const setFilterByTagIds = useUIStore((s) => s.setFilterByTagIds);
+  const setShowHiddenOnly = useUIStore((s) => s.setShowHiddenOnly);
+  const setFilterByGenreIds = useUIStore((s) => s.setFilterByGenreIds);
+  const setFilterBySteamTagNames = useUIStore((s) => s.setFilterBySteamTagNames);
+  const setFilterByCategoryIds = useUIStore((s) => s.setFilterByCategoryIds);
+  const setFilterBySource = useUIStore((s) => s.setFilterBySource);
+  const setFilterByRated = useUIStore((s) => s.setFilterByRated);
+  const setShowUpdatePendingOnly = useUIStore((s) => s.setShowUpdatePendingOnly);
 
   const activeInstalls = useInstallStore((s) => s.activeInstalls);
 
@@ -82,9 +82,9 @@ export function LibraryControls({
 
   // Debounce search
   useEffect(() => {
-    const timer = setTimeout(() => setSearchQuery(localSearch), 300);
+    const timer = setTimeout(() => setSearchQuery(localSearch), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [localSearch, setSearchQuery]);
+  }, [localSearch]); // eslint-disable-line react-hooks/exhaustive-deps -- setSearchQuery is a stable Zustand setter
 
   // Close genre popover on outside click
   useEffect(() => {

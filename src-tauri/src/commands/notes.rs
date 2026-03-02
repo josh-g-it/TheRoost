@@ -20,6 +20,11 @@ pub async fn save_game_note(
     content: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<GameNote, AppError> {
+    if content.chars().count() > 5000 {
+        return Err(AppError::Validation(
+            "Note content exceeds maximum length of 5000 characters".into(),
+        ));
+    }
     tracing::debug!(game_id = %game_id, len = content.len(), "Saving game note");
     let db = db.lock_or_err("DB")?;
     db.save_game_note(&game_id, &content)

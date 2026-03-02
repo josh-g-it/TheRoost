@@ -46,20 +46,22 @@ import type {
 export const steamApi = {
   scanLocalLibrary: () => invoke<Game[]>("scan_local_library"),
 
-  getFullLibrary: (apiKey: string, steamId: string) =>
-    invoke<GameLibrary>("get_full_library", { apiKey, steamId }),
+  getFullLibrary: (steamId: string) =>
+    invoke<GameLibrary>("get_full_library", { steamId }),
 
-  fetchOwnedGames: (apiKey: string, steamId: string) =>
-    invoke<Game[]>("fetch_owned_games", { apiKey, steamId }),
+  fetchOwnedGames: (steamId: string) => invoke<Game[]>("fetch_owned_games", { steamId }),
 
-  fetchRecentGames: (apiKey: string, steamId: string) =>
-    invoke<Game[]>("fetch_recent_games", { apiKey, steamId }),
+  fetchRecentGames: (steamId: string) =>
+    invoke<Game[]>("fetch_recent_games", { steamId }),
 
-  fetchPlayerSummary: (apiKey: string, steamId: string) =>
-    invoke<PlayerSummary>("fetch_player_summary", { apiKey, steamId }),
+  fetchPlayerSummary: (steamId: string) =>
+    invoke<PlayerSummary>("fetch_player_summary", { steamId }),
 
-  resolveSteamAccount: (apiKey: string, input: string) =>
-    invoke<PlayerSummary>("resolve_steam_account", { apiKey, input }),
+  resolveSteamAccount: (input: string) =>
+    invoke<PlayerSummary>("resolve_steam_account", { input }),
+
+  /** Store the Steam API key in the OS credential manager. */
+  storeSteamApiKey: (key: string) => invoke<void>("store_steam_api_key", { key }),
 };
 
 export const settingsApi = {
@@ -248,31 +250,28 @@ export const developerApi = {
 };
 
 export const achievementsApi = {
-  fetchGameAchievements: (apiKey: string, steamId: string, gameId: string) =>
+  fetchGameAchievements: (gameId: string) =>
     invoke<GameAchievementSummary>("fetch_game_achievements", {
-      apiKey,
-      steamId,
       gameId,
     }),
   getAllAchievementStats: () =>
     invoke<[string, number, number][]>("get_all_achievement_stats"),
-  batchFetchAchievements: (apiKey: string, steamId: string) =>
-    invoke<number>("batch_fetch_achievements", { apiKey, steamId }),
+  batchFetchAchievements: () => invoke<number>("batch_fetch_achievements"),
   clearAchievementCache: () => invoke<number>("clear_achievement_cache"),
 };
 
 export const friendsApi = {
-  fetchFriendsList: (apiKey: string, steamId: string) =>
-    invoke<FriendInfo[]>("fetch_friends_list", { apiKey, steamId }),
-  fetchFriendLibrary: (apiKey: string, friendSteamId: string) =>
-    invoke<FriendLibrary>("fetch_friend_library", { apiKey, friendSteamId }),
+  fetchFriendsList: (steamId: string) =>
+    invoke<FriendInfo[]>("fetch_friends_list", { steamId }),
+  fetchFriendLibrary: (friendSteamId: string) =>
+    invoke<FriendLibrary>("fetch_friend_library", { friendSteamId }),
 };
 
 export const newsApi = {
   fetchGameNews: (gameId: string, count?: number) =>
     invoke<GameNewsItem[]>("fetch_game_news", { gameId, count: count ?? 10 }),
-  fetchFollowedGames: (apiKey: string, steamId: string) =>
-    invoke<number[]>("fetch_followed_games", { apiKey, steamId }),
+  fetchFollowedGames: (steamId: string) =>
+    invoke<number[]>("fetch_followed_games", { steamId }),
   fetchNewsFeed: (force?: boolean) =>
     invoke<FeedNewsItem[]>("fetch_news_feed", { force: force ?? false }),
   markNewsRead: (newsId: string, gameId: string) =>
@@ -468,6 +467,8 @@ export const steamInstallApi = {
 export const assistantApi = {
   startConversation: (avatarId: string) =>
     invoke<string>("start_conversation", { avatarId }),
+  getActiveConversationId: (avatarId: string) =>
+    invoke<string | null>("get_active_conversation_id", { avatarId }),
   sendMessage: (
     conversationId: string,
     avatarId: string,

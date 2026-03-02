@@ -1,10 +1,20 @@
 use crate::models::game::{Game, PlayerSummary};
-use crate::services::steam_client;
+use crate::services::{credential_store, steam_client};
 use crate::utils::error::AppError;
 
+/// Load the Steam API key from the OS credential manager.
+fn load_steam_api_key() -> Result<String, AppError> {
+    credential_store::load_api_key()?.ok_or_else(|| {
+        AppError::Credential(
+            "Steam API key not configured. Add it in Settings > Connections.".into(),
+        )
+    })
+}
+
 #[tauri::command]
-pub async fn fetch_owned_games(api_key: String, steam_id: String) -> Result<Vec<Game>, AppError> {
+pub async fn fetch_owned_games(steam_id: String) -> Result<Vec<Game>, AppError> {
     tracing::info!("Fetching owned games from Steam API");
+    let api_key = load_steam_api_key()?;
     let result = steam_client::fetch_owned_games(&api_key, &steam_id).await;
     match &result {
         Ok(games) => tracing::info!(count = games.len(), "Owned games fetched"),
@@ -14,8 +24,9 @@ pub async fn fetch_owned_games(api_key: String, steam_id: String) -> Result<Vec<
 }
 
 #[tauri::command]
-pub async fn fetch_recent_games(api_key: String, steam_id: String) -> Result<Vec<Game>, AppError> {
+pub async fn fetch_recent_games(steam_id: String) -> Result<Vec<Game>, AppError> {
     tracing::info!("Fetching recent games from Steam API");
+    let api_key = load_steam_api_key()?;
     let result = steam_client::fetch_recent_games(&api_key, &steam_id).await;
     match &result {
         Ok(games) => tracing::info!(count = games.len(), "Recent games fetched"),
@@ -25,11 +36,9 @@ pub async fn fetch_recent_games(api_key: String, steam_id: String) -> Result<Vec
 }
 
 #[tauri::command]
-pub async fn fetch_player_summary(
-    api_key: String,
-    steam_id: String,
-) -> Result<PlayerSummary, AppError> {
+pub async fn fetch_player_summary(steam_id: String) -> Result<PlayerSummary, AppError> {
     tracing::info!("Fetching player summary");
+    let api_key = load_steam_api_key()?;
     let result = steam_client::fetch_player_summary(&api_key, &steam_id).await;
     match &result {
         Ok(p) => tracing::info!(persona_name = %p.persona_name, "Player summary fetched"),
@@ -40,15 +49,22 @@ pub async fn fetch_player_summary(
 
 /// Resolve user input (vanity URL, profile URL, or raw Steam ID) to a full player profile.
 #[tauri::command]
-pub async fn resolve_steam_account(
-    api_key: String,
-    input: String,
-) -> Result<PlayerSummary, AppError> {
+pub async fn resolve_steam_account(input: String) -> Result<PlayerSummary, AppError> {
     tracing::info!(input_type = "user_input", "Resolving Steam account");
+    let api_key = load_steam_api_key()?;
     let input = input.trim().to_string();
     let steam_id = resolve_input_to_steam_id(&api_key, &input).await?;
     tracing::info!("Steam ID resolved, fetching profile");
     steam_client::fetch_player_summary(&api_key, &steam_id).await
+}
+
+/// Store the Steam API key in the OS credential manager (for use during first-run setup).
+#[tauri::command]
+pub fn store_steam_api_key(key: String) -> Result<(), AppError> {
+    if key.trim().is_empty() {
+        return Err(AppError::Validation("API key cannot be empty".into()));
+    }
+    credential_store::store_api_key(key.trim())
 }
 
 /// Parse user input and resolve to a 64-bit Steam ID.

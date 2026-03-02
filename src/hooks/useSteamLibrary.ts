@@ -10,10 +10,10 @@ export function useSteamLibrary() {
 
   useEffect(() => {
     if (!libraryData && !isLoading && settings) {
-      const mode = settings.steamApiKey && settings.steamId ? "full" : "local-only";
+      const mode = settings.steamId ? "full" : "local-only";
       logger.info("useSteamLibrary", "library", "Auto-loading library", { mode });
       if (mode === "full") {
-        refreshLibrary(settings.steamApiKey!, settings.steamId!);
+        refreshLibrary(settings.steamId!);
       } else {
         scanLocalOnly();
       }
@@ -21,8 +21,8 @@ export function useSteamLibrary() {
   }, [settings, libraryData, isLoading, refreshLibrary, scanLocalOnly]);
 
   const refresh = () => {
-    if (settings?.steamApiKey && settings?.steamId) {
-      library.refreshLibrary(settings.steamApiKey, settings.steamId);
+    if (settings?.steamId) {
+      library.refreshLibrary(settings.steamId);
     } else {
       library.scanLocalOnly();
     }

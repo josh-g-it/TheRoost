@@ -61,7 +61,10 @@ export function FirstRunSetup() {
     setLookupError("");
     setResolvedProfile(null);
     try {
-      const profile = await steamApi.resolveSteamAccount(apiKey, lookupInput.trim());
+      // Store the API key in credential manager before the lookup call
+      // so the Rust command can load it server-side
+      await steamApi.storeSteamApiKey(apiKey);
+      const profile = await steamApi.resolveSteamAccount(lookupInput.trim());
       logger.info("FirstRunSetup", "api", "Account resolved", {
         personaName: profile.personaName,
       });
@@ -248,9 +251,7 @@ export function FirstRunSetup() {
             <Button
               onClick={() => {
                 // Kick off library scan early — runs in background during remaining steps
-                useLibraryStore
-                  .getState()
-                  .refreshLibrary(apiKey, resolvedProfile!.steamid);
+                useLibraryStore.getState().refreshLibrary(resolvedProfile!.steamid);
                 setStep(3);
               }}
             >

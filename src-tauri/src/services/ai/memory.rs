@@ -24,7 +24,61 @@ pub fn load_vault_memories(
     rows_to_memories(rows, key)
 }
 
+/// Load vault memories ranked by combined importance and keyword relevance.
+/// Fetches more than needed, scores by keyword overlap, and returns top `limit`.
+/// Keywords are matched case-insensitively against decrypted memory content.
+pub fn load_vault_memories_ranked(
+    db: &CacheDb,
+    avatar_id: &str,
+    key: &[u8; 32],
+    limit: u32,
+    keywords: &[String],
+) -> Result<Vec<AiMemory>, AppError> {
+    if keywords.is_empty() {
+        return load_vault_memories(db, avatar_id, key, limit);
+    }
+
+    // Fetch 2x the limit to have candidates for re-ranking
+    let fetch_count = limit.saturating_mul(2).max(50);
+    let rows = db.get_active_vault_memories_raw(avatar_id, fetch_count)?;
+    let mut memories = rows_to_memories(rows, key)?;
+
+    // Score each memory: importance (0-10) + keyword bonus (0-5)
+    let lower_keywords: Vec<String> = keywords.iter().map(|k| k.to_lowercase()).collect();
+    memories.sort_by(|a, b| {
+        let score_a = rank_memory(a, &lower_keywords);
+        let score_b = rank_memory(b, &lower_keywords);
+        score_b
+            .partial_cmp(&score_a)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    memories.truncate(limit as usize);
+    Ok(memories)
+}
+
+/// Compute a combined score for a memory based on importance and keyword relevance.
+fn rank_memory(mem: &AiMemory, keywords: &[String]) -> f64 {
+    let importance_score = f64::from(mem.importance);
+    let content_lower = mem.content.to_lowercase();
+    let keyword_hits = keywords
+        .iter()
+        .filter(|kw| kw.len() >= 3 && content_lower.contains(kw.as_str()))
+        .count();
+    // Keyword bonus: up to 5 points (each hit adds 2.5, capped at 2 hits)
+    let keyword_bonus = (keyword_hits as f64 * 2.5).min(5.0);
+    importance_score + keyword_bonus
+}
+
 /// Load cross-avatar memories (decrypted) — returns (memory, avatar_name) pairs.
+///
+/// # Cross-avatar sharing semantics
+/// Memories are avatar-scoped by default. Cross-avatar sharing surfaces high-importance
+/// memories (importance >= 6) from OTHER avatars into the current avatar's context.
+/// This lets a new avatar benefit from preferences learned by a previous avatar
+/// (e.g., "user loves RPGs") without inheriting low-value or avatar-specific context.
+/// System memories are excluded — they are avatar-specific by design.
+/// Shared memories are read-only: the receiving avatar cannot modify or supersede them.
 pub fn load_cross_avatar_memories(
     db: &CacheDb,
     avatar_id: &str,
@@ -130,15 +184,47 @@ pub fn insert_memory(
 }
 
 /// Prune vault if active non-system memories exceed 100.
-/// Returns the number of memories pruned.
+/// Also hard-deletes inactive memories and journal entries older than 90 days
+/// to prevent unbounded table growth.
+/// Returns the number of active memories soft-deleted.
+///
+/// # Future improvements
+/// - **Smarter pruning**: Factor in recency (`last_referenced`), frequency of
+///   reference, and semantic clustering to avoid losing memories that are low-
+///   importance but recently relevant.
+/// - **Compaction meta-learning**: Track which memories get superseded most often
+///   and auto-adjust importance, reducing churn and the need for pruning.
 pub fn prune_vault_if_needed(db: &CacheDb, avatar_id: &str) -> Result<u32, AppError> {
+    // 1. Soft-delete lowest-importance active memories if vault exceeds cap
     let count = db.count_active_vault_memories(avatar_id)?;
-    if count <= 100 {
-        return Ok(0);
+    let pruned = if count > 100 {
+        let to_prune = db.get_lowest_importance_memories(avatar_id, 20)?;
+        let n = to_prune.len() as u32;
+        db.soft_delete_memories_batch(&to_prune)?;
+        n
+    } else {
+        0
+    };
+
+    // 2. Hard-delete old inactive (superseded) memories and journal entries
+    //    to prevent unbounded table growth. 90-day retention is generous for
+    //    data that has already been compacted into newer memories.
+    let cutoff = (chrono::Utc::now() - chrono::Duration::days(90))
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string();
+
+    let old_mems = db.hard_delete_old_inactive_memories(avatar_id, &cutoff)?;
+    let old_journal = db.prune_old_journal_entries(avatar_id, &cutoff)?;
+
+    if old_mems > 0 || old_journal > 0 {
+        tracing::info!(
+            avatar_id,
+            inactive_deleted = old_mems,
+            journal_deleted = old_journal,
+            "Cleaned up old AI data"
+        );
     }
-    let to_prune = db.get_lowest_importance_memories(avatar_id, 20)?;
-    let pruned = to_prune.len() as u32;
-    db.soft_delete_memories_batch(&to_prune)?;
+
     Ok(pruned)
 }
 
@@ -535,5 +621,276 @@ mod tests {
         .unwrap();
         let raw = db.get_all_active_memories_raw(&avatar_id).unwrap();
         assert_ne!(raw[0].content, "my secret preference"); // Must be ciphertext in DB
+    }
+
+    // ── load_vault_memories_ranked tests ────────────────────────────────
+
+    #[test]
+    fn test_ranked_memories_empty_keywords_falls_back() {
+        let db = test_db();
+        let avatar_id = setup_avatar(&db);
+
+        insert_memory(
+            &db,
+            &avatar_id,
+            "Alpha memory",
+            8,
+            "general",
+            None,
+            false,
+            &TEST_KEY,
+        )
+        .unwrap();
+        insert_memory(
+            &db,
+            &avatar_id,
+            "Beta memory",
+            5,
+            "general",
+            None,
+            false,
+            &TEST_KEY,
+        )
+        .unwrap();
+
+        let ranked = load_vault_memories_ranked(&db, &avatar_id, &TEST_KEY, 10, &[]).unwrap();
+        let plain = load_vault_memories(&db, &avatar_id, &TEST_KEY, 10).unwrap();
+
+        assert_eq!(ranked.len(), plain.len());
+        for (r, p) in ranked.iter().zip(plain.iter()) {
+            assert_eq!(r.id, p.id);
+            assert_eq!(r.content, p.content);
+        }
+    }
+
+    #[test]
+    fn test_ranked_memories_keyword_boost() {
+        let db = test_db();
+        let avatar_id = setup_avatar(&db);
+
+        // High importance but no keyword match
+        insert_memory(
+            &db,
+            &avatar_id,
+            "I enjoy puzzle games a lot",
+            7,
+            "preference",
+            None,
+            false,
+            &TEST_KEY,
+        )
+        .unwrap();
+        // Lower importance but matches keyword "skyrim"
+        insert_memory(
+            &db,
+            &avatar_id,
+            "Loves playing Skyrim every evening",
+            5,
+            "preference",
+            None,
+            false,
+            &TEST_KEY,
+        )
+        .unwrap();
+
+        let keywords = vec!["skyrim".to_string()];
+        let ranked = load_vault_memories_ranked(&db, &avatar_id, &TEST_KEY, 10, &keywords).unwrap();
+
+        assert_eq!(ranked.len(), 2);
+        // "Skyrim" memory (5 + 2.5 = 7.5) should rank above "puzzle" memory (7 + 0 = 7)
+        assert!(ranked[0].content.contains("Skyrim"));
+        assert!(ranked[1].content.contains("puzzle"));
+    }
+
+    #[test]
+    fn test_ranked_memories_respects_limit() {
+        let db = test_db();
+        let avatar_id = setup_avatar(&db);
+
+        for i in 0..20 {
+            insert_memory(
+                &db,
+                &avatar_id,
+                &format!("Memory number {}", i),
+                5,
+                "general",
+                None,
+                false,
+                &TEST_KEY,
+            )
+            .unwrap();
+        }
+
+        let ranked =
+            load_vault_memories_ranked(&db, &avatar_id, &TEST_KEY, 5, &["number".to_string()])
+                .unwrap();
+
+        assert_eq!(ranked.len(), 5);
+    }
+
+    #[test]
+    fn test_ranked_memories_keyword_bonus_caps_at_5() {
+        let db = test_db();
+        let avatar_id = setup_avatar(&db);
+
+        // This memory matches 3 keywords but bonus should cap at 5 (2 hits x 2.5)
+        insert_memory(
+            &db,
+            &avatar_id,
+            "I love skyrim and witcher and fallout",
+            3,
+            "preference",
+            None,
+            false,
+            &TEST_KEY,
+        )
+        .unwrap();
+        // This memory has high importance and matches 2 keywords (gets max +5)
+        insert_memory(
+            &db,
+            &avatar_id,
+            "RPG games like skyrim and witcher are the best",
+            4,
+            "preference",
+            None,
+            false,
+            &TEST_KEY,
+        )
+        .unwrap();
+
+        let keywords = vec![
+            "skyrim".to_string(),
+            "witcher".to_string(),
+            "fallout".to_string(),
+        ];
+        let ranked = load_vault_memories_ranked(&db, &avatar_id, &TEST_KEY, 10, &keywords).unwrap();
+
+        assert_eq!(ranked.len(), 2);
+        // Both get +5 bonus (capped at 2 hits). Scores: first = 3+5=8, second = 4+5=9
+        // So the second memory (importance 4) should rank first
+        assert!(ranked[0].content.contains("RPG games"));
+        assert!(ranked[1].content.contains("I love skyrim"));
+    }
+
+    #[test]
+    fn test_ranked_memories_skips_short_keywords() {
+        let db = test_db();
+        let avatar_id = setup_avatar(&db);
+
+        // Memory that contains "an" and "or" — short keywords that should be ignored
+        insert_memory(
+            &db,
+            &avatar_id,
+            "an old or new adventure game",
+            3,
+            "preference",
+            None,
+            false,
+            &TEST_KEY,
+        )
+        .unwrap();
+        // Higher importance memory with no keyword relevance
+        insert_memory(
+            &db,
+            &avatar_id,
+            "Prefers strategy titles",
+            6,
+            "preference",
+            None,
+            false,
+            &TEST_KEY,
+        )
+        .unwrap();
+
+        // All keywords are < 3 chars, so they should be ignored (no boost applied)
+        let keywords = vec!["an".to_string(), "or".to_string()];
+        let ranked = load_vault_memories_ranked(&db, &avatar_id, &TEST_KEY, 10, &keywords).unwrap();
+
+        assert_eq!(ranked.len(), 2);
+        // With no valid keywords, ranking is by importance alone
+        assert_eq!(ranked[0].importance, 6);
+        assert_eq!(ranked[1].importance, 3);
+    }
+
+    // ── prune_vault_if_needed: 90-day hard-delete test ──────────────────
+
+    #[test]
+    fn test_prune_hard_deletes_old_inactive_memories() {
+        let db = test_db();
+        let avatar_id = setup_avatar(&db);
+
+        // Insert some memories and then soft-delete them
+        let mut ids = Vec::new();
+        for i in 0..5 {
+            let id = insert_memory(
+                &db,
+                &avatar_id,
+                &format!("Old mem {}", i),
+                3,
+                "general",
+                None,
+                false,
+                &TEST_KEY,
+            )
+            .unwrap();
+            ids.push(id);
+        }
+        db.soft_delete_memories_batch(&ids).unwrap();
+
+        // Run prune — these are freshly created (not 90 days old), so hard-delete
+        // should return 0 but the path still executes without error
+        let pruned = prune_vault_if_needed(&db, &avatar_id).unwrap();
+        assert_eq!(pruned, 0); // No active vault memories over 100, so no soft-deletes either
+    }
+
+    // ── seed_system_memories edge-case tests ────────────────────────────
+
+    #[test]
+    fn test_seed_system_memories_custom_name() {
+        let db = test_db();
+        let avatar_id = setup_avatar(&db);
+        seed_system_memories(&db, &avatar_id, "PixelPal", &TEST_KEY).unwrap();
+
+        let mems = load_system_memories(&db, &avatar_id, &TEST_KEY).unwrap();
+        // The first memory should contain the custom avatar name
+        let has_name = mems.iter().any(|m| m.content.contains("PixelPal"));
+        assert!(has_name);
+        // Should NOT contain the default "TestBot" name from setup_avatar
+        let has_testbot_in_content = mems.iter().any(|m| m.content.contains("TestBot"));
+        assert!(!has_testbot_in_content);
+    }
+
+    #[test]
+    fn test_seed_system_memories_all_importance_10() {
+        let db = test_db();
+        let avatar_id = setup_avatar(&db);
+        seed_system_memories(&db, &avatar_id, "Bot", &TEST_KEY).unwrap();
+
+        let mems = load_system_memories(&db, &avatar_id, &TEST_KEY).unwrap();
+        assert_eq!(mems.len(), 4);
+        for mem in &mems {
+            assert_eq!(
+                mem.importance, 10,
+                "Memory '{}' should have importance 10",
+                mem.content
+            );
+        }
+    }
+
+    #[test]
+    fn test_seed_system_memories_all_marked_system() {
+        let db = test_db();
+        let avatar_id = setup_avatar(&db);
+        seed_system_memories(&db, &avatar_id, "Bot", &TEST_KEY).unwrap();
+
+        let mems = load_system_memories(&db, &avatar_id, &TEST_KEY).unwrap();
+        assert_eq!(mems.len(), 4);
+        for mem in &mems {
+            assert!(
+                mem.is_system,
+                "Memory '{}' should be marked as system",
+                mem.content
+            );
+        }
     }
 }

@@ -17,9 +17,12 @@ import {
   searchPalette,
   shouldShowAskAssistant,
   extractGameMentions,
+  actionNeedsMainWindow,
   PALETTE_HINTS,
 } from "../../utils/commandPalette";
 import { aiApi, cloudAiApi } from "../../services/tauri";
+import { logger } from "../../utils/logger";
+import { getErrorMessage } from "../../utils/errors";
 import { AppIcon } from "../common/AppIcon";
 import { CommandSlot } from "../layout/CommandSlot";
 import { CommandPaletteResults, type AiState } from "../layout/CommandPaletteResults";
@@ -29,6 +32,8 @@ import { RandomGamePopover } from "../layout/RandomGamePopover";
 import { OverlayTagFilter } from "./OverlayTagFilter";
 import "../layout/CommandCenter.css";
 import "./OverlayCommandCenter.css";
+
+const SEARCH_FOCUS_DELAY_MS = 50;
 
 const NAV_PATHS: Record<string, string> = {
   "nav:library": "/library",
@@ -147,7 +152,14 @@ export function OverlayCommandCenter({
 
   // Navigate: show main window + navigate + hide overlay
   const navigateMain = useCallback(async (route: string) => {
-    await invoke("show_main_and_navigate", { route });
+    try {
+      await invoke("show_main_and_navigate", { route });
+    } catch (err: unknown) {
+      logger.warn("OverlayCommandCenter", "ui", "Navigate to main failed", {
+        route,
+        error: getErrorMessage(err),
+      });
+    }
   }, []);
 
   // Keyboard handling
@@ -205,7 +217,7 @@ export function OverlayCommandCenter({
         setShowHints(false);
         setPatternResult(null);
         setAiState({ mode: "idle" });
-        setTimeout(() => searchRef.current?.focus(), 50);
+        setTimeout(() => searchRef.current?.focus(), SEARCH_FOCUS_DELAY_MS);
       }
     });
     return () => {
@@ -272,9 +284,8 @@ export function OverlayCommandCenter({
 
       switch (action.id) {
         case "action:refresh-library":
-          if (settings.steamApiKey && settings.steamId) {
+          if (settings.steamId) {
             invoke("fetch_owned_games", {
-              apiKey: settings.steamApiKey,
               steamId: settings.steamId,
             });
           }
@@ -335,7 +346,12 @@ export function OverlayCommandCenter({
           actionId: action.actionId,
           gameId: action.gameId ?? null,
           showMain: actionNeedsMainWindow(action.actionId),
-        }).catch(() => {});
+        }).catch((err: unknown) => {
+          logger.warn("OverlayCommandCenter", "ui", "Palette action failed", {
+            actionId: action.actionId,
+            error: getErrorMessage(err),
+          });
+        });
       }
       hideOverlay();
     },
@@ -349,7 +365,12 @@ export function OverlayCommandCenter({
           actionId: action.actionId,
           gameId: action.gameId ?? null,
           showMain: actionNeedsMainWindow(action.actionId),
-        }).catch(() => {});
+        }).catch((err: unknown) => {
+          logger.warn("OverlayCommandCenter", "ui", "AI action relay failed", {
+            actionId: action.actionId,
+            error: getErrorMessage(err),
+          });
+        });
       }
       hideOverlay();
     },
@@ -369,11 +390,21 @@ export function OverlayCommandCenter({
         invoke("overlay_execute_palette_action", {
           actionId: action.id,
           showMain: actionNeedsMainWindow(action.id),
-        }).catch(() => {});
+        }).catch((err: unknown) => {
+          logger.warn("OverlayCommandCenter", "ui", "Palette action failed", {
+            actionId: action.id,
+            error: getErrorMessage(err),
+          });
+        });
       } else if (index < actionCount + gameCount) {
         const game = paletteResults.games[index - actionCount];
         if (!game) return;
-        invoke("launch_game", { gameId: game.gameId }).catch(() => {});
+        invoke("launch_game", { gameId: game.gameId }).catch((err: unknown) => {
+          logger.warn("OverlayCommandCenter", "ui", "Launch game failed", {
+            gameId: game.gameId,
+            error: getErrorMessage(err),
+          });
+        });
         hideOverlay();
       } else if (index < actionCount + gameCount + patternActionCount) {
         // Pattern matcher — apply ALL pattern matcher actions
@@ -595,28 +626,4 @@ export function OverlayCommandCenter({
       </div>
     </>
   );
-}
-
-/**
- * Determine if an action requires showing/focusing the main window.
- * Actions that only save settings or trigger background tasks don't need it.
- */
-function actionNeedsMainWindow(actionId: string): boolean {
-  // Theme/appearance — settings save only
-  if (actionId.startsWith("theme:")) return false;
-  if (actionId.startsWith("font:")) return false;
-  if (actionId.startsWith("icons:")) return false;
-  if (actionId.startsWith("scale:")) return false;
-  // Toggle settings — no navigation
-  if (actionId === "settings:tray") return false;
-  if (actionId === "action:toggle-dev-mode") return false;
-  if (actionId === "dev:onboarding") return false;
-  // Background tasks — no navigation
-  if (actionId === "action:refresh") return false;
-  if (actionId === "action:refresh-metadata") return false;
-  if (actionId === "action:scan-external") return false;
-  // Favorite toggle — no navigation
-  if (actionId.startsWith("game:favorite")) return false;
-  // Everything else navigates or opens UI
-  return true;
 }

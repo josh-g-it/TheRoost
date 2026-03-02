@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -38,12 +39,16 @@ function CustomTooltip({
 export function RecapTopGames({ topGames }: RecapTopGamesProps) {
   const colors = useChartColors();
 
-  const data = topGames.map((g) => ({
-    ...g,
-    hours: Math.round((g.minutes / 60) * 10) / 10,
-    // Truncate long names for the axis
-    shortName: g.name.length > 20 ? g.name.slice(0, 18) + "..." : g.name,
-  }));
+  const data = useMemo(
+    () =>
+      topGames.map((g) => ({
+        ...g,
+        hours: Math.round((g.minutes / 60) * 10) / 10,
+        // Truncate long names for the axis
+        shortName: g.name.length > 20 ? g.name.slice(0, 18) + "..." : g.name,
+      })),
+    [topGames],
+  );
 
   return (
     <div className="recap-section">

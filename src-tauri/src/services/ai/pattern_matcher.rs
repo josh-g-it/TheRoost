@@ -12,6 +12,13 @@ impl PatternMatcher {
             return None;
         }
 
+        if ctx.games.is_empty() && ctx.genres.is_empty() && ctx.tags.is_empty() {
+            tracing::debug!(
+                query,
+                "Pattern matcher context has no games/genres/tags — game/genre/tag matching disabled"
+            );
+        }
+
         let tokens: Vec<&str> = lower.split_whitespace().collect();
         let mut actions: Vec<IntentAction> = Vec::new();
         let mut consumed: Vec<bool> = vec![false; tokens.len()];

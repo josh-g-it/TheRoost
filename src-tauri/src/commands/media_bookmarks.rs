@@ -137,6 +137,11 @@ pub async fn add_media_bookmark(
     db: State<'_, CacheDbHandle>,
 ) -> Result<MediaBookmark, AppError> {
     validate_url(&request.url)?;
+    if request.title.chars().count() > 200 {
+        return Err(AppError::Validation(
+            "Bookmark title exceeds maximum length of 200 characters".into(),
+        ));
+    }
     tracing::info!(title = %request.title, "Adding media bookmark");
     let db = db.lock_or_err("DB")?;
     db.add_media_bookmark(&request.title, &request.url, request.icon.as_deref())
@@ -148,6 +153,11 @@ pub async fn update_media_bookmark(
     db: State<'_, CacheDbHandle>,
 ) -> Result<(), AppError> {
     validate_url(&request.url)?;
+    if request.title.chars().count() > 200 {
+        return Err(AppError::Validation(
+            "Bookmark title exceeds maximum length of 200 characters".into(),
+        ));
+    }
     tracing::info!(id = request.id, title = %request.title, "Updating media bookmark");
     let db = db.lock_or_err("DB")?;
     db.update_media_bookmark(

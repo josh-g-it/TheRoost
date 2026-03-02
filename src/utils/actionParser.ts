@@ -6,6 +6,8 @@
  * so the action payload is never shown to the user.
  */
 
+import { logger } from "./logger";
+
 export const DELIMITER = "\n---ACTIONS---\n";
 
 /** A raw action as parsed from the AI response JSON. */
@@ -101,7 +103,14 @@ export function parseActionsFromContent(content: string): {
 
   try {
     const parsed: unknown = JSON.parse(actionSection);
-    if (!Array.isArray(parsed)) return { displayText, actions: [] };
+    if (!Array.isArray(parsed)) {
+      logger.warn(
+        "actionParser",
+        "ai",
+        `Malformed action JSON: expected array, got ${typeof parsed}`,
+      );
+      return { displayText, actions: [] };
+    }
 
     const actions: ParsedAiAction[] = parsed.filter(
       (item: unknown): item is ParsedAiAction =>
@@ -113,7 +122,12 @@ export function parseActionsFromContent(content: string): {
         typeof (item as Record<string, unknown>).tier === "number",
     );
     return { displayText, actions };
-  } catch {
+  } catch (e) {
+    logger.warn(
+      "actionParser",
+      "ai",
+      `Malformed action JSON from AI response: ${String(e)}`,
+    );
     return { displayText, actions: [] };
   }
 }
@@ -145,6 +159,11 @@ export function finalizeStream(state: StreamParserState): {
     const parsed: unknown = JSON.parse(trimmed);
 
     if (!Array.isArray(parsed)) {
+      logger.warn(
+        "actionParser",
+        "ai",
+        `Malformed streamed action JSON: expected array, got ${typeof parsed}`,
+      );
       return { displayText: "", actions: [] };
     }
 
@@ -160,8 +179,13 @@ export function finalizeStream(state: StreamParserState): {
     );
 
     return { displayText: "", actions };
-  } catch {
-    // Malformed JSON — return empty actions, display text unaffected
+  } catch (e) {
+    // Malformed JSON — log it for debugging, return empty actions
+    logger.warn(
+      "actionParser",
+      "ai",
+      `Malformed streamed action JSON from AI: ${String(e)}`,
+    );
     return { displayText: "", actions: [] };
   }
 }

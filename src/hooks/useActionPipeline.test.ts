@@ -103,7 +103,7 @@ describe("useActionPipeline", () => {
     expect(result.current.state.results.every((r) => r.success)).toBe(true);
   });
 
-  it("pauses at Tier 2 action", () => {
+  it("pauses at Tier 2 action (reordered before Tier 1)", () => {
     mockExecutors["sort:playtime"] = vi.fn();
 
     const { result } = renderHook(() => useActionPipeline({ navigate: mockNavigate }));
@@ -118,10 +118,11 @@ describe("useActionPipeline", () => {
       ]);
     });
 
-    expect(mockExecutors["sort:playtime"]).toHaveBeenCalledTimes(1);
+    // Tier 2 is reordered first, so pipeline pauses immediately
+    expect(mockExecutors["sort:playtime"]).not.toHaveBeenCalled();
     expect(result.current.state.status).toBe("paused");
-    expect(result.current.state.currentIndex).toBe(1);
-    expect(result.current.state.results).toHaveLength(1);
+    expect(result.current.state.currentIndex).toBe(0);
+    expect(result.current.state.results).toHaveLength(0);
   });
 
   it("confirmTier2 resumes and completes pipeline", () => {
@@ -141,16 +142,21 @@ describe("useActionPipeline", () => {
       ]);
     });
 
+    // Tier 2 reordered first — pauses at index 0
     expect(result.current.state.status).toBe("paused");
+    expect(result.current.state.currentIndex).toBe(0);
 
     // Confirm the Tier 2 action
     act(() => {
-      result.current.confirmTier2(result.current.state.actions[1]);
+      result.current.confirmTier2(result.current.state.actions[0]);
     });
 
+    // After confirm, Tier 1 sort auto-executes
     expect(favoriteExecutor).toHaveBeenCalledTimes(1);
+    expect(mockExecutors["sort:playtime"]).toHaveBeenCalledTimes(1);
     expect(result.current.state.status).toBe("completed");
     expect(result.current.state.results).toHaveLength(2);
+    expect(result.current.state.results[0].confirmed).toBe(true);
     expect(result.current.state.results[1].success).toBe(true);
   });
 
@@ -170,19 +176,22 @@ describe("useActionPipeline", () => {
       ]);
     });
 
+    // Reordered to: [favorite(T2), sort(T1), nav(T1)] — pauses at index 0
     expect(result.current.state.status).toBe("paused");
+    expect(mockExecutors["sort:playtime"]).not.toHaveBeenCalled();
 
     act(() => {
       result.current.denyTier2();
     });
 
     expect(result.current.state.status).toBe("canceled");
-    // Results: sort(success) + favorite(denied) + nav(canceled) = 3
+    // Results: favorite(denied) + sort(canceled) + nav(canceled) = 3
     expect(result.current.state.results).toHaveLength(3);
-    expect(result.current.state.results[0].success).toBe(true);
+    expect(result.current.state.results[0].success).toBe(false);
+    expect(result.current.state.results[0].error).toBe("denied by user");
+    expect(result.current.state.results[0].originalActionId).toBe("favorite:Elden Ring");
     expect(result.current.state.results[1].success).toBe(false);
-    expect(result.current.state.results[1].error).toBe("denied by user");
-    expect(result.current.state.results[1].originalActionId).toBe("favorite:Elden Ring");
+    expect(result.current.state.results[1].error).toBe("canceled (sequence stopped)");
     expect(result.current.state.results[2].success).toBe(false);
     expect(result.current.state.results[2].error).toBe("canceled (sequence stopped)");
   });
@@ -285,6 +294,39 @@ describe("useActionPipeline", () => {
     expect(result.current.state.results[0].success).toBe(false);
     expect(result.current.state.results[0].error).toBe("Boom!");
     expect(result.current.state.results[1].success).toBe(true);
+  });
+
+  it("reorders Tier 2 actions before Tier 1 to prevent nav-induced unmount", () => {
+    mockExecutors["action:reset-filters"] = vi.fn();
+    mockExecutors["review:uuid-1"] = vi.fn();
+
+    const { result } = renderHook(() => useActionPipeline({ navigate: mockNavigate }));
+    act(() => {
+      result.current.setActions([
+        makeAction({ actionId: "action:reset-filters", tier: 1 }),
+        makeAction({
+          actionId: "review:uuid-1",
+          tier: 2,
+          originalActionId: "review:Overwatch",
+        }),
+      ]);
+    });
+
+    // Review (Tier 2) should be first after reordering
+    expect(result.current.state.actions[0].actionId).toBe("review:uuid-1");
+    expect(result.current.state.actions[1].actionId).toBe("action:reset-filters");
+    // Pipeline pauses for review confirmation before reset-filters can navigate away
+    expect(result.current.state.status).toBe("paused");
+    expect(mockExecutors["action:reset-filters"]).not.toHaveBeenCalled();
+
+    // Confirm review — then reset-filters auto-executes
+    act(() => {
+      result.current.confirmTier2(result.current.state.actions[0]);
+    });
+
+    expect(mockExecutors["review:uuid-1"]).toHaveBeenCalledTimes(1);
+    expect(mockExecutors["action:reset-filters"]).toHaveBeenCalledTimes(1);
+    expect(result.current.state.status).toBe("completed");
   });
 
   it("handles Tier 2 at the very start of the pipeline", () => {
@@ -467,6 +509,7 @@ describe("useActionPipeline", () => {
       ]);
     });
 
+    // Reordered: [favorite(T2), sort(T1)] — pauses at favorite
     act(() => {
       result.current.denyTier2();
     });
@@ -477,8 +520,8 @@ describe("useActionPipeline", () => {
     });
 
     expect(consumed).toHaveLength(2);
-    expect(consumed[0].success).toBe(true);
-    expect(consumed[1].error).toBe("denied by user");
+    expect(consumed[0].error).toBe("denied by user");
+    expect(consumed[1].error).toBe("canceled (sequence stopped)");
   });
 
   it("consumeResults captures canceled results after cancelAll", () => {

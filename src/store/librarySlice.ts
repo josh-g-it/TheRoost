@@ -22,7 +22,7 @@ interface LibraryState {
   library: GameLibrary | null;
   isLoading: boolean;
   error: string | null;
-  refreshLibrary: (apiKey: string, steamId: string) => Promise<void>;
+  refreshLibrary: (steamId: string) => Promise<void>;
   scanLocalOnly: () => Promise<void>;
   addGame: (game: Game) => void;
   removeGame: (gameId: string) => void;
@@ -34,13 +34,13 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   isLoading: false,
   error: null,
 
-  refreshLibrary: async (apiKey: string, steamId: string) => {
+  refreshLibrary: async (steamId: string) => {
     if (get().isLoading) return;
     set({ isLoading: true, error: null });
     try {
       // Scan Steam and external launchers in parallel
       const [steamResult, externalResult] = await Promise.allSettled([
-        steamApi.getFullLibrary(apiKey, steamId),
+        steamApi.getFullLibrary(steamId),
         externalApi.scanExternalGames(),
       ]);
 

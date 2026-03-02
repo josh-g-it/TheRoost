@@ -134,7 +134,7 @@ describe("useLibraryStore", () => {
         warnings: [],
       });
 
-      await useLibraryStore.getState().refreshLibrary("key", "id");
+      await useLibraryStore.getState().refreshLibrary("id");
 
       const state = useLibraryStore.getState();
       expect(state.library?.games).toHaveLength(2);
@@ -153,7 +153,7 @@ describe("useLibraryStore", () => {
         warnings: [],
       });
 
-      await useLibraryStore.getState().refreshLibrary("key", "id");
+      await useLibraryStore.getState().refreshLibrary("id");
 
       const state = useLibraryStore.getState();
       expect(state.library?.games).toHaveLength(1);
@@ -173,7 +173,7 @@ describe("useLibraryStore", () => {
       });
       mockScanExternalGames.mockRejectedValue(new Error("external down"));
 
-      await useLibraryStore.getState().refreshLibrary("key", "id");
+      await useLibraryStore.getState().refreshLibrary("id");
 
       const state = useLibraryStore.getState();
       expect(state.library?.games).toHaveLength(1);
@@ -182,7 +182,7 @@ describe("useLibraryStore", () => {
 
     it("skips if already loading", async () => {
       useLibraryStore.setState({ isLoading: true });
-      await useLibraryStore.getState().refreshLibrary("key", "id");
+      await useLibraryStore.getState().refreshLibrary("id");
       expect(mockGetFullLibrary).not.toHaveBeenCalled();
     });
   });

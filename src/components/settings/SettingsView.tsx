@@ -11,6 +11,7 @@ import { ThemeBuilder } from "./ThemeBuilder";
 import { DeveloperSettings } from "./DeveloperSettings";
 import { BackupRestoreSection } from "./BackupRestoreSection";
 import { useSettings } from "../../hooks/useSettings";
+import { useSettingsStore } from "../../store/settingsSlice";
 import { useAppVersion } from "../../hooks/useAppVersion";
 import { useLibraryStore } from "../../store/librarySlice";
 import {
@@ -34,6 +35,9 @@ import type { ThemeId } from "../../hooks/useTheme";
 import type { IconSetId, FontFamilyId, UIScaleId } from "../../types/theme";
 import { SHORTCUT_OPTIONS } from "../../types";
 import "./SettingsView.css";
+
+const SAVE_NOTIFICATION_MS = 2000;
+const CLIPBOARD_MESSAGE_MS = 3000;
 
 type SettingsTabId =
   | "general"
@@ -172,8 +176,15 @@ export function SettingsView() {
       form.commandCenterShortcut !== settings.commandCenterShortcut ||
       form.railMode !== settings.railMode ||
       form.minimizeToTray !== settings.minimizeToTray ||
+      form.cloudAiEnabled !== settings.cloudAiEnabled ||
+      form.cloudAiProvider !== settings.cloudAiProvider ||
       form.cloudAiDailyLimit !== settings.cloudAiDailyLimit ||
       form.cloudAiContextScope !== settings.cloudAiContextScope ||
+      form.aiConversationAutoEndEnabled !== settings.aiConversationAutoEndEnabled ||
+      form.aiPostSessionReviewEnabled !== settings.aiPostSessionReviewEnabled ||
+      form.aiMaxTokensMain !== settings.aiMaxTokensMain ||
+      form.aiMaxTokensOverlay !== settings.aiMaxTokensOverlay ||
+      form.mediaControlsMode !== settings.mediaControlsMode ||
       JSON.stringify(form.cloudAiIncludedGames ?? []) !==
         JSON.stringify(settings.cloudAiIncludedGames ?? []) ||
       JSON.stringify(form.cloudAiExcludedGames ?? []) !==
@@ -187,6 +198,65 @@ export function SettingsView() {
 
   const blocker = useBlocker(isDirty);
 
+  // Build a clean save payload that exactly matches the Rust AppSettings struct.
+  // Uses strict type coercion (=== true, Number(), Array.isArray) instead of ??
+  // because ?? only guards null/undefined — a corrupted value like {} passes through.
+  // JSON roundtrip strips proxies, undefined values, and non-serializable properties.
+  const buildSavePayload = (f: AppSettings): AppSettings => {
+    const payload = {
+      steamApiKey: f.steamApiKey ?? null,
+      steamId: f.steamId ?? null,
+      isFirstRun: f.isFirstRun === true,
+      theme: String(f.theme || "dark-gaming"),
+      iconSet: String(f.iconSet || "default"),
+      fontFamily: String(f.fontFamily || "system"),
+      uiScale: String(f.uiScale || "comfortable"),
+      cardDisplay: {
+        showGenreTags: f.cardDisplay?.showGenreTags === true,
+        showPlaytime: f.cardDisplay?.showPlaytime === true,
+        showInstalledBadge: f.cardDisplay?.showInstalledBadge === true,
+        showTags: f.cardDisplay?.showTags === true,
+        gridSize: String(f.cardDisplay?.gridSize || "medium"),
+        listDensity: String(f.cardDisplay?.listDensity || "default"),
+        listColumns: Array.isArray(f.cardDisplay?.listColumns)
+          ? f.cardDisplay.listColumns
+          : [],
+      },
+      profileChartOptions: {
+        genreRadarCount: Number(f.profileChartOptions?.genreRadarCount) || 8,
+        playtimeBuckets: String(f.profileChartOptions?.playtimeBuckets || "default"),
+        leaderboardTopN: Number(f.profileChartOptions?.leaderboardTopN) || 10,
+      },
+      commandCenterSlots: Array.isArray(f.commandCenterSlots) ? f.commandCenterSlots : [],
+      commandCenterShortcut: String(f.commandCenterShortcut || "Ctrl+Space"),
+      railMode: String(f.railMode || "dynamic"),
+      shelves: Array.isArray(f.shelves) ? f.shelves : [],
+      minimizeToTray: f.minimizeToTray !== false, // defaults true
+      devSettingsEnabled: f.devSettingsEnabled === true,
+      activityLayout: Array.isArray(f.activityLayout) ? f.activityLayout : [],
+      hasSeenWelcome: f.hasSeenWelcome === true,
+      overlayPanelPositions: f.overlayPanelPositions ?? {},
+      mediaControlsMode: String(f.mediaControlsMode || "dynamic"),
+      cloudAiEnabled: f.cloudAiEnabled === true,
+      cloudAiProvider: String(f.cloudAiProvider || "gemini"),
+      cloudAiDailyLimit: Number(f.cloudAiDailyLimit) || 100,
+      cloudAiPrivacyAcknowledged: f.cloudAiPrivacyAcknowledged === true,
+      cloudAiContextScope: String(f.cloudAiContextScope || "all"),
+      cloudAiExcludedGames: Array.isArray(f.cloudAiExcludedGames)
+        ? f.cloudAiExcludedGames
+        : [],
+      cloudAiIncludedGames: Array.isArray(f.cloudAiIncludedGames)
+        ? f.cloudAiIncludedGames
+        : [],
+      aiPostSessionReviewEnabled: f.aiPostSessionReviewEnabled === true,
+      aiConversationAutoEndEnabled: f.aiConversationAutoEndEnabled !== false, // defaults true
+      aiMaxTokensMain: Number(f.aiMaxTokensMain) || 8192,
+      aiMaxTokensOverlay: Number(f.aiMaxTokensOverlay) || 2048,
+    };
+    // JSON roundtrip ensures a perfectly clean plain object for Tauri invoke
+    return JSON.parse(JSON.stringify(payload)) as AppSettings;
+  };
+
   const handleSave = async () => {
     if (!form) return;
     setSaving(true);
@@ -194,11 +264,25 @@ export function SettingsView() {
     if (settings && form.commandCenterShortcut !== settings.commandCenterShortcut) {
       invoke("update_overlay_shortcut", { shortcut: form.commandCenterShortcut });
     }
-    await saveSettings(form);
+    const cleanForm = buildSavePayload(form);
+    await saveSettings(cleanForm);
+    const { settings: saved, error } = useSettingsStore.getState();
     setSaving(false);
+    if (error) {
+      logger.error("settings", "ui", "Save failed", { error });
+      return;
+    }
+    // Re-sync form from store to ensure isDirty becomes false
+    if (saved) setForm({ ...saved });
+    // Sync in-memory CloudConfig with saved values
+    cloudAiApi.updateSettings(
+      form.cloudAiEnabled ?? false,
+      form.cloudAiProvider ?? "gemini",
+      form.cloudAiDailyLimit ?? 100,
+    );
     setSaved(true);
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-    savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
+    savedTimerRef.current = setTimeout(() => setSaved(false), SAVE_NOTIFICATION_MS);
   };
 
   const handleSaveAndLeave = async () => {
@@ -207,7 +291,14 @@ export function SettingsView() {
     if (settings && form.commandCenterShortcut !== settings.commandCenterShortcut) {
       invoke("update_overlay_shortcut", { shortcut: form.commandCenterShortcut });
     }
-    await saveSettings(form);
+    const cleanForm = buildSavePayload(form);
+    await saveSettings(cleanForm);
+    // Sync in-memory CloudConfig with saved values
+    cloudAiApi.updateSettings(
+      form.cloudAiEnabled ?? false,
+      form.cloudAiProvider ?? "gemini",
+      form.cloudAiDailyLimit ?? 100,
+    );
     setSaving(false);
     blocker.proceed?.();
   };
@@ -233,11 +324,11 @@ export function SettingsView() {
     };
     setForm(updated);
     setSaving(true);
-    await saveSettings(updated);
+    await saveSettings(buildSavePayload(updated));
     setSaving(false);
     setSaved(true);
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-    savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
+    savedTimerRef.current = setTimeout(() => setSaved(false), SAVE_NOTIFICATION_MS);
   };
 
   if (isLoading || !form) return null;
@@ -579,19 +670,9 @@ export function SettingsView() {
                         cloudAiPrivacyAcknowledged: true,
                         aiPostSessionReviewEnabled: enableReviews,
                       });
-                      cloudAiApi.updateSettings(
-                        true,
-                        form.cloudAiProvider ?? "gemini",
-                        form.cloudAiDailyLimit ?? 100,
-                      );
                       return;
                     }
                     setForm({ ...form, cloudAiEnabled: enabled });
-                    cloudAiApi.updateSettings(
-                      enabled,
-                      form.cloudAiProvider ?? "gemini",
-                      form.cloudAiDailyLimit ?? 100,
-                    );
                   }}
                 />
                 Enable Cloud AI
@@ -607,11 +688,6 @@ export function SettingsView() {
                     value={form.cloudAiProvider ?? "gemini"}
                     onChange={(e) => {
                       setForm({ ...form, cloudAiProvider: e.target.value });
-                      cloudAiApi.updateSettings(
-                        form.cloudAiEnabled ?? false,
-                        e.target.value,
-                        form.cloudAiDailyLimit ?? 100,
-                      );
                       // Refresh key status for new provider
                       cloudAiApi
                         .getKeyStatus(e.target.value)
@@ -737,11 +813,6 @@ export function SettingsView() {
                         Math.min(9999, Number(e.target.value) || 100),
                       );
                       setForm({ ...form, cloudAiDailyLimit: val });
-                      cloudAiApi.updateSettings(
-                        form.cloudAiEnabled ?? false,
-                        form.cloudAiProvider ?? "gemini",
-                        val,
-                      );
                     }}
                   />
                 </div>
@@ -1048,7 +1119,10 @@ export function SettingsView() {
                         onClick={() => {
                           navigator.clipboard.writeText(exportedKey);
                           setKeyImportMessage("Copied to clipboard (auto-clears in 30s)");
-                          setTimeout(() => setKeyImportMessage(null), 3000);
+                          setTimeout(
+                            () => setKeyImportMessage(null),
+                            CLIPBOARD_MESSAGE_MS,
+                          );
                           if (clipboardTimerRef.current)
                             clearTimeout(clipboardTimerRef.current);
                           clipboardTimerRef.current = setTimeout(() => {

@@ -80,9 +80,10 @@ describe("AssistantMemories", () => {
     expect(screen.queryByText("Some fact noted")).not.toBeInTheDocument();
   });
 
-  it("system memories do not show delete button", async () => {
+  it("all filter hides system memories", async () => {
     mockGetMemories.mockResolvedValue([
-      makeAiMemory("m1", "a1", {
+      makeAiMemory("m1", "a1", { content: "User memory", category: "preference" }),
+      makeAiMemory("m2", "a1", {
         content: "System memory",
         isSystem: true,
         category: "system",
@@ -92,9 +93,34 @@ describe("AssistantMemories", () => {
     render(<AssistantMemories avatarId="a1" />);
 
     await waitFor(() => {
+      expect(screen.getByText("User memory")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("System memory")).not.toBeInTheDocument();
+  });
+
+  it("system memories visible when system chip selected", async () => {
+    mockGetMemories.mockResolvedValue([
+      makeAiMemory("m1", "a1", {
+        content: "System memory",
+        isSystem: true,
+        category: "system",
+      }),
+    ]);
+
+    const user = userEvent.setup();
+    render(<AssistantMemories avatarId="a1" />);
+
+    const chips = screen.getAllByRole("button");
+    const systemChip = chips.find(
+      (btn) =>
+        btn.classList.contains("assistant-memories__chip") &&
+        btn.textContent === "system",
+    )!;
+    await user.click(systemChip);
+
+    await waitFor(() => {
       expect(screen.getByText("System memory")).toBeInTheDocument();
     });
-
     expect(screen.queryByText("Delete")).not.toBeInTheDocument();
   });
 

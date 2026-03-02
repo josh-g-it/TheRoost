@@ -164,11 +164,34 @@ pub fn get_game_art_info(
 
 /// Read a local image file and return it as a data URL (data:image/png;base64,...).
 /// Used to display custom art without relying on the asset protocol.
+///
+/// Path is validated to be within the app data directory to prevent
+/// path traversal attacks (01-M4).
 #[tauri::command]
-pub fn read_image_base64(file_path: String) -> Result<String, AppError> {
+pub fn read_image_base64(
+    file_path: String,
+    app_handle: tauri::AppHandle,
+) -> Result<String, AppError> {
     let path = std::path::Path::new(&file_path);
 
-    let ext = path
+    // Validate the path is within the app data directory
+    let app_data = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e: tauri::Error| AppError::Io(std::io::Error::other(e.to_string())))?;
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| AppError::Validation(format!("Cannot access image path: {e}")))?;
+    let app_data_canonical = app_data
+        .canonicalize()
+        .map_err(|e| AppError::Validation(format!("Cannot resolve app data dir: {e}")))?;
+    if !canonical.starts_with(&app_data_canonical) {
+        return Err(AppError::Validation(
+            "Image path must be within the app data directory".to_string(),
+        ));
+    }
+
+    let ext = canonical
         .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_lowercase())
@@ -181,7 +204,7 @@ pub fn read_image_base64(file_path: String) -> Result<String, AppError> {
         _ => "image/png", // saved art is always PNG
     };
 
-    let bytes = std::fs::read(path)?;
+    let bytes = std::fs::read(&canonical)?;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
     Ok(format!("data:{};base64,{}", mime, b64))
 }

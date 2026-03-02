@@ -50,7 +50,7 @@ describe("useSteamLibrary", () => {
     vi.clearAllMocks();
   });
 
-  it("calls refreshLibrary in full mode when API key + steamId present", async () => {
+  it("calls refreshLibrary in full mode when steamId present", async () => {
     const settings = makeSettings({ steamApiKey: "key123", steamId: "id456" });
     useSettingsStore.setState({ settings });
 
@@ -60,7 +60,7 @@ describe("useSteamLibrary", () => {
     renderHook(() => useSteamLibrary());
 
     await waitFor(() => {
-      expect(mockGetFullLibrary).toHaveBeenCalledWith("key123", "id456");
+      expect(mockGetFullLibrary).toHaveBeenCalledWith("id456");
     });
   });
 
@@ -113,7 +113,7 @@ describe("useSteamLibrary", () => {
     // Call refresh explicitly
     await result.current.refresh();
 
-    expect(mockGetFullLibrary).toHaveBeenCalledWith("key", "id");
+    expect(mockGetFullLibrary).toHaveBeenCalledWith("id");
   });
 
   it("provides a refresh function that uses local-only when no credentials", async () => {

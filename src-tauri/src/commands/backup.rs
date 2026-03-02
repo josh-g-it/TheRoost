@@ -73,6 +73,22 @@ pub async fn restore_from_backup(
         .app_data_dir()
         .map_err(|e| AppError::Io(std::io::Error::other(e.to_string())))?;
 
+    // Re-check active sessions under lock to close the TOCTOU gap between
+    // the frontend's check_active_sessions() call and the actual restore (01-M2).
+    {
+        let db_guard = db
+            .lock()
+            .map_err(|_| AppError::LockPoisoned("DB lock poisoned".to_string()))?;
+        let sessions = db_guard.get_active_sessions_with_names()?;
+        if !sessions.is_empty() {
+            let names: Vec<String> = sessions.into_iter().map(|(_, name, _)| name).collect();
+            return Err(AppError::Backup(format!(
+                "Cannot restore while games are running: {}",
+                names.join(", ")
+            )));
+        }
+    }
+
     // 1. Create safety backup first
     let safety_path = backup_service::create_safety_backup(&app_handle, &app_data, db.inner())?;
 

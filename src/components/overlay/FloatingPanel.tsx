@@ -55,85 +55,86 @@ export function FloatingPanel({
   });
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Refs synced each render so drag/resize callbacks read latest values without dep churn
+  const posRef = useRef(pos);
+  posRef.current = pos;
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
+  const pinnedRef = useRef(pinned);
+  pinnedRef.current = pinned;
+  const otherRectsRef = useRef(otherPanelRects);
+  otherRectsRef.current = otherPanelRects;
+
   const effectiveMinWidth = minWidth ?? defaultWidth;
   const effectiveMinHeight = minHeight ?? 200;
 
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (pinned) return;
-      e.currentTarget.setPointerCapture(e.pointerId);
-      dragState.current = {
-        startX: e.clientX - pos.x,
-        startY: e.clientY - pos.y,
-        dragging: true,
-      };
-    },
-    [pinned, pos],
-  );
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (pinnedRef.current) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragState.current = {
+      startX: e.clientX - posRef.current.x,
+      startY: e.clientY - posRef.current.y,
+      dragging: true,
+    };
+  }, []);
 
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!dragState.current.dragging) return;
-      let newX = e.clientX - dragState.current.startX;
-      let newY = e.clientY - dragState.current.startY;
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragState.current.dragging) return;
+    let newX = e.clientX - dragState.current.startX;
+    let newY = e.clientY - dragState.current.startY;
 
-      // Clamp to viewport
-      newX = Math.max(0, Math.min(window.innerWidth - size.width, newX));
-      newY = Math.max(0, Math.min(window.innerHeight - PANEL_HEADER_HEIGHT, newY));
+    // Clamp to viewport
+    newX = Math.max(0, Math.min(window.innerWidth - sizeRef.current.width, newX));
+    newY = Math.max(0, Math.min(window.innerHeight - PANEL_HEADER_HEIGHT, newY));
 
-      // Collision detection
-      const panelHeight = panelRef.current?.offsetHeight ?? size.height ?? 400;
-      const resolved = resolveCollision(
-        { x: newX, y: newY, width: size.width, height: panelHeight },
-        otherPanelRects,
-      );
+    // Collision detection
+    const panelHeight = panelRef.current?.offsetHeight ?? sizeRef.current.height ?? 400;
+    const resolved = resolveCollision(
+      { x: newX, y: newY, width: sizeRef.current.width, height: panelHeight },
+      otherRectsRef.current,
+    );
 
-      setPos({ x: resolved.x, y: resolved.y });
-    },
-    [size.width, size.height, otherPanelRects],
-  );
+    setPos({ x: resolved.x, y: resolved.y });
+  }, []);
 
   const handlePointerUp = useCallback(() => {
     if (!dragState.current.dragging) return;
     dragState.current.dragging = false;
     onPositionChange({
-      ...pos,
-      width: size.width,
-      height: size.height,
-      pinned,
+      ...posRef.current,
+      width: sizeRef.current.width,
+      height: sizeRef.current.height,
+      pinned: pinnedRef.current,
       visible: true,
     });
-  }, [pos, pinned, size, onPositionChange]);
+  }, [onPositionChange]);
 
   const handlePinToggle = useCallback(() => {
-    const next = !pinned;
+    const next = !pinnedRef.current;
     setPinned(next);
     onPositionChange({
-      ...pos,
-      width: size.width,
-      height: size.height,
+      ...posRef.current,
+      width: sizeRef.current.width,
+      height: sizeRef.current.height,
       pinned: next,
       visible: true,
     });
-  }, [pinned, pos, size, onPositionChange]);
+  }, [onPositionChange]);
 
   // Resize handlers
-  const handleResizePointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (pinned) return;
-      e.stopPropagation();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      const panelHeight = panelRef.current?.offsetHeight ?? size.height ?? 400;
-      resizeState.current = {
-        startX: e.clientX,
-        startY: e.clientY,
-        startW: size.width,
-        startH: panelHeight,
-        resizing: true,
-      };
-    },
-    [pinned, size],
-  );
+  const handleResizePointerDown = useCallback((e: React.PointerEvent) => {
+    if (pinnedRef.current) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const panelHeight = panelRef.current?.offsetHeight ?? sizeRef.current.height ?? 400;
+    resizeState.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: sizeRef.current.width,
+      startH: panelHeight,
+      resizing: true,
+    };
+  }, []);
 
   const handleResizePointerMove = useCallback(
     (e: React.PointerEvent) => {
@@ -145,28 +146,28 @@ export function FloatingPanel({
 
       // Collision during resize
       const resolved = resolveResizeCollision(
-        { x: pos.x, y: pos.y, width: newW, height: newH },
-        otherPanelRects,
+        { x: posRef.current.x, y: posRef.current.y, width: newW, height: newH },
+        otherRectsRef.current,
         effectiveMinWidth,
         effectiveMinHeight,
       );
 
       setSize({ width: resolved.width, height: resolved.height });
     },
-    [pos, effectiveMinWidth, effectiveMinHeight, otherPanelRects],
+    [effectiveMinWidth, effectiveMinHeight],
   );
 
   const handleResizePointerUp = useCallback(() => {
     if (!resizeState.current.resizing) return;
     resizeState.current.resizing = false;
     onPositionChange({
-      ...pos,
-      width: size.width,
-      height: size.height,
-      pinned,
+      ...posRef.current,
+      width: sizeRef.current.width,
+      height: sizeRef.current.height,
+      pinned: pinnedRef.current,
       visible: true,
     });
-  }, [pos, pinned, size, onPositionChange]);
+  }, [onPositionChange]);
 
   return (
     <div

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { useEventListener } from "../../hooks/useEventListener";
 import {
   DndContext,
   DragOverlay,
@@ -68,6 +68,8 @@ import { logger } from "../../utils/logger";
 import "./ActivityView.css";
 
 // ── Constants ────────────────────────────────────────────────────
+
+const LAYOUT_PERSIST_DEBOUNCE_MS = 100;
 
 const DAILY_RANGE_OPTIONS = [
   { value: 7, label: "7 days" },
@@ -298,6 +300,176 @@ function computeDropSlots(
   return slots;
 }
 
+// ── Memoized Chart Card Components ───────────────────────────────
+
+interface ChartCardProps {
+  card: ActivityCardConfig;
+  data: CardData;
+  updateOptions: (id: string, options: Record<string, unknown>) => void;
+  openDrillDown: (ctx: SessionDrillDownContext) => void;
+}
+
+function DailyPlaytimeCard({ card, data, updateOptions, openDrillDown }: ChartCardProps) {
+  const range = (card.options?.range as number) ?? 30;
+  const sessions = applyCardFilters(data.recentSessions, card, data);
+  const dailyData = useMemo(
+    () => computeDailyPlaytime(sessions, range),
+    [sessions, range],
+  );
+  return (
+    <ChartCard
+      title="Daily Playtime"
+      subtitle="Your play time each day"
+      isEmpty={dailyData.every((d) => d.minutes === 0)}
+      emptyMessage="No session data available"
+      actions={
+        <>
+          <ChartFilterMenu
+            {...getFilterProps(card, data)}
+            onChange={(opts) => updateOptions(card.id, opts)}
+          />
+          <ChartToolbarSelect
+            label="Range"
+            value={range}
+            options={DAILY_RANGE_OPTIONS}
+            onChange={(v) => updateOptions(card.id, { range: Number(v) })}
+          />
+        </>
+      }
+    >
+      <DailyPlaytimeChart
+        data={dailyData}
+        onPointClick={(point) => {
+          const filtered = filterSessionsByDate(sessions, point.dateKey);
+          openDrillDown({
+            title: point.date,
+            subtitle: `${filtered.length} session${filtered.length !== 1 ? "s" : ""}`,
+            sessions: filtered,
+          });
+        }}
+      />
+    </ChartCard>
+  );
+}
+
+function MostPlayedCard({ card, data, updateOptions, openDrillDown }: ChartCardProps) {
+  const period = (card.options?.period as string) ?? "week";
+  const sessions = applyCardFilters(data.recentSessions, card, data);
+  const since = useMemo(() => {
+    const now = Math.floor(Date.now() / 1000);
+    if (period === "week") return now - 7 * 86400;
+    if (period === "month") return now - 30 * 86400;
+    return 0;
+  }, [period]);
+  const mostPlayedData = useMemo(
+    () => computeMostPlayed(sessions, data.gameNames, since, 5),
+    [sessions, data.gameNames, since],
+  );
+  return (
+    <ChartCard
+      title="Most Played"
+      subtitle="Top games by session time"
+      isEmpty={mostPlayedData.length === 0}
+      emptyMessage="No session data for this period"
+      actions={
+        <>
+          <ChartFilterMenu
+            {...getFilterProps(card, data)}
+            onChange={(opts) => updateOptions(card.id, opts)}
+          />
+          <ChartToolbarSelect
+            label="Period"
+            value={period}
+            options={MOST_PLAYED_PERIOD_OPTIONS}
+            onChange={(v) => updateOptions(card.id, { period: String(v) })}
+          />
+        </>
+      }
+    >
+      <MostPlayedChart
+        data={mostPlayedData}
+        onBarClick={(entry) => {
+          const filtered = filterSessionsByGame(sessions, entry.gameId);
+          openDrillDown({
+            title: entry.name,
+            subtitle: `${filtered.length} session${filtered.length !== 1 ? "s" : ""}`,
+            sessions: filtered,
+          });
+        }}
+      />
+    </ChartCard>
+  );
+}
+
+function SessionLengthCard({ card, data, updateOptions, openDrillDown }: ChartCardProps) {
+  const sessions = applyCardFilters(data.recentSessions, card, data);
+  const sessionLengthData = useMemo(
+    () => computeSessionLengthDistribution(sessions),
+    [sessions],
+  );
+  return (
+    <ChartCard
+      title="Session Length"
+      subtitle="How long are your gaming sessions?"
+      isEmpty={sessionLengthData.every((b) => b.count === 0)}
+      emptyMessage="No session data available"
+      actions={
+        <ChartFilterMenu
+          {...getFilterProps(card, data)}
+          onChange={(opts) => updateOptions(card.id, opts)}
+        />
+      }
+    >
+      <SessionLengthDistribution
+        data={sessionLengthData}
+        onBarClick={(bucket) => {
+          const filtered = filterSessionsByDurationRange(
+            sessions,
+            bucket.min,
+            bucket.max,
+          );
+          openDrillDown({
+            title: `Sessions: ${bucket.label}`,
+            subtitle: `${filtered.length} session${filtered.length !== 1 ? "s" : ""}`,
+            sessions: filtered,
+          });
+        }}
+      />
+    </ChartCard>
+  );
+}
+
+function PlaytimeByDayCard({ card, data, updateOptions, openDrillDown }: ChartCardProps) {
+  const sessions = applyCardFilters(data.recentSessions, card, data);
+  const dayOfWeekData = useMemo(() => computePlaytimeByDayOfWeek(sessions), [sessions]);
+  return (
+    <ChartCard
+      title="Playtime by Day"
+      subtitle="When do you play the most?"
+      isEmpty={dayOfWeekData.every((d) => d.totalHours === 0)}
+      emptyMessage="No session data available"
+      actions={
+        <ChartFilterMenu
+          {...getFilterProps(card, data)}
+          onChange={(opts) => updateOptions(card.id, opts)}
+        />
+      }
+    >
+      <PlaytimeByDayOfWeek
+        data={dayOfWeekData}
+        onBarClick={(entry) => {
+          const filtered = filterSessionsByDayOfWeek(sessions, entry.dayIndex);
+          openDrillDown({
+            title: `${entry.day} Sessions`,
+            subtitle: `${filtered.length} session${filtered.length !== 1 ? "s" : ""}`,
+            sessions: filtered,
+          });
+        }}
+      />
+    </ChartCard>
+  );
+}
+
 // ── Card Renderers ───────────────────────────────────────────────
 
 type CardRenderer = (
@@ -371,155 +543,41 @@ const CARD_REGISTRY: Record<ActivityCardType, CardRenderer> = {
     </ChartCard>
   ),
 
-  "daily-playtime": (card, data, updateOptions, openDrillDown) => {
-    const range = (card.options?.range as number) ?? 30;
-    const sessions = applyCardFilters(data.recentSessions, card, data);
-    const dailyData = computeDailyPlaytime(sessions, range);
-    return (
-      <ChartCard
-        title="Daily Playtime"
-        subtitle="Your play time each day"
-        isEmpty={dailyData.every((d) => d.minutes === 0)}
-        emptyMessage="No session data available"
-        actions={
-          <>
-            <ChartFilterMenu
-              {...getFilterProps(card, data)}
-              onChange={(opts) => updateOptions(card.id, opts)}
-            />
-            <ChartToolbarSelect
-              label="Range"
-              value={range}
-              options={DAILY_RANGE_OPTIONS}
-              onChange={(v) => updateOptions(card.id, { range: Number(v) })}
-            />
-          </>
-        }
-      >
-        <DailyPlaytimeChart
-          data={dailyData}
-          onPointClick={(point) => {
-            const filtered = filterSessionsByDate(sessions, point.dateKey);
-            openDrillDown({
-              title: point.date,
-              subtitle: `${filtered.length} session${filtered.length !== 1 ? "s" : ""}`,
-              sessions: filtered,
-            });
-          }}
-        />
-      </ChartCard>
-    );
-  },
+  "daily-playtime": (card, data, updateOptions, openDrillDown) => (
+    <DailyPlaytimeCard
+      card={card}
+      data={data}
+      updateOptions={updateOptions}
+      openDrillDown={openDrillDown}
+    />
+  ),
 
-  "most-played": (card, data, updateOptions, openDrillDown) => {
-    const period = (card.options?.period as string) ?? "week";
-    const sessions = applyCardFilters(data.recentSessions, card, data);
-    const now = Math.floor(Date.now() / 1000);
-    let since = 0;
-    if (period === "week") since = now - 7 * 86400;
-    else if (period === "month") since = now - 30 * 86400;
-    const mostPlayedData = computeMostPlayed(sessions, data.gameNames, since, 5);
-    return (
-      <ChartCard
-        title="Most Played"
-        subtitle="Top games by session time"
-        isEmpty={mostPlayedData.length === 0}
-        emptyMessage="No session data for this period"
-        actions={
-          <>
-            <ChartFilterMenu
-              {...getFilterProps(card, data)}
-              onChange={(opts) => updateOptions(card.id, opts)}
-            />
-            <ChartToolbarSelect
-              label="Period"
-              value={period}
-              options={MOST_PLAYED_PERIOD_OPTIONS}
-              onChange={(v) => updateOptions(card.id, { period: String(v) })}
-            />
-          </>
-        }
-      >
-        <MostPlayedChart
-          data={mostPlayedData}
-          onBarClick={(entry) => {
-            const filtered = filterSessionsByGame(sessions, entry.gameId);
-            openDrillDown({
-              title: entry.name,
-              subtitle: `${filtered.length} session${filtered.length !== 1 ? "s" : ""}`,
-              sessions: filtered,
-            });
-          }}
-        />
-      </ChartCard>
-    );
-  },
+  "most-played": (card, data, updateOptions, openDrillDown) => (
+    <MostPlayedCard
+      card={card}
+      data={data}
+      updateOptions={updateOptions}
+      openDrillDown={openDrillDown}
+    />
+  ),
 
-  "session-length": (card, data, updateOptions, openDrillDown) => {
-    const sessions = applyCardFilters(data.recentSessions, card, data);
-    const sessionLengthData = computeSessionLengthDistribution(sessions);
-    return (
-      <ChartCard
-        title="Session Length"
-        subtitle="How long are your gaming sessions?"
-        isEmpty={sessionLengthData.every((b) => b.count === 0)}
-        emptyMessage="No session data available"
-        actions={
-          <ChartFilterMenu
-            {...getFilterProps(card, data)}
-            onChange={(opts) => updateOptions(card.id, opts)}
-          />
-        }
-      >
-        <SessionLengthDistribution
-          data={sessionLengthData}
-          onBarClick={(bucket) => {
-            const filtered = filterSessionsByDurationRange(
-              sessions,
-              bucket.min,
-              bucket.max,
-            );
-            openDrillDown({
-              title: `Sessions: ${bucket.label}`,
-              subtitle: `${filtered.length} session${filtered.length !== 1 ? "s" : ""}`,
-              sessions: filtered,
-            });
-          }}
-        />
-      </ChartCard>
-    );
-  },
+  "session-length": (card, data, updateOptions, openDrillDown) => (
+    <SessionLengthCard
+      card={card}
+      data={data}
+      updateOptions={updateOptions}
+      openDrillDown={openDrillDown}
+    />
+  ),
 
-  "playtime-by-day": (card, data, updateOptions, openDrillDown) => {
-    const sessions = applyCardFilters(data.recentSessions, card, data);
-    const dayOfWeekData = computePlaytimeByDayOfWeek(sessions);
-    return (
-      <ChartCard
-        title="Playtime by Day"
-        subtitle="When do you play the most?"
-        isEmpty={dayOfWeekData.every((d) => d.totalHours === 0)}
-        emptyMessage="No session data available"
-        actions={
-          <ChartFilterMenu
-            {...getFilterProps(card, data)}
-            onChange={(opts) => updateOptions(card.id, opts)}
-          />
-        }
-      >
-        <PlaytimeByDayOfWeek
-          data={dayOfWeekData}
-          onBarClick={(entry) => {
-            const filtered = filterSessionsByDayOfWeek(sessions, entry.dayIndex);
-            openDrillDown({
-              title: `${entry.day} Sessions`,
-              subtitle: `${filtered.length} session${filtered.length !== 1 ? "s" : ""}`,
-              sessions: filtered,
-            });
-          }}
-        />
-      </ChartCard>
-    );
-  },
+  "playtime-by-day": (card, data, updateOptions, openDrillDown) => (
+    <PlaytimeByDayCard
+      card={card}
+      data={data}
+      updateOptions={updateOptions}
+      openDrillDown={openDrillDown}
+    />
+  ),
 
   "recent-sessions": (_card, data) => (
     <ChartCard
@@ -699,7 +757,7 @@ export function ActivityView() {
       logger.debug("ActivityView", "activity", "Layout persisted", {
         count: currentLayout.length,
       });
-    }, 100);
+    }, LAYOUT_PERSIST_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [cards, saveSettings]);
 
@@ -793,16 +851,11 @@ export function ActivityView() {
   }, [loadRecentSessions, loadActiveSessions]);
 
   // Listen for live session updates
-  useEffect(() => {
-    const promise = listen("session-update", () => {
-      logger.debug("ActivityView", "activity", "Session update received");
-      loadActiveSessions();
-      loadRecentSessions(500);
-    });
-    return () => {
-      promise.then((fn) => fn());
-    };
-  }, [loadActiveSessions, loadRecentSessions]);
+  useEventListener("session-update", () => {
+    logger.debug("ActivityView", "activity", "Session update received");
+    loadActiveSessions();
+    loadRecentSessions(500);
+  });
 
   const gameNames = useMemo(() => {
     const map = new Map<string, string>();
@@ -829,10 +882,13 @@ export function ActivityView() {
     [recentSessions],
   );
 
-  const weekTrend = formatTrend(quickStats.weeklyMinutes, quickStats.previousWeekMinutes);
-  const monthTrend = formatTrend(
-    quickStats.monthlyMinutes,
-    quickStats.previousMonthMinutes,
+  const weekTrend = useMemo(
+    () => formatTrend(quickStats.weeklyMinutes, quickStats.previousWeekMinutes),
+    [quickStats],
+  );
+  const monthTrend = useMemo(
+    () => formatTrend(quickStats.monthlyMinutes, quickStats.previousMonthMinutes),
+    [quickStats],
   );
 
   const cardData: CardData = useMemo(

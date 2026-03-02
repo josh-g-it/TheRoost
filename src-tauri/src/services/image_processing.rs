@@ -76,12 +76,31 @@ pub fn read_local_image(path: &Path) -> Result<DynamicImage, AppError> {
         .map_err(|e| AppError::Validation(format!("Invalid image file: {}", e)))
 }
 
+/// Sanitize a reqwest error for image download requests without leaking
+/// the full URL (which may contain CDN tokens or reveal internal paths).
+fn sanitize_image_download_error(err: reqwest::Error) -> AppError {
+    if err.is_timeout() {
+        AppError::StoreApi("Image download timed out".to_string())
+    } else if err.is_connect() {
+        AppError::StoreApi("Failed to connect to image server".to_string())
+    } else if let Some(status) = err.status() {
+        AppError::StoreApi(format!("Image server returned HTTP {}", status.as_u16()))
+    } else {
+        AppError::StoreApi("Image download failed".to_string())
+    }
+}
+
 /// Download an image from a URL (for SteamGridDB images).
 pub async fn download_image(url: &str) -> Result<DynamicImage, AppError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()?;
-    let bytes = client.get(url).send().await?.bytes().await?;
+    let resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(sanitize_image_download_error)?;
+    let bytes = resp.bytes().await.map_err(sanitize_image_download_error)?;
     image::load_from_memory(&bytes)
         .map_err(|e| AppError::Validation(format!("Invalid image data from URL: {}", e)))
 }

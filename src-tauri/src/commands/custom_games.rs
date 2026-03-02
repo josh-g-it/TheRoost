@@ -21,6 +21,25 @@ pub async fn add_custom_game(
             "Game name cannot be empty".to_string(),
         ));
     }
+    if name.chars().count() > 255 {
+        return Err(AppError::Validation(
+            "Game name exceeds maximum length of 255 characters".into(),
+        ));
+    }
+    if let Some(ref desc) = description {
+        if desc.chars().count() > 1000 {
+            return Err(AppError::Validation(
+                "Description exceeds maximum length of 1000 characters".into(),
+            ));
+        }
+    }
+    if let Some(ref args) = launch_args {
+        if args.chars().count() > 500 {
+            return Err(AppError::Validation(
+                "Launch arguments exceed maximum length of 500 characters".into(),
+            ));
+        }
+    }
 
     let exe = Path::new(&exe_path);
     if !exe.exists() {
@@ -132,6 +151,28 @@ pub async fn update_custom_game(
         return Err(AppError::Validation(
             "Only custom games can be edited".to_string(),
         ));
+    }
+
+    if let Some(ref n) = name {
+        if n.chars().count() > 255 {
+            return Err(AppError::Validation(
+                "Game name exceeds maximum length of 255 characters".into(),
+            ));
+        }
+    }
+    if let Some(ref desc) = description {
+        if desc.chars().count() > 1000 {
+            return Err(AppError::Validation(
+                "Description exceeds maximum length of 1000 characters".into(),
+            ));
+        }
+    }
+    if let Some(ref args) = launch_args {
+        if args.chars().count() > 500 {
+            return Err(AppError::Validation(
+                "Launch arguments exceed maximum length of 500 characters".into(),
+            ));
+        }
     }
 
     // Update name if provided
