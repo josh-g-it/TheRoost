@@ -16,8 +16,10 @@ src-tauri/target/
 # Claude Code
 .claude/
 
-# Internal dev docs
-docs/
+# Internal dev docs (except technical overviews — those are public)
+docs/*
+!docs/TECHNICAL_OVERVIEW_ENGINEER.md
+!docs/TECHNICAL_OVERVIEW_SIMPLE.md
 PLAN-*.md
 
 # Tauri auto-generated schemas (regenerated on build)
