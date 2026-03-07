@@ -239,6 +239,24 @@
   padding-top: var(--space-sm);
 }
 
+.storage-view__refreshing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--color-text-tertiary);
+  animation: storage-refresh-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes storage-refresh-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 /* ── Context Menu ────────────────────────────────────────── */
 
 .storage-view__context-menu {

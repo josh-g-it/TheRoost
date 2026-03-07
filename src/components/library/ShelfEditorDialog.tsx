@@ -432,15 +432,32 @@ export function ShelfEditorDialog({
               selectedCount={filters.filterByTagIds.length}
               defaultOpen={filters.filterByTagIds.length > 0}
             >
-              {tags.map((tag) => (
-                <button
-                  key={tag.id}
-                  className={`shelf-editor__chip ${filters.filterByTagIds.includes(tag.id) ? "shelf-editor__chip--active" : ""}`}
-                  onClick={() => handleTagToggle(tag.id)}
-                >
-                  {tag.name}
-                </button>
-              ))}
+              {tags
+                .filter((t) => filters.filterByTagIds.includes(t.id))
+                .map((tag) => (
+                  <button
+                    key={tag.id}
+                    className="shelf-editor__chip shelf-editor__chip--active"
+                    onClick={() => handleTagToggle(tag.id)}
+                  >
+                    {tag.name}
+                  </button>
+                ))}
+              {filters.filterByTagIds.length > 0 &&
+                tags.length > filters.filterByTagIds.length && (
+                  <div className="shelf-editor__selected-divider" />
+                )}
+              {tags
+                .filter((t) => !filters.filterByTagIds.includes(t.id))
+                .map((tag) => (
+                  <button
+                    key={tag.id}
+                    className="shelf-editor__chip"
+                    onClick={() => handleTagToggle(tag.id)}
+                  >
+                    {tag.name}
+                  </button>
+                ))}
             </ChipSection>
           )}
 
@@ -454,15 +471,32 @@ export function ShelfEditorDialog({
               searchValue={genreSearch}
               onSearchChange={setGenreSearch}
             >
-              {filteredGenres.map((genre) => (
-                <button
-                  key={genre.id}
-                  className={`shelf-editor__chip ${filters.filterByGenreIds.includes(genre.id) ? "shelf-editor__chip--active" : ""}`}
-                  onClick={() => handleGenreToggle(genre.id)}
-                >
-                  {genre.description}
-                </button>
-              ))}
+              {filteredGenres
+                .filter((g) => filters.filterByGenreIds.includes(g.id))
+                .map((genre) => (
+                  <button
+                    key={genre.id}
+                    className="shelf-editor__chip shelf-editor__chip--active"
+                    onClick={() => handleGenreToggle(genre.id)}
+                  >
+                    {genre.description}
+                  </button>
+                ))}
+              {filteredGenres.some((g) => filters.filterByGenreIds.includes(g.id)) &&
+                filteredGenres.some((g) => !filters.filterByGenreIds.includes(g.id)) && (
+                  <div className="shelf-editor__selected-divider" />
+                )}
+              {filteredGenres
+                .filter((g) => !filters.filterByGenreIds.includes(g.id))
+                .map((genre) => (
+                  <button
+                    key={genre.id}
+                    className="shelf-editor__chip"
+                    onClick={() => handleGenreToggle(genre.id)}
+                  >
+                    {genre.description}
+                  </button>
+                ))}
             </ChipSection>
           )}
 
@@ -476,15 +510,34 @@ export function ShelfEditorDialog({
               searchValue={tagSearch}
               onSearchChange={setTagSearch}
             >
-              {filteredSteamTags.map((tag) => (
-                <button
-                  key={tag.name}
-                  className={`shelf-editor__chip ${filters.filterBySteamTagNames.includes(tag.name) ? "shelf-editor__chip--active" : ""}`}
-                  onClick={() => handleSteamTagToggle(tag.name)}
-                >
-                  {tag.name}
-                </button>
-              ))}
+              {filteredSteamTags
+                .filter((t) => filters.filterBySteamTagNames.includes(t.name))
+                .map((tag) => (
+                  <button
+                    key={tag.name}
+                    className="shelf-editor__chip shelf-editor__chip--active"
+                    onClick={() => handleSteamTagToggle(tag.name)}
+                  >
+                    {tag.name}
+                  </button>
+                ))}
+              {filteredSteamTags.some((t) =>
+                filters.filterBySteamTagNames.includes(t.name),
+              ) &&
+                filteredSteamTags.some(
+                  (t) => !filters.filterBySteamTagNames.includes(t.name),
+                ) && <div className="shelf-editor__selected-divider" />}
+              {filteredSteamTags
+                .filter((t) => !filters.filterBySteamTagNames.includes(t.name))
+                .map((tag) => (
+                  <button
+                    key={tag.name}
+                    className="shelf-editor__chip"
+                    onClick={() => handleSteamTagToggle(tag.name)}
+                  >
+                    {tag.name}
+                  </button>
+                ))}
             </ChipSection>
           )}
 
@@ -498,15 +551,34 @@ export function ShelfEditorDialog({
               searchValue={featureSearch}
               onSearchChange={setFeatureSearch}
             >
-              {filteredCategories.map((cat) => (
-                <button
-                  key={cat.id}
-                  className={`shelf-editor__chip ${filters.filterByCategoryIds.includes(cat.id) ? "shelf-editor__chip--active" : ""}`}
-                  onClick={() => handleCategoryToggle(cat.id)}
-                >
-                  {cat.description}
-                </button>
-              ))}
+              {filteredCategories
+                .filter((c) => filters.filterByCategoryIds.includes(c.id))
+                .map((cat) => (
+                  <button
+                    key={cat.id}
+                    className="shelf-editor__chip shelf-editor__chip--active"
+                    onClick={() => handleCategoryToggle(cat.id)}
+                  >
+                    {cat.description}
+                  </button>
+                ))}
+              {filteredCategories.some((c) =>
+                filters.filterByCategoryIds.includes(c.id),
+              ) &&
+                filteredCategories.some(
+                  (c) => !filters.filterByCategoryIds.includes(c.id),
+                ) && <div className="shelf-editor__selected-divider" />}
+              {filteredCategories
+                .filter((c) => !filters.filterByCategoryIds.includes(c.id))
+                .map((cat) => (
+                  <button
+                    key={cat.id}
+                    className="shelf-editor__chip"
+                    onClick={() => handleCategoryToggle(cat.id)}
+                  >
+                    {cat.description}
+                  </button>
+                ))}
             </ChipSection>
           )}
 
@@ -517,15 +589,32 @@ export function ShelfEditorDialog({
               selectedCount={(filters.filterBySource ?? []).length}
               defaultOpen={(filters.filterBySource ?? []).length > 0}
             >
-              {allSources.map(({ source }) => (
-                <button
-                  key={source}
-                  className={`shelf-editor__chip ${(filters.filterBySource ?? []).includes(source) ? "shelf-editor__chip--active" : ""}`}
-                  onClick={() => handleSourceToggle(source)}
-                >
-                  {GAME_SOURCE_LABELS[source]}
-                </button>
-              ))}
+              {allSources
+                .filter(({ source }) => (filters.filterBySource ?? []).includes(source))
+                .map(({ source }) => (
+                  <button
+                    key={source}
+                    className="shelf-editor__chip shelf-editor__chip--active"
+                    onClick={() => handleSourceToggle(source)}
+                  >
+                    {GAME_SOURCE_LABELS[source]}
+                  </button>
+                ))}
+              {(filters.filterBySource ?? []).length > 0 &&
+                allSources.length > (filters.filterBySource ?? []).length && (
+                  <div className="shelf-editor__selected-divider" />
+                )}
+              {allSources
+                .filter(({ source }) => !(filters.filterBySource ?? []).includes(source))
+                .map(({ source }) => (
+                  <button
+                    key={source}
+                    className="shelf-editor__chip"
+                    onClick={() => handleSourceToggle(source)}
+                  >
+                    {GAME_SOURCE_LABELS[source]}
+                  </button>
+                ))}
             </ChipSection>
           )}
 

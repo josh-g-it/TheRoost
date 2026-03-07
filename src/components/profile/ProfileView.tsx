@@ -14,7 +14,7 @@ import { StatCard } from "../common/StatCard";
 import { ProfileHeader } from "./ProfileHeader";
 import { ProfileDrillDown } from "./ProfileDrillDown";
 import { ChartCard } from "./ChartCard";
-import { ChartToolbarSelect } from "./ChartToolbar";
+import { ChartToolbarSelect, ChartToolbarToggle } from "./ChartToolbar";
 import { ChartFilterMenu } from "../activity/cards/ChartFilterMenu";
 import { GenreDNARadar } from "./charts/GenreDNARadar";
 import { PlaytimeDistribution } from "./charts/PlaytimeDistribution";
@@ -59,6 +59,8 @@ const LEADERBOARD_N_OPTIONS = [5, 10, 15, 20].map((n) => ({
   label: `Top ${n}`,
 }));
 
+const SCATTER_TOP_N = 50;
+
 export function ProfileView() {
   const library = useLibraryStore((s) => s.library);
   const cache = useMetadataStore((s) => s.cache);
@@ -80,6 +82,9 @@ export function ProfileView() {
     chartOptions.playtimeBuckets,
   );
   const [leaderboardN, setLeaderboardN] = useState(chartOptions.leaderboardTopN);
+
+  // Scatter chart top-N toggle
+  const [showAllScatter, setShowAllScatter] = useState(false);
 
   // Per-chart filter state
   const [chartFilters, setChartFilters] = useState<
@@ -248,10 +253,17 @@ export function ProfileView() {
     [distributionFilteredGames, bucketPreset],
   );
 
-  const scatterData = useMemo(
+  const scatterDataAll = useMemo(
     () => computeMetacriticScatter(scatterFilteredGames, cache),
     [scatterFilteredGames, cache],
   );
+
+  const scatterData = useMemo(() => {
+    if (showAllScatter || scatterDataAll.length <= SCATTER_TOP_N) return scatterDataAll;
+    return [...scatterDataAll]
+      .sort((a, b) => b.playtimeHours - a.playtimeHours)
+      .slice(0, SCATTER_TOP_N);
+  }, [scatterDataAll, showAllScatter]);
 
   const devData = useMemo(
     () =>
@@ -452,10 +464,25 @@ export function ProfileView() {
 
         <ChartCard
           title="Metacritic vs Playtime"
-          subtitle="Review scores compared to your actual playtime"
+          subtitle={
+            !showAllScatter && scatterDataAll.length > SCATTER_TOP_N
+              ? `Top ${SCATTER_TOP_N} by playtime — ${scatterDataAll.length} games total`
+              : "Review scores compared to your actual playtime"
+          }
           isEmpty={scatterData.length === 0}
           emptyMessage="No Metacritic data available"
-          actions={<ChartFilterMenu {...filterProps("metacriticScatter")} />}
+          actions={
+            <>
+              <ChartFilterMenu {...filterProps("metacriticScatter")} />
+              {scatterDataAll.length > SCATTER_TOP_N && (
+                <ChartToolbarToggle
+                  label={showAllScatter ? `Show top ${SCATTER_TOP_N}` : "Show all games"}
+                  active={showAllScatter}
+                  onClick={() => setShowAllScatter((prev) => !prev)}
+                />
+              )}
+            </>
+          }
         >
           <MetacriticScatter data={scatterData} onDotClick={handleScatterClick} />
         </ChartCard>

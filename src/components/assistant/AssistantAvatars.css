@@ -280,6 +280,13 @@
   cursor: not-allowed;
 }
 
+.assistant-avatars__form-error {
+  font-size: 0.75rem;
+  color: var(--color-danger, #ef4444);
+  margin: 0;
+  line-height: 1.4;
+}
+
 /* ── Personality Browser ─────────────────────────────────────── */
 .personality-item {
   background: var(--color-bg-secondary);

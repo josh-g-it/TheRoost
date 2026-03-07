@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AiMessage,
+  CompactionEventPayload,
   ConversationEndedPayload,
   ResolvedAction,
   StreamChunk,
+  UserMessagePayload,
 } from "../types";
 import { assistantApi } from "../services/tauri";
 import { getErrorMessage } from "../utils/errors";
@@ -22,12 +24,15 @@ interface UseConversationOptions {
   avatarId: string;
   conversationId: string | null;
   maxOutputTokens?: number;
+  /** When false, sendMessage() is blocked and returns a system-style warning. */
+  cloudAiEnabled?: boolean;
 }
 
 export function useConversation({
   avatarId,
   conversationId,
   maxOutputTokens,
+  cloudAiEnabled = true,
 }: UseConversationOptions) {
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -41,6 +46,17 @@ export function useConversation({
   const convIdRef = useRef(conversationId);
   const isLocalEndRef = useRef(false);
   const parserStateRef = useRef<StreamParserState | null>(null);
+  const cloudAiEnabledRef = useRef(cloudAiEnabled);
+  cloudAiEnabledRef.current = cloudAiEnabled;
+
+  // Stream debounce: accumulate chunks in a ref and flush to state every 50ms (20 fps)
+  const streamBufferRef = useRef("");
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Dedup ref: stores the timestamp of the last user message sent from THIS window.
+  // When the `ai-user-message` event arrives, we compare its timestamp against this
+  // to avoid adding the same message twice (the sender already has it in local state).
+  const lastSentTimestampRef = useRef<number | null>(null);
 
   useEffect(() => {
     convIdRef.current = conversationId;
@@ -52,6 +68,13 @@ export function useConversation({
     setIsCompacting(false);
     setPendingActions([]);
     parserStateRef.current = null;
+    lastSentTimestampRef.current = null;
+    // Clear any pending debounce timer
+    if (flushTimerRef.current) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    streamBufferRef.current = "";
   }, [conversationId]);
 
   useEventListener<StreamChunk>(
@@ -61,6 +84,14 @@ export function useConversation({
       if (chunk.conversationId !== convIdRef.current) return;
 
       if (chunk.isFinal) {
+        // Flush any pending debounced text first
+        if (flushTimerRef.current) {
+          clearTimeout(flushTimerRef.current);
+          flushTimerRef.current = null;
+        }
+        const pendingBuffer = streamBufferRef.current;
+        streamBufferRef.current = "";
+
         // Initialize parser if not yet started (edge case: only final chunk)
         if (!parserStateRef.current) {
           parserStateRef.current = createParserState();
@@ -74,7 +105,7 @@ export function useConversation({
         parserStateRef.current = null;
 
         setCurrentStreamText((prev) => {
-          let finalText = prev + safeText + result.displayText;
+          let finalText = prev + pendingBuffer + safeText + result.displayText;
           // Safety-strip delimiter if parser didn't fully catch it
           const delimIdx = finalText.indexOf("---ACTIONS---");
           if (delimIdx >= 0) finalText = finalText.substring(0, delimIdx).trimEnd();
@@ -121,8 +152,84 @@ export function useConversation({
           parserStateRef.current = createParserState();
         }
         const displayText = processChunk(parserStateRef.current, chunk.text);
-        setCurrentStreamText((prev) => prev + displayText);
+        if (displayText) {
+          streamBufferRef.current += displayText;
+          // Debounce: flush accumulated text every 50ms (20 fps)
+          if (!flushTimerRef.current) {
+            flushTimerRef.current = setTimeout(() => {
+              const buffered = streamBufferRef.current;
+              streamBufferRef.current = "";
+              flushTimerRef.current = null;
+              if (buffered) {
+                setCurrentStreamText((prev) => prev + buffered);
+              }
+            }, 50);
+          }
+        }
       }
+    },
+    [conversationId],
+    { enabled: !!conversationId },
+  );
+
+  // Listen for cross-window user message sync (KI #9).
+  // When the OTHER window sends a user message, the Rust backend emits
+  // `ai-user-message` to all windows. The sender deduplicates by comparing
+  // the event timestamp against lastSentTimestampRef.
+  useEventListener<UserMessagePayload>(
+    "ai-user-message",
+    (event) => {
+      const { conversationId: msgConvId, content, timestamp } = event.payload;
+      if (msgConvId !== convIdRef.current) return;
+
+      // Dedup: skip if this message originated from this window.
+      // We match on timestamp (seconds precision) set just before the IPC call.
+      if (
+        lastSentTimestampRef.current !== null &&
+        Math.abs(timestamp - lastSentTimestampRef.current) <= 2
+      ) {
+        // Clear the ref so the next event is not falsely deduped
+        lastSentTimestampRef.current = null;
+        return;
+      }
+
+      // Add the user message from the other window to local state
+      const userMessage: AiMessage = {
+        id: crypto.randomUUID(),
+        conversationId: msgConvId,
+        role: "user",
+        content,
+        createdAt: new Date(timestamp * 1000).toISOString(),
+        tokenEstimate: Math.ceil(content.length / 4),
+      };
+      setMessages((prev) => [...prev, userMessage]);
+    },
+    [conversationId],
+    { enabled: !!conversationId },
+  );
+
+  // Listen for cross-window compaction started event (KI #9).
+  // When any window starts ending a conversation, the Rust backend emits
+  // `ai-compaction-started`. The window that initiated the end already
+  // has isCompacting=true, but this covers the OTHER window.
+  useEventListener<CompactionEventPayload>(
+    "ai-compaction-started",
+    (event) => {
+      if (event.payload.conversationId !== convIdRef.current) return;
+      setIsCompacting(true);
+    },
+    [conversationId],
+    { enabled: !!conversationId },
+  );
+
+  // Listen for cross-window compaction complete event (KI #9).
+  // When compaction finishes, clear the splash on the OTHER window and
+  // reload conversation history to pick up any compacted state.
+  useEventListener<CompactionEventPayload>(
+    "ai-compaction-complete",
+    (event) => {
+      if (event.payload.conversationId !== convIdRef.current) return;
+      setIsCompacting(false);
     },
     [conversationId],
     { enabled: !!conversationId },
@@ -214,11 +321,43 @@ export function useConversation({
     async (text: string, options?: { hidden?: boolean; actionFeedback?: string }) => {
       if (!conversationId) return;
       if (isStreamingRef.current) return;
+
+      // Block all messages when Cloud AI is disabled
+      if (!cloudAiEnabledRef.current) {
+        if (!options?.hidden) {
+          // Show the user's message in the chat
+          const userMessage: AiMessage = {
+            id: crypto.randomUUID(),
+            conversationId,
+            role: "user",
+            content: text,
+            createdAt: new Date().toISOString(),
+            tokenEstimate: Math.ceil(text.length / 4),
+          };
+          setMessages((prev) => [...prev, userMessage]);
+          // Add a system-style response explaining why it's blocked
+          const systemMessage: AiMessage = {
+            id: crypto.randomUUID(),
+            conversationId,
+            role: "assistant",
+            content:
+              "Cloud AI is currently disabled. You can enable it in Settings \u2192 Assistant to start chatting.",
+            createdAt: new Date().toISOString(),
+            tokenEstimate: 20,
+          };
+          setMessages((prev) => [...prev, systemMessage]);
+        }
+        return;
+      }
+
       setError(null);
       // Only track non-hidden messages for retry
       if (!options?.hidden) lastUserMessageRef.current = text;
 
       if (!options?.hidden) {
+        // Record timestamp for cross-window dedup BEFORE adding to local state
+        lastSentTimestampRef.current = Math.floor(Date.now() / 1000);
+
         const userMessage: AiMessage = {
           id: crypto.randomUUID(),
           conversationId,
@@ -272,11 +411,16 @@ export function useConversation({
     if (!conversationId) return;
     if (isCompacting) return;
     isLocalEndRef.current = true;
+    // Note: isCompacting is now set by the `ai-compaction-started` event (broadcast
+    // from Rust), which fires before the actual compaction begins. This ensures both
+    // windows show the journaling splash simultaneously. We still set it here as a
+    // fast local fallback in case the event arrives slightly after the IPC call.
     setIsCompacting(true);
     try {
       await assistantApi.endConversation(conversationId, avatarId);
       logger.info("useConversation", "api", "Conversation ended", { conversationId });
-      // Compaction is done — clear state immediately
+      // Compaction is done — the `ai-compaction-complete` event will clear isCompacting
+      // on both windows. For the local window, also clear immediately for snappy UX.
       isLocalEndRef.current = false;
       setIsCompacting(false);
       setIsEnded(true);

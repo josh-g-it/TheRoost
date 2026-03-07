@@ -115,6 +115,65 @@ describe("AssistantAvatars", () => {
     });
   });
 
+  it("shows error message when avatar creation fails with duplicate name", async () => {
+    const user = userEvent.setup();
+    mockCreateAvatar.mockRejectedValue({
+      code: "VALIDATION_ERROR",
+      message: "An avatar with that name already exists. Please choose a different name.",
+    });
+
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("Avatar name")).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByPlaceholderText("Avatar name"), "Buddy");
+    await user.click(screen.getByRole("button", { name: /Create Avatar/ }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "An avatar with that name already exists. Please choose a different name.",
+        ),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("clears avatar creation error when user types in name field", async () => {
+    const user = userEvent.setup();
+    mockCreateAvatar.mockRejectedValue({
+      code: "VALIDATION_ERROR",
+      message: "An avatar with that name already exists. Please choose a different name.",
+    });
+
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("Avatar name")).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByPlaceholderText("Avatar name"), "Buddy");
+    await user.click(screen.getByRole("button", { name: /Create Avatar/ }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "An avatar with that name already exists. Please choose a different name.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    // Typing in the name field should clear the error
+    await user.type(screen.getByPlaceholderText("Avatar name"), "X");
+
+    expect(
+      screen.queryByText(
+        "An avatar with that name already exists. Please choose a different name.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
   it("personality list renders built-in and custom personalities", async () => {
     const onSwitch = vi.fn();
     render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={onSwitch} />);

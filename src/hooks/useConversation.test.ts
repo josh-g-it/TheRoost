@@ -249,6 +249,7 @@ describe("useConversation", () => {
   });
 
   it("accumulates streaming text from non-final chunks", async () => {
+    vi.useFakeTimers();
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
@@ -274,6 +275,11 @@ describe("useConversation", () => {
       });
     });
 
+    // Flush the 50ms debounce timer so buffered text is flushed to state
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+
     // Parser buffers last 15 chars, emits the rest
     expect(result.current.currentStreamText.length).toBeGreaterThan(0);
     expect(result.current.currentStreamText).toContain("Hello world");
@@ -288,10 +294,17 @@ describe("useConversation", () => {
       });
     });
 
+    // Flush debounce timer again
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+
     // More text accumulated
     expect(result.current.currentStreamText.length).toBeGreaterThan(
       "Hello world, this is a streaming response. ".length - 15,
     );
+
+    vi.useRealTimers();
   });
 
   it("adds assistant message on final chunk and resets streaming", async () => {
@@ -881,6 +894,7 @@ describe("useConversation", () => {
   });
 
   it("initializes parser state on stream start", async () => {
+    vi.useFakeTimers();
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
@@ -900,6 +914,11 @@ describe("useConversation", () => {
       });
     });
 
+    // Flush the 50ms debounce timer so buffered text is flushed to state
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+
     // Parser buffers last 15 chars, rest is displayed
     expect(result.current.currentStreamText.length).toBeGreaterThan(0);
 
@@ -914,6 +933,8 @@ describe("useConversation", () => {
     expect(result.current.messages[1].content).toContain(
       "This is a longer response that should partially display during streaming.",
     );
+
+    vi.useRealTimers();
   });
 
   // ── History load: action re-parsing ─────────────────────────────

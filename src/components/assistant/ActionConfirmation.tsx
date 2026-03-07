@@ -1,3 +1,4 @@
+import { memo } from "react";
 import "./ActionConfirmation.css";
 
 interface ActionConfirmationProps {
@@ -7,7 +8,7 @@ interface ActionConfirmationProps {
   onDeny: (actionId: string) => void;
 }
 
-export function ActionConfirmation({
+export const ActionConfirmation = memo(function ActionConfirmation({
   actionId,
   description,
   onConfirm,
@@ -32,4 +33,4 @@ export function ActionConfirmation({
       </div>
     </div>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -17,7 +17,7 @@ import { logger } from "../../utils/logger";
 import { AssistantChat } from "../assistant/AssistantChat";
 import "./OverlayAssistant.css";
 
-export function OverlayAssistant() {
+export const OverlayAssistant = memo(function OverlayAssistant() {
   const [activeAvatar, setActiveAvatar] = useState<AiAvatar | null>(null);
   const [personalities, setPersonalities] = useState<AiPersonality[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -373,4 +373,4 @@ export function OverlayAssistant() {
       </div>
     </div>
   );
-}
+});

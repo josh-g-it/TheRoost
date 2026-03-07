@@ -375,6 +375,9 @@ CRITICAL RULES:
 5. Order actions by dependency: if you favorite a game then filter to favorites, the favorite
    action must come first in the array.
 6. Use EXACT game names as they appear in the library context. Do not abbreviate or guess.
+   When multiple games share a common name (e.g., Skyrim, Skyrim Special Edition, Skyrim VR),
+   include enough of the title to identify the specific game. If the user doesn't specify
+   which version, ask them rather than guessing.
 7. Only use action IDs from the list below. Unknown actions are silently rejected.
 8. NON-NEGOTIABLE: ONLY include actions when the user explicitly asks you to DO something
    (navigate, sort, filter, favorite, review, etc.). Never generate actions unprompted or because

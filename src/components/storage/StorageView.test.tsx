@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { StorageView } from "./StorageView";
+import { StorageView, __resetStorageCache } from "./StorageView";
 import type { StorageScanResult } from "../../types/storage";
 
 // Mock Tauri event API
@@ -88,6 +88,7 @@ const SAMPLE_RESULT: StorageScanResult = {
 describe("StorageView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    __resetStorageCache();
   });
 
   it("shows loading state initially", () => {
@@ -217,5 +218,101 @@ describe("StorageView", () => {
     // Click again to deactivate
     await user.click(dDriveBar);
     expect(screen.queryByText("Drive: D:")).not.toBeInTheDocument();
+  });
+
+  // ── Caching tests ──────────────────────────────────────
+
+  it("displays cached data immediately on revisit without loading spinner", async () => {
+    // First visit: populate the cache
+    mockScanStorage.mockResolvedValue(SAMPLE_RESULT);
+    const { unmount } = render(<StorageView />);
+
+    await waitFor(() => {
+      expect(screen.getByText("3")).toBeInTheDocument();
+    });
+    unmount();
+
+    // Second visit: should show cached data immediately (no loading spinner)
+    const scanPromise = new Promise<StorageScanResult>((resolve) => {
+      // Scan will hang — but cached data should already be visible
+      setTimeout(() => resolve(SAMPLE_RESULT), 10_000);
+    });
+    mockScanStorage.mockReturnValue(scanPromise);
+
+    render(<StorageView />);
+
+    // Cached data visible immediately — no "Preparing scan..." spinner
+    expect(screen.queryByText("Preparing scan...")).not.toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("Games on Disk")).toBeInTheDocument();
+    expect(screen.getByText("ARK: Survival Evolved")).toBeInTheDocument();
+  });
+
+  it("shows background refresh indicator when updating cached data", async () => {
+    // First visit: populate the cache
+    mockScanStorage.mockResolvedValue(SAMPLE_RESULT);
+    const { unmount } = render(<StorageView />);
+
+    await waitFor(() => {
+      expect(screen.getByText("3")).toBeInTheDocument();
+    });
+    unmount();
+
+    // Second visit: scan takes time
+    let resolveScan!: (value: StorageScanResult) => void;
+    mockScanStorage.mockReturnValue(
+      new Promise<StorageScanResult>((r) => {
+        resolveScan = r;
+      }),
+    );
+
+    render(<StorageView />);
+
+    // Cached data is visible and shows "Updating..." indicator
+    expect(screen.getByText("3")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Updating...")).toBeInTheDocument();
+    });
+
+    // Resolve the scan with updated data
+    const updatedResult = { ...SAMPLE_RESULT, scannedCount: 5 };
+    resolveScan(updatedResult);
+
+    // Data updates in place
+    await waitFor(() => {
+      expect(screen.getByText("5")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Updating...")).not.toBeInTheDocument();
+  });
+
+  it("updates cached data when background rescan completes", async () => {
+    // First visit
+    mockScanStorage.mockResolvedValue(SAMPLE_RESULT);
+    const { unmount: unmount1 } = render(<StorageView />);
+    await waitFor(() => {
+      expect(screen.getByText("3")).toBeInTheDocument();
+    });
+    unmount1();
+
+    // Second visit — rescan returns updated data
+    const updatedResult: StorageScanResult = {
+      ...SAMPLE_RESULT,
+      scannedCount: 7,
+      totalGameBytes: 500_000_000_000,
+    };
+    mockScanStorage.mockResolvedValue(updatedResult);
+    const { unmount: unmount2 } = render(<StorageView />);
+
+    // Initially shows cached value (3), then updates to 7
+    expect(screen.getByText("3")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("7")).toBeInTheDocument();
+    });
+    unmount2();
+
+    // Third visit — should show the updated cached value (7) immediately
+    mockScanStorage.mockReturnValue(new Promise(() => {})); // never resolves
+    render(<StorageView />);
+    expect(screen.getByText("7")).toBeInTheDocument();
   });
 });

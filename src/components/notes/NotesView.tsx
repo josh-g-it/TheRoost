@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { Header } from "../layout/Header";
 import { useNotesStore } from "../../store/notesSlice";
 import { useLibraryStore } from "../../store/librarySlice";
 import { GENERAL_NOTES_ID } from "../../types/note";
-import type { GameNoteWithName } from "../../types";
+import type { GameNote, GameNoteWithName } from "../../types";
 import { AppIcon } from "../common/AppIcon";
 import "./NotesView.css";
 
@@ -258,6 +259,37 @@ export function NotesView() {
 
   useEffect(() => {
     loadNotes();
+  }, [loadNotes]);
+
+  // Listen for cross-window note changes (KI #16).
+  // When the overlay (or another window) saves a note, Rust emits `note-changed`.
+  // Reload the full notes list to pick up the change.
+  useEffect(() => {
+    let isMounted = true;
+    let unlistenChanged: (() => void) | null = null;
+    let unlistenDeleted: (() => void) | null = null;
+
+    listen<GameNote>("note-changed", () => {
+      if (!isMounted) return;
+      loadNotes();
+    }).then((fn) => {
+      if (isMounted) unlistenChanged = fn;
+      else fn();
+    });
+
+    listen<string>("note-deleted", () => {
+      if (!isMounted) return;
+      loadNotes();
+    }).then((fn) => {
+      if (isMounted) unlistenDeleted = fn;
+      else fn();
+    });
+
+    return () => {
+      isMounted = false;
+      unlistenChanged?.();
+      unlistenDeleted?.();
+    };
   }, [loadNotes]);
 
   // Consume scrollTarget from command palette "Open Game Notes" action

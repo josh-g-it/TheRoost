@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
 import { favoritesApi } from "../services/tauri";
 import { getErrorMessage } from "../utils/errors";
@@ -71,3 +72,8 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
 
   isFavorite: (gameId) => get().favorites.has(gameId),
 }));
+
+// Cross-window sync: reload favorites when another window toggles via direct API.
+listen("favorite-changed", () => {
+  useFavoritesStore.getState().loadFavorites();
+});

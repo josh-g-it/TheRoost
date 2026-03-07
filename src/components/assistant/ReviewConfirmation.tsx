@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { StarRating } from "../common/StarRating";
 import "./ReviewConfirmation.css";
 
@@ -11,7 +11,7 @@ interface ReviewConfirmationProps {
   onSkip: () => void;
 }
 
-export function ReviewConfirmation({
+export const ReviewConfirmation = memo(function ReviewConfirmation({
   gameId,
   gameName,
   stars,
@@ -63,4 +63,4 @@ export function ReviewConfirmation({
       </div>
     </div>
   );
-}
+});

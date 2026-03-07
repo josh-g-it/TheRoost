@@ -3,11 +3,13 @@ import { invoke } from "@tauri-apps/api/core";
 import type { SystemMetricsSnapshot } from "../../types";
 import { SELF_PROCESS_ID } from "../../types";
 import { formatBytes } from "../../utils/formatters";
+import { useOverlayVisible } from "./overlayVisibility";
 import { AppIcon } from "../common/AppIcon";
 import { Sparkline } from "./Sparkline";
 import "./OverlaySystemMonitor.css";
 
 const SYSTEM_METRICS_POLL_MS = 1000;
+const SYSTEM_METRICS_BACKGROUND_POLL_MS = 10_000;
 
 function formatCpu(value: number): string {
   return value < 10 ? `${value.toFixed(1)}%` : `${Math.round(value)}%`;
@@ -27,6 +29,7 @@ export function OverlaySystemMonitor(_props: OverlaySystemMonitorProps) {
   const [snapshot, setSnapshot] = useState<SystemMetricsSnapshot | null>(null);
   const [confirmKillPid, setConfirmKillPid] = useState<number | null>(null);
   const mountedRef = useRef(true);
+  const isOverlayVisible = useOverlayVisible();
 
   const fetchMetrics = useCallback(() => {
     invoke<SystemMetricsSnapshot>("get_system_metrics")
@@ -38,15 +41,19 @@ export function OverlaySystemMonitor(_props: OverlaySystemMonitorProps) {
       .catch(() => {});
   }, []);
 
+  // Poll at 1s when overlay is visible, 10s when hidden (keeps sparkline data flowing)
+  const pollMs = isOverlayVisible
+    ? SYSTEM_METRICS_POLL_MS
+    : SYSTEM_METRICS_BACKGROUND_POLL_MS;
   useEffect(() => {
     mountedRef.current = true;
     fetchMetrics();
-    const interval = setInterval(fetchMetrics, SYSTEM_METRICS_POLL_MS);
+    const interval = setInterval(fetchMetrics, pollMs);
     return () => {
       mountedRef.current = false;
       clearInterval(interval);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- fetchMetrics is stable (empty deps)
+  }, [pollMs]); // eslint-disable-line react-hooks/exhaustive-deps -- fetchMetrics is stable (empty deps)
 
   const handleKill = useCallback(
     (pid: number) => {

@@ -20,7 +20,7 @@ pub fn get_steam_install_path() -> Result<String, AppError> {
         if let Ok(key) = hklm.open_subkey(reg_path) {
             if let Ok(path) = key.get_value::<String, _>("InstallPath") {
                 if !path.is_empty() && std::path::Path::new(&path).exists() {
-                    tracing::info!(path = %path, source = "HKLM registry", "Steam installation found");
+                    tracing::debug!(path = %path, source = "HKLM registry", "Steam installation found");
                     return Ok(path);
                 }
             }
@@ -35,7 +35,7 @@ pub fn get_steam_install_path() -> Result<String, AppError> {
                 // SteamPath uses forward slashes, normalize it
                 let normalized = path.replace('/', "\\");
                 if std::path::Path::new(&normalized).exists() {
-                    tracing::info!(path = %normalized, source = "HKCU registry", "Steam installation found");
+                    tracing::debug!(path = %normalized, source = "HKCU registry", "Steam installation found");
                     return Ok(normalized);
                 }
             }

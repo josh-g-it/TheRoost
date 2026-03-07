@@ -60,10 +60,11 @@ pub fn create_overlay(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>>
     }
 
     // Cover the full primary monitor for the overlay backdrop
-    let (width, height, x, y) = if let Some(monitor) = app.primary_monitor()? {
-        let size = monitor.size();
-        let scale = monitor.scale_factor();
-        let pos = monitor.position();
+    let monitor = app.primary_monitor()?;
+    let (width, height, x, y) = if let Some(ref m) = monitor {
+        let size = m.size();
+        let scale = m.scale_factor();
+        let pos = m.position();
         (
             size.width as f64 / scale,
             size.height as f64 / scale,
@@ -74,7 +75,7 @@ pub fn create_overlay(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>>
         (1920.0, 1080.0, 0.0, 0.0)
     };
 
-    tauri::WebviewWindowBuilder::new(
+    let win = tauri::WebviewWindowBuilder::new(
         app,
         OVERLAY_LABEL,
         tauri::WebviewUrl::App("overlay.html".into()),
@@ -90,6 +91,21 @@ pub fn create_overlay(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>>
     .visible(false)
     .focused(true)
     .build()?;
+
+    // Force exact physical size/position after creation. On Windows 11,
+    // borderless windows can have invisible DWM frame margins that shrink
+    // the client area by ~7px. Setting physical size post-creation ensures
+    // the content area covers the entire monitor.
+    if let Some(m) = monitor {
+        let size = m.size();
+        let pos = m.position();
+        let _ = win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
+            size.width, size.height,
+        )));
+        let _ = win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
+            pos.x, pos.y,
+        )));
+    }
 
     tracing::info!(
         width = width,

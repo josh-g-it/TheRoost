@@ -121,6 +121,8 @@ export type {
   AiDailyLog,
   StreamChunk,
   ConversationEndedPayload,
+  UserMessagePayload,
+  CompactionEventPayload,
   ActionSuggestion,
   ReviewConfirmationData,
   ResolvedAction,

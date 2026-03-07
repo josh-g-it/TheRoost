@@ -230,6 +230,13 @@
   color: var(--color-text-inverse);
 }
 
+.library-controls__genre-divider {
+  width: 100%;
+  height: 1px;
+  background: var(--color-border-subtle);
+  flex-shrink: 0;
+}
+
 /* Saved filters dropdown */
 .library-controls__saved-filters {
   position: relative;

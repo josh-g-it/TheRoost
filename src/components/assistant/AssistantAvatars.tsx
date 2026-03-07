@@ -28,12 +28,14 @@ export function AssistantAvatars({
   const [newAvatarName, setNewAvatarName] = useState("");
   const [newAvatarPersonalityId, setNewAvatarPersonalityId] = useState("");
   const [isCreatingAvatar, setIsCreatingAvatar] = useState(false);
+  const [createAvatarError, setCreateAvatarError] = useState("");
 
   // Create personality form
   const [showCreatePersonality, setShowCreatePersonality] = useState(false);
   const [newPersonalityName, setNewPersonalityName] = useState("");
   const [newPersonalityPrompt, setNewPersonalityPrompt] = useState("");
   const [isCreatingPersonality, setIsCreatingPersonality] = useState(false);
+  const [createPersonalityError, setCreatePersonalityError] = useState("");
 
   // Delete / wipe state
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -69,6 +71,7 @@ export function AssistantAvatars({
   const handleCreateAvatar = useCallback(async () => {
     if (!newAvatarName.trim() || !newAvatarPersonalityId) return;
     setIsCreatingAvatar(true);
+    setCreateAvatarError("");
     try {
       const avatar = await assistantApi.createAvatar(
         newAvatarName.trim(),
@@ -78,8 +81,10 @@ export function AssistantAvatars({
       setNewAvatarName("");
       logger.info("AssistantAvatars", "api", "Avatar created", { avatarId: avatar.id });
     } catch (err) {
+      const msg = getErrorMessage(err);
+      setCreateAvatarError(msg);
       logger.error("AssistantAvatars", "api", "Failed to create avatar", {
-        error: getErrorMessage(err),
+        error: msg,
       });
     } finally {
       setIsCreatingAvatar(false);
@@ -144,6 +149,7 @@ export function AssistantAvatars({
   const handleCreatePersonality = useCallback(async () => {
     if (!newPersonalityName.trim() || !newPersonalityPrompt.trim()) return;
     setIsCreatingPersonality(true);
+    setCreatePersonalityError("");
     try {
       const personality = await assistantApi.createPersonality(
         newPersonalityName.trim(),
@@ -157,8 +163,10 @@ export function AssistantAvatars({
         personalityId: personality.id,
       });
     } catch (err) {
+      const msg = getErrorMessage(err);
+      setCreatePersonalityError(msg);
       logger.error("AssistantAvatars", "api", "Failed to create personality", {
-        error: getErrorMessage(err),
+        error: msg,
       });
     } finally {
       setIsCreatingPersonality(false);
@@ -303,7 +311,10 @@ export function AssistantAvatars({
               type="text"
               placeholder="Avatar name"
               value={newAvatarName}
-              onChange={(e) => setNewAvatarName(e.target.value)}
+              onChange={(e) => {
+                setNewAvatarName(e.target.value);
+                if (createAvatarError) setCreateAvatarError("");
+              }}
             />
             <label className="assistant-avatars__form-label">Personality</label>
             <select
@@ -327,6 +338,9 @@ export function AssistantAvatars({
             >
               <AppIcon name="plus" size={14} /> Create Avatar
             </button>
+            {createAvatarError && (
+              <p className="assistant-avatars__form-error">{createAvatarError}</p>
+            )}
           </div>
         </div>
 
@@ -362,7 +376,10 @@ export function AssistantAvatars({
                 type="text"
                 placeholder="My Custom Personality"
                 value={newPersonalityName}
-                onChange={(e) => setNewPersonalityName(e.target.value)}
+                onChange={(e) => {
+                  setNewPersonalityName(e.target.value);
+                  if (createPersonalityError) setCreatePersonalityError("");
+                }}
               />
               <label className="assistant-avatars__form-label">System Prompt</label>
               <textarea
@@ -393,11 +410,15 @@ export function AssistantAvatars({
                     setShowCreatePersonality(false);
                     setNewPersonalityName("");
                     setNewPersonalityPrompt("");
+                    setCreatePersonalityError("");
                   }}
                 >
                   Cancel
                 </button>
               </div>
+              {createPersonalityError && (
+                <p className="assistant-avatars__form-error">{createPersonalityError}</p>
+              )}
             </div>
           )}
         </div>

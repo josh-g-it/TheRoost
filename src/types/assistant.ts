@@ -69,6 +69,19 @@ export interface ConversationEndedPayload {
   reason: "manual" | "timer";
 }
 
+/** Payload for `ai-user-message` cross-window sync event. */
+export interface UserMessagePayload {
+  conversationId: string;
+  content: string;
+  /** Unix timestamp (seconds) — used to deduplicate messages from the local window. */
+  timestamp: number;
+}
+
+/** Payload for `ai-compaction-started` and `ai-compaction-complete` events. */
+export interface CompactionEventPayload {
+  conversationId: string;
+}
+
 export interface ActionSuggestion {
   actionId: string;
   description: string;

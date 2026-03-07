@@ -103,3 +103,10 @@
   color: var(--color-text-tertiary);
   flex-shrink: 0;
 }
+
+.source-filter__selected-divider {
+  height: 1px;
+  background: var(--color-border-subtle);
+  margin: var(--space-xs) 0;
+  flex-shrink: 0;
+}

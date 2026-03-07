@@ -50,6 +50,13 @@
   white-space: nowrap;
 }
 
+.tag-filter-popover__selected-divider {
+  height: 1px;
+  background: var(--color-border-subtle);
+  margin: var(--space-xs) 0;
+  flex-shrink: 0;
+}
+
 .tag-filter-popover__apply {
   width: 100%;
   margin-top: var(--space-sm);

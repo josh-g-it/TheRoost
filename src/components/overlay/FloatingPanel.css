@@ -81,6 +81,8 @@
 .floating-panel__content {
   overflow-y: auto;
   flex: 1;
+  /* Isolate layout/paint so internal changes don't reflow siblings */
+  contain: layout style paint;
 }
 
 /* ── Resize Handle ────────────────────────────────────────────── */

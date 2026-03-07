@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEventListener } from "./hooks/useEventListener";
@@ -25,6 +25,7 @@ import type { MediaControlsMode } from "./types";
 import { FloatingPanel } from "./components/overlay/FloatingPanel";
 import { OverlayBackdrop } from "./components/overlay/OverlayBackdrop";
 import { OverlayWindowManager } from "./components/overlay/OverlayWindowManager";
+import { OverlayVisibilityContext } from "./components/overlay/overlayVisibility";
 
 const SAVE_DEBOUNCE_MS = 300;
 
@@ -40,6 +41,8 @@ export function OverlayApp() {
     Partial<Record<OverlayPanelId, OverlayPanelPosition>>
   >({});
   const [resetKeys, setResetKeys] = useState<Record<string, number>>({});
+
+  const [isOverlayVisible, setIsOverlayVisible] = useState(true);
 
   // Track intentional hide so we don't re-grab focus when we dismiss on purpose
   const hidingRef = useRef(false);
@@ -137,6 +140,7 @@ export function OverlayApp() {
         if (!isMounted) return;
         if (focused) {
           hidingRef.current = false;
+          setIsOverlayVisible(true);
           // loadData has its own debounce guard — safe to call on focus
           loadData();
         } else if (!hidingRef.current) {
@@ -161,13 +165,16 @@ export function OverlayApp() {
     };
   }, [loadData]);
 
-  // Re-fetch when a game session starts or stops (process monitor broadcasts this)
+  // Re-fetch active sessions when a game session starts or stops (every ~5s during gaming).
+  // Only fetches sessions — settings, library, and metadata don't change on session ticks.
   useEventListener(
     "session-update",
     () => {
-      loadData();
+      invoke<GameSession[]>("get_active_sessions")
+        .then((sessions) => setActiveSessions(sessions ?? []))
+        .catch(() => {});
     },
-    [loadData],
+    [],
   );
 
   // Apply theme + sync to Zustand so AppIcon reads the correct icon set
@@ -202,62 +209,74 @@ export function OverlayApp() {
   });
 
   // ── Panel orchestration ────────────────────────────────────────
+  // Refs synced each render so panel callbacks have stable identity (no dep on state)
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const panelPositionsRef = useRef(panelPositions);
+  panelPositionsRef.current = panelPositions;
 
   const handlePanelPositionChange = useCallback(
     (panelId: OverlayPanelId, pos: OverlayPanelPosition) => {
-      const next = { ...panelPositions, [panelId]: pos };
-      setPanelPositions(next);
-      if (settings) {
-        const updated = { ...settings, overlayPanelPositions: next };
-        setSettings(updated);
-        debouncedSave(updated);
-      }
+      setPanelPositions((prev) => {
+        const next = { ...prev, [panelId]: pos };
+        const s = settingsRef.current;
+        if (s) {
+          const updated = { ...s, overlayPanelPositions: next };
+          setSettings(updated);
+          debouncedSave(updated);
+        }
+        return next;
+      });
     },
-    [panelPositions, settings, debouncedSave],
+    [debouncedSave],
   );
 
   const handleTogglePanel = useCallback(
     (id: OverlayPanelId) => {
-      const current = panelPositions[id];
+      const current = panelPositionsRef.current[id];
       const isVisible = current?.visible ?? true;
       const pos: OverlayPanelPosition = current
         ? { ...current, visible: !isVisible }
         : { ...getPanelDefault(id), visible: true };
       handlePanelPositionChange(id, pos);
     },
-    [panelPositions, handlePanelPositionChange],
+    [handlePanelPositionChange],
   );
 
   const handleHidePanel = useCallback(
     (id: OverlayPanelId) => {
-      const current = panelPositions[id];
+      const current = panelPositionsRef.current[id];
       if (current) {
         handlePanelPositionChange(id, { ...current, visible: false });
       } else {
         handlePanelPositionChange(id, { ...getPanelDefault(id), visible: false });
       }
     },
-    [panelPositions, handlePanelPositionChange],
+    [handlePanelPositionChange],
   );
 
   const handleResetPanel = useCallback(
     (id: OverlayPanelId) => {
-      const next = { ...panelPositions };
-      delete next[id];
-      setPanelPositions(next);
+      setPanelPositions((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        const s = settingsRef.current;
+        if (s) {
+          const updated = { ...s, overlayPanelPositions: next };
+          setSettings(updated);
+          debouncedSave(updated);
+        }
+        return next;
+      });
       // Bump reset key to force FloatingPanel remount at default position
       setResetKeys((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
-      if (settings) {
-        const updated = { ...settings, overlayPanelPositions: next };
-        setSettings(updated);
-        debouncedSave(updated);
-      }
     },
-    [panelPositions, settings, debouncedSave],
+    [debouncedSave],
   );
 
   const hideOverlay = useCallback(() => {
     hidingRef.current = true;
+    setIsOverlayVisible(false);
     getCurrentWindow().hide();
   }, []);
 
@@ -333,15 +352,37 @@ export function OverlayApp() {
 
   const handleMediaControlsModeChange = useCallback(
     (mode: MediaControlsMode) => {
-      if (!settings) return;
-      const updated = { ...settings, mediaControlsMode: mode };
+      const s = settingsRef.current;
+      if (!s) return;
+      const updated = { ...s, mediaControlsMode: mode };
       setSettings(updated);
       debouncedSave(updated);
       // Also sync to main window
       invoke("notify_settings_changed").catch(() => {});
     },
-    [settings, debouncedSave],
+    [debouncedSave],
   );
+
+  // Stable per-panel position change callbacks — avoid inline arrows that create
+  // new function references on every render (which would force FloatingPanel re-renders).
+  const panelCallbacks = useMemo(() => {
+    const ids = OVERLAY_PANELS.map((p) => p.id);
+    const result: Record<
+      string,
+      {
+        onPositionChange: (pos: OverlayPanelPosition) => void;
+        onClose: () => void;
+      }
+    > = {};
+    for (const id of ids) {
+      result[id] = {
+        onPositionChange: (pos: OverlayPanelPosition) =>
+          handlePanelPositionChange(id, pos),
+        onClose: () => handleHidePanel(id),
+      };
+    }
+    return result;
+  }, [handlePanelPositionChange, handleHidePanel]);
 
   if (!settings) return null;
 
@@ -352,7 +393,7 @@ export function OverlayApp() {
   const ccPosition = ccSaved ? { x: ccSaved.x, y: ccSaved.y } : ccDef.defaultPosition();
 
   return (
-    <>
+    <OverlayVisibilityContext.Provider value={isOverlayVisible}>
       <OverlayBackdrop onClick={hideOverlay} />
       <OverlayWindowManager
         panelStates={panelStates}
@@ -369,7 +410,7 @@ export function OverlayApp() {
           title="Command Center"
           defaultPosition={ccPosition}
           pinned={ccSaved?.pinned}
-          onPositionChange={(pos) => handlePanelPositionChange("command-center", pos)}
+          onPositionChange={panelCallbacks["command-center"].onPositionChange}
           width={ccSaved?.width ?? ccDef.defaultWidth}
           resizable={false}
           otherPanelRects={buildOtherRects("command-center")}
@@ -409,8 +450,8 @@ export function OverlayApp() {
             title="Game Notes"
             defaultPosition={gnPosition}
             pinned={gnSaved?.pinned}
-            onPositionChange={(pos) => handlePanelPositionChange("game-notes", pos)}
-            onClose={() => handleHidePanel("game-notes")}
+            onPositionChange={panelCallbacks["game-notes"].onPositionChange}
+            onClose={panelCallbacks["game-notes"].onClose}
             width={gnSaved?.width ?? gnDef.defaultWidth}
             resizable
             minWidth={300}
@@ -437,8 +478,8 @@ export function OverlayApp() {
             title="System Monitor"
             defaultPosition={smPosition}
             pinned={smSaved?.pinned}
-            onPositionChange={(pos) => handlePanelPositionChange("system-monitor", pos)}
-            onClose={() => handleHidePanel("system-monitor")}
+            onPositionChange={panelCallbacks["system-monitor"].onPositionChange}
+            onClose={panelCallbacks["system-monitor"].onClose}
             width={smSaved?.width ?? smDef.defaultWidth}
             resizable
             minWidth={360}
@@ -465,7 +506,7 @@ export function OverlayApp() {
             title="Media Controls"
             defaultPosition={mcPosition}
             pinned={mcSaved?.pinned}
-            onPositionChange={(pos) => handlePanelPositionChange("media-controls", pos)}
+            onPositionChange={panelCallbacks["media-controls"].onPositionChange}
             onClose={() => handleMediaControlsModeChange("hidden")}
             width={mcSaved?.width ?? mcDef.defaultWidth}
             resizable
@@ -493,8 +534,8 @@ export function OverlayApp() {
             title="Audio Mixer"
             defaultPosition={amPosition}
             pinned={amSaved?.pinned}
-            onPositionChange={(pos) => handlePanelPositionChange("audio-mixer", pos)}
-            onClose={() => handleHidePanel("audio-mixer")}
+            onPositionChange={panelCallbacks["audio-mixer"].onPositionChange}
+            onClose={panelCallbacks["audio-mixer"].onClose}
             width={amSaved?.width ?? amDef.defaultWidth}
             resizable
             minWidth={320}
@@ -521,8 +562,8 @@ export function OverlayApp() {
             title="Assistant"
             defaultPosition={astPosition}
             pinned={astSaved?.pinned}
-            onPositionChange={(pos) => handlePanelPositionChange("assistant", pos)}
-            onClose={() => handleHidePanel("assistant")}
+            onPositionChange={panelCallbacks["assistant"].onPositionChange}
+            onClose={panelCallbacks["assistant"].onClose}
             width={astSaved?.width ?? astDef.defaultWidth}
             resizable
             minWidth={300}
@@ -534,7 +575,7 @@ export function OverlayApp() {
           </FloatingPanel>
         );
       })()}
-    </>
+    </OverlayVisibilityContext.Provider>
   );
 }
 

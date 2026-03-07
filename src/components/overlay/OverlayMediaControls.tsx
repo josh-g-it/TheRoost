@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { MediaSessionSnapshot, MediaBookmark } from "../../types";
 import { mediaControlsApi, mediaBookmarksApi } from "../../services/tauri";
+import { useOverlayVisible } from "./overlayVisibility";
 import { AppIcon } from "../common/AppIcon";
 import "./OverlayMediaControls.css";
 
@@ -632,6 +633,7 @@ export function OverlayMediaControls() {
   const [addUrl, setAddUrl] = useState("");
   const [addIcon, setAddIcon] = useState("");
   const mountedRef = useRef(true);
+  const isOverlayVisible = useOverlayVisible();
 
   // Refs for form values so the save handler always reads current state
   const addTitleRef = useRef(addTitle);
@@ -669,6 +671,7 @@ export function OverlayMediaControls() {
   }, [fetchSession]);
 
   useEffect(() => {
+    if (!isOverlayVisible) return; // Pause polling when overlay is hidden
     mountedRef.current = true;
     fetchSession();
     fetchBookmarks();
@@ -677,7 +680,7 @@ export function OverlayMediaControls() {
       mountedRef.current = false;
       clearInterval(interval);
     };
-  }, [fetchSession, fetchBookmarks]);
+  }, [fetchSession, fetchBookmarks, isOverlayVisible]);
 
   // Clamp activeIndex when bookmarks change
   useEffect(() => {
@@ -864,10 +867,11 @@ const VISIBILITY_POLL_MS = 3000;
 export function useMediaSession(enabled: boolean): MediaSessionSnapshot | null {
   const [snapshot, setSnapshot] = useState<MediaSessionSnapshot | null>(null);
   const mountedRef = useRef(true);
+  const isOverlayVisible = useOverlayVisible();
 
   useEffect(() => {
-    if (!enabled) {
-      setSnapshot(null);
+    if (!enabled || !isOverlayVisible) {
+      if (!enabled) setSnapshot(null);
       return;
     }
     mountedRef.current = true;
@@ -886,7 +890,7 @@ export function useMediaSession(enabled: boolean): MediaSessionSnapshot | null {
       mountedRef.current = false;
       clearInterval(interval);
     };
-  }, [enabled]);
+  }, [enabled, isOverlayVisible]);
 
   return snapshot;
 }

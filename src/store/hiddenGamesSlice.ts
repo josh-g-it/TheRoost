@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
 import { hiddenGamesApi } from "../services/tauri";
 import { getErrorMessage } from "../utils/errors";
@@ -71,3 +72,8 @@ export const useHiddenGamesStore = create<HiddenGamesState>((set, get) => ({
 
   isHidden: (gameId) => get().hiddenGames.has(gameId),
 }));
+
+// Cross-window sync: reload hidden games when another window toggles via direct API.
+listen("hidden-changed", () => {
+  useHiddenGamesStore.getState().loadHiddenGames();
+});

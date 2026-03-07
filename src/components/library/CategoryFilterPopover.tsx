@@ -28,11 +28,20 @@ export function CategoryFilterPopover() {
   const allCategories = useMemo(() => extractAllCategories(cache), [cache]);
   const categoryCounts = useMemo(() => countByCategory(cache), [cache]);
 
+  const selectedIds = filters.filterByCategoryIds;
+
   const filteredCategories = useMemo(() => {
-    if (!search.trim()) return allCategories;
-    const q = search.toLowerCase().trim();
-    return allCategories.filter((c) => c.description.toLowerCase().includes(q));
-  }, [allCategories, search]);
+    let cats: typeof allCategories;
+    if (!search.trim()) {
+      cats = allCategories;
+    } else {
+      const q = search.toLowerCase().trim();
+      cats = allCategories.filter((c) => c.description.toLowerCase().includes(q));
+    }
+    const selected = cats.filter((c) => selectedIds.includes(c.id));
+    const unselected = cats.filter((c) => !selectedIds.includes(c.id));
+    return { selected, unselected };
+  }, [allCategories, search, selectedIds]);
 
   // Close on outside click
   useEffect(() => {
@@ -91,25 +100,36 @@ export function CategoryFilterPopover() {
             autoFocus
           />
           <div className="category-filter__list">
-            {filteredCategories.map((cat) => {
-              const isSelected = filters.filterByCategoryIds.includes(cat.id);
-              return (
-                <label key={cat.id} className="category-filter__item">
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => handleToggle(cat.id)}
-                  />
-                  <span className="category-filter__item-name">{cat.description}</span>
-                  <span className="category-filter__item-count">
-                    {categoryCounts.get(cat.id) ?? 0}
-                  </span>
-                </label>
-              );
-            })}
-            {filteredCategories.length === 0 && (
-              <div className="category-filter__empty">No matching features</div>
-            )}
+            {filteredCategories.selected.map((cat) => (
+              <label key={cat.id} className="category-filter__item">
+                <input type="checkbox" checked onChange={() => handleToggle(cat.id)} />
+                <span className="category-filter__item-name">{cat.description}</span>
+                <span className="category-filter__item-count">
+                  {categoryCounts.get(cat.id) ?? 0}
+                </span>
+              </label>
+            ))}
+            {filteredCategories.selected.length > 0 &&
+              filteredCategories.unselected.length > 0 && (
+                <div className="category-filter__selected-divider" />
+              )}
+            {filteredCategories.unselected.map((cat) => (
+              <label key={cat.id} className="category-filter__item">
+                <input
+                  type="checkbox"
+                  checked={false}
+                  onChange={() => handleToggle(cat.id)}
+                />
+                <span className="category-filter__item-name">{cat.description}</span>
+                <span className="category-filter__item-count">
+                  {categoryCounts.get(cat.id) ?? 0}
+                </span>
+              </label>
+            ))}
+            {filteredCategories.selected.length === 0 &&
+              filteredCategories.unselected.length === 0 && (
+                <div className="category-filter__empty">No matching features</div>
+              )}
           </div>
         </div>
       )}

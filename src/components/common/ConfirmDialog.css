@@ -1,0 +1,71 @@
+/* ── Confirm Dialog ─────────────────────────────────────────────── */
+
+.confirm-dialog__overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--color-overlay);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  animation: confirm-dialog-fade-in 0.2s ease;
+}
+
+.confirm-dialog {
+  width: 90%;
+  max-width: 440px;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  padding: var(--space-xl);
+  box-shadow: var(--shadow-lg);
+  animation: confirm-dialog-slide-in 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.confirm-dialog__title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.confirm-dialog__message {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+}
+
+/* ── Animations ──────────────────────────────────────────────────── */
+
+@keyframes confirm-dialog-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes confirm-dialog-slide-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}

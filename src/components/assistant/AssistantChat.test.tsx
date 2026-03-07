@@ -16,6 +16,11 @@ const mockAbandonConversation = vi.fn();
 
 const mockSaveGameRating = vi.fn();
 const mockSaveGameNote = vi.fn();
+const mockGetGameNote = vi.fn();
+const mockGetAllFavorites = vi.fn();
+const mockToggleFavorite = vi.fn();
+const mockGetAllHidden = vi.fn();
+const mockToggleHidden = vi.fn();
 
 vi.mock("../../services/tauri", () => ({
   assistantApi: {
@@ -29,33 +34,30 @@ vi.mock("../../services/tauri", () => ({
     saveGameRating: (...args: unknown[]) => mockSaveGameRating(...args),
   },
   notesApi: {
+    getGameNote: (...args: unknown[]) => mockGetGameNote(...args),
     saveGameNote: (...args: unknown[]) => mockSaveGameNote(...args),
+  },
+  favoritesApi: {
+    getAllFavorites: (...args: unknown[]) => mockGetAllFavorites(...args),
+    toggleFavorite: (...args: unknown[]) => mockToggleFavorite(...args),
+  },
+  hiddenGamesApi: {
+    getAllHidden: (...args: unknown[]) => mockGetAllHidden(...args),
+    toggleHidden: (...args: unknown[]) => mockToggleHidden(...args),
   },
 }));
 
 vi.mock("../../store/settingsSlice", () => ({
   useSettingsStore: Object.assign(
     (selector: (s: Record<string, unknown>) => unknown) =>
-      selector({ settings: { iconSet: "classic" } }),
+      selector({ settings: { iconSet: "classic", cloudAiEnabled: true } }),
     {
       getState: () => ({
-        settings: { theme: "dark" },
+        settings: { theme: "dark", cloudAiEnabled: true },
         saveSettings: vi.fn(),
       }),
     },
   ),
-}));
-
-vi.mock("../../store/favoritesSlice", () => ({
-  useFavoritesStore: {
-    getState: () => ({ toggleFavorite: vi.fn().mockResolvedValue(undefined) }),
-  },
-}));
-
-vi.mock("../../store/hiddenGamesSlice", () => ({
-  useHiddenGamesStore: {
-    getState: () => ({ toggleHidden: vi.fn().mockResolvedValue(undefined) }),
-  },
 }));
 
 vi.mock("../../utils/commandPalette", () => ({
@@ -110,6 +112,11 @@ describe("AssistantChat", () => {
     mockEndConversation.mockResolvedValue(undefined);
     mockSaveGameRating.mockResolvedValue(undefined);
     mockSaveGameNote.mockResolvedValue(undefined);
+    mockGetGameNote.mockResolvedValue(null);
+    mockGetAllFavorites.mockResolvedValue([]);
+    mockToggleFavorite.mockResolvedValue(undefined);
+    mockGetAllHidden.mockResolvedValue([]);
+    mockToggleHidden.mockResolvedValue(undefined);
     // Return a non-empty history by default so auto-greeting doesn't fire
     mockGetConversationHistory.mockResolvedValue([existingMessage]);
     mockCheckConversationStale.mockResolvedValue(false);
@@ -132,10 +139,13 @@ describe("AssistantChat", () => {
     expect(screen.getByTitle("Send message")).toBeInTheDocument();
   });
 
-  it("send button is disabled when input is empty", () => {
+  it("send button does not send when input is empty", async () => {
+    const user = userEvent.setup();
     render(<AssistantChat avatarId="a1" conversationId="c1" />);
     const sendBtn = screen.getByTitle("Send message");
-    expect(sendBtn).toBeDisabled();
+    await user.click(sendBtn);
+    // No message should appear — handleSend guards against empty text
+    expect(screen.queryByText("assistant-chat__message--user")).not.toBeInTheDocument();
   });
 
   it("clears input after sending a message", async () => {

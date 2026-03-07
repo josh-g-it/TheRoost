@@ -1,4 +1,4 @@
-import { type ButtonHTMLAttributes } from "react";
+import { forwardRef, type ButtonHTMLAttributes } from "react";
 import "./Button.css";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -7,17 +7,21 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
 }
 
-export function Button({
-  variant = "primary",
-  size = "md",
-  loading = false,
-  disabled,
-  children,
-  className = "",
-  ...props
-}: ButtonProps) {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  {
+    variant = "primary",
+    size = "md",
+    loading = false,
+    disabled,
+    children,
+    className = "",
+    ...props
+  },
+  ref,
+) {
   return (
     <button
+      ref={ref}
       className={`btn btn--${variant} btn--${size} ${loading ? "btn--loading" : ""} ${className}`}
       disabled={disabled || loading}
       {...props}
@@ -26,4 +30,4 @@ export function Button({
       <span className={loading ? "btn__content--hidden" : ""}>{children}</span>
     </button>
   );
-}
+});

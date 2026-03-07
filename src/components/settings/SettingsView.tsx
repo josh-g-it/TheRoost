@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Header } from "../layout/Header";
 import { Button } from "../common/Button";
 import { Input } from "../common/Input";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 import { TagManager } from "./TagManager";
 import { BookmarkManager } from "./BookmarkManager";
 import { CardDisplaySettings } from "./CardDisplaySettings";
@@ -11,6 +12,7 @@ import { ThemeBuilder } from "./ThemeBuilder";
 import { DeveloperSettings } from "./DeveloperSettings";
 import { BackupRestoreSection } from "./BackupRestoreSection";
 import { useSettings } from "../../hooks/useSettings";
+import { useConfirmDialog } from "../../hooks/useConfirmDialog";
 import { useSettingsStore } from "../../store/settingsSlice";
 import { useAppVersion } from "../../hooks/useAppVersion";
 import { useLibraryStore } from "../../store/librarySlice";
@@ -58,6 +60,7 @@ const SETTINGS_TABS: { id: SettingsTabId; label: string }[] = [
 
 export function SettingsView() {
   const { settings, saveSettings, isLoading } = useSettings();
+  const { confirm, dialogProps } = useConfirmDialog();
   const [form, setForm] = useState<AppSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [showKey, setShowKey] = useState(false);
@@ -649,21 +652,26 @@ export function SettingsView() {
                 <input
                   type="checkbox"
                   checked={form.cloudAiEnabled ?? false}
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const enabled = e.target.checked;
                     // First-use privacy acknowledgment
                     if (enabled && !form.cloudAiPrivacyAcknowledged) {
-                      const ok = window.confirm(
-                        "Cloud AI sends your search queries and library data (game names, genres, playtime) to external servers for processing. " +
-                          "API keys, file paths, and personal information are never sent.\n\n" +
-                          "Do you want to enable Cloud AI?",
-                      );
+                      const ok = await confirm({
+                        title: "Enable Cloud AI?",
+                        message:
+                          "Cloud AI sends your search queries and library data (game names, genres, playtime) to external servers for processing.\n\nAPI keys, file paths, and personal information are never sent.",
+                        confirmLabel: "Enable",
+                        cancelLabel: "Cancel",
+                      });
                       if (!ok) return;
                       // Prompt for post-session reviews feature
-                      const enableReviews = window.confirm(
-                        "Post-Session Reviews: After a 30+ minute gaming session, your assistant can prompt you to share your thoughts and help write a review.\n\n" +
-                          "Would you like to enable this feature?",
-                      );
+                      const enableReviews = await confirm({
+                        title: "Post-Session Reviews",
+                        message:
+                          "After a 30+ minute gaming session, your assistant can prompt you to share your thoughts and help write a review.\n\nWould you like to enable this feature?",
+                        confirmLabel: "Enable",
+                        cancelLabel: "No Thanks",
+                      });
                       setForm({
                         ...form,
                         cloudAiEnabled: true,
@@ -1427,6 +1435,8 @@ export function SettingsView() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 }

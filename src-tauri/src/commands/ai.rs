@@ -22,6 +22,14 @@ use crate::services::cache_db::CacheDbHandle;
 use crate::services::credential_store;
 use crate::services::settings_store;
 use crate::utils::error::{AppError, MutexExt};
+use serde::Serialize;
+
+/// Payload for `ai-compaction-started` and `ai-compaction-complete` cross-window events.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CompactionEventPayload {
+    conversation_id: String,
+}
 
 /// Validate and resolve AI actions in a single IPC round-trip.
 /// Validates tiers (rejects blacklisted/unknown) and fuzzy-resolves game names to UUIDs.
@@ -515,9 +523,14 @@ pub async fn send_message(
 
     let skip_user_persist = hidden.unwrap_or(false);
 
-    // Check daily limit
+    // Check cloud AI enabled + daily limit
     {
         let mut config = cloud.lock_or_err("CloudConfig")?;
+        if !config.enabled {
+            return Err(AppError::Validation(
+                "Cloud AI is disabled. Enable it in Settings \u{2192} Assistant.".into(),
+            ));
+        }
         config.maybe_reset_daily();
         if !config.can_request() {
             return Err(AppError::StoreApi("Daily AI request limit reached".into()));
@@ -610,7 +623,20 @@ pub async fn end_conversation(
     let settings = settings_store::load_settings(&app_handle)?;
     let key = encryption::load_encryption_key()?;
 
-    conversation::end_conversation(&db, &conversation_id, &avatar_id, &key, &settings).await?;
+    // Notify all windows that compaction is starting (shows journaling splash)
+    let compaction_payload = CompactionEventPayload {
+        conversation_id: conversation_id.clone(),
+    };
+    let _ = app_handle.emit("ai-compaction-started", &compaction_payload);
+
+    let result =
+        conversation::end_conversation(&db, &conversation_id, &avatar_id, &key, &settings).await;
+
+    // Notify all windows that compaction is complete (clears journaling splash)
+    let _ = app_handle.emit("ai-compaction-complete", &compaction_payload);
+
+    // Propagate any error from end_conversation after emitting compaction-complete
+    result?;
 
     // Note: compaction is an internal system operation — intentionally not counted
     // against the daily request limit or rate limiter to avoid blocking the
@@ -671,8 +697,19 @@ pub async fn retry_compaction(
     let settings = settings_store::load_settings(&app_handle)?;
     let key = encryption::load_encryption_key()?;
 
-    let compacted =
-        conversation::end_conversation(&db, &conversation_id, &avatar_id, &key, &settings).await?;
+    // Notify all windows that compaction is starting
+    let compaction_payload = CompactionEventPayload {
+        conversation_id: conversation_id.clone(),
+    };
+    let _ = app_handle.emit("ai-compaction-started", &compaction_payload);
+
+    let result =
+        conversation::end_conversation(&db, &conversation_id, &avatar_id, &key, &settings).await;
+
+    // Notify all windows that compaction is complete
+    let _ = app_handle.emit("ai-compaction-complete", &compaction_payload);
+
+    let compacted = result?;
 
     if compacted {
         let mut config = cloud.lock_or_err("CloudConfig")?;

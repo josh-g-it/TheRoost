@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GameImage } from "./GameImage";
 import { Button } from "../common/Button";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 import { AppIcon } from "../common/AppIcon";
 import { GenreTag } from "../common/GenreTag";
 import { UserTag } from "../common/UserTag";
@@ -16,6 +17,7 @@ import {
   getSourceDisplayName,
 } from "../../utils/formatters";
 import { useGameLaunch } from "../../hooks/useGameLaunch";
+import { useConfirmDialog } from "../../hooks/useConfirmDialog";
 import { useLibraryStore } from "../../store/librarySlice";
 import { customGameApi, gameApi, notesApi, sessionApi } from "../../services/tauri";
 import { logger } from "../../utils/logger";
@@ -174,6 +176,7 @@ function ScreenshotGallery({ screenshots }: { screenshots: ScreenshotInfo[] }) {
 export function GameDetail({ game, onClose, onPersistShelves }: GameDetailProps) {
   const navigate = useNavigate();
   const { launch, launching } = useGameLaunch();
+  const { confirm, dialogProps } = useConfirmDialog();
   const metadata = useMetadataStore((s) => s.getMetadata(game.gameId));
   const fetchMetadata = useMetadataStore((s) => s.fetchMetadata);
   const gameSessions = useSessionStore((s) => s.gameSessions);
@@ -447,12 +450,14 @@ export function GameDetail({ game, onClose, onPersistShelves }: GameDetailProps)
                     variant="ghost"
                     size="lg"
                     onClick={async () => {
-                      if (
-                        !window.confirm(
-                          `Remove "${game.name}" from your library? This will delete all associated data (sessions, tags, art).`,
-                        )
-                      )
-                        return;
+                      const ok = await confirm({
+                        title: "Remove Game",
+                        message: `Remove "${game.name}" from your library? This will delete all associated data (sessions, tags, art).`,
+                        confirmLabel: "Remove",
+                        cancelLabel: "Cancel",
+                        destructive: true,
+                      });
+                      if (!ok) return;
                       try {
                         await customGameApi.remove(game.gameId);
                         useLibraryStore.getState().removeGame(game.gameId);
@@ -898,6 +903,8 @@ export function GameDetail({ game, onClose, onPersistShelves }: GameDetailProps)
           </div>
         </div>
       </div>
+
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 }

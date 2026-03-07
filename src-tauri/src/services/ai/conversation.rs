@@ -10,8 +10,21 @@ use crate::services::credential_store;
 use crate::utils::error::{AppError, MutexExt};
 use tauri::Emitter;
 
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::OnceLock;
+
+/// Payload broadcast via `ai-user-message` for cross-window conversation sync.
+/// Both the main window and overlay receive this; the sender deduplicates by timestamp.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserMessagePayload {
+    pub conversation_id: String,
+    pub content: String,
+    /// Unix timestamp (seconds) — used by the frontend to deduplicate messages
+    /// that originated from the local window.
+    pub timestamp: i64,
+}
 
 const CHARS_PER_TOKEN: usize = 3;
 const TOKEN_BUDGET_LAYER4: usize = 4000; // ~12000 chars
@@ -284,7 +297,7 @@ pub async fn send_message_and_stream(
     let conv_lock = acquire_conversation_lock(conv_id);
     let _guard = conv_lock.lock().await;
 
-    // Step 0: Check message count cap
+    // Step 0: Check message count cap + prevent duplicate auto-greetings
     {
         let db_guard = db.lock_or_err("DB")?;
         let msg_count = db_guard.get_ai_messages_raw(conv_id)?.len();
@@ -292,6 +305,30 @@ pub async fn send_message_and_stream(
             return Err(AppError::Validation(
                 "Conversation has reached the message limit. Please end this conversation and start a new one.".into(),
             ));
+        }
+        // When both windows start a conversation simultaneously, both may try
+        // to send the initial hidden auto-greeting. The per-conversation lock
+        // serializes these calls, so the second one sees the first's stored
+        // messages and returns early — preventing duplicate greetings.
+        if skip_user_persist && msg_count > 0 {
+            tracing::debug!(conv_id, "Skipping duplicate auto-greeting (conversation already has messages)");
+            return Ok(());
+        }
+    }
+
+    // Broadcast user message to all windows for cross-window sync EARLY,
+    // before streaming begins. The frontend deduplicates by timestamp, so
+    // this must fire within 2s of the frontend setting lastSentTimestampRef.
+    // Only for visible (non-hidden) messages — hidden messages (auto-greetings,
+    // system prompts) are not displayed in chat and don't need syncing.
+    if !skip_user_persist {
+        let payload = UserMessagePayload {
+            conversation_id: conv_id.to_string(),
+            content: user_message.to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        if let Err(e) = app_handle.emit("ai-user-message", &payload) {
+            tracing::warn!(error = %e, "Failed to emit ai-user-message");
         }
     }
 
@@ -388,7 +425,7 @@ pub async fn send_message_and_stream(
             asst_tokens,
             skip_user_persist,
         )?;
-    }
+    } // DB lock dropped
 
     Ok(())
 }

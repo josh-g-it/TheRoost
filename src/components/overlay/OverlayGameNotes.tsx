@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { Game, GameSession, GameNote } from "../../types";
 import { GENERAL_NOTES_ID } from "../../types";
 import "./OverlayGameNotes.css";
@@ -39,6 +40,9 @@ export function OverlayGameNotes({ activeSessions, games }: OverlayGameNotesProp
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentNoteIdRef = useRef(currentNoteId);
   currentNoteIdRef.current = currentNoteId;
+  // Track the last save timestamp to deduplicate incoming note-changed events
+  // that originated from this component's own saves.
+  const lastLocalSaveTimestampRef = useRef<number>(0);
 
   // Load note when tab/game changes
   useEffect(() => {
@@ -56,9 +60,49 @@ export function OverlayGameNotes({ activeSessions, games }: OverlayGameNotesProp
       .finally(() => setIsLoading(false));
   }, [currentNoteId]);
 
+  // Listen for cross-window note changes (KI #16).
+  // When the main app saves a note, Rust emits `note-changed` to all windows.
+  // This listener updates the overlay's content if the changed note matches
+  // the currently displayed note.
+  useEffect(() => {
+    let isMounted = true;
+    let unlistenFn: (() => void) | null = null;
+
+    listen<GameNote>("note-changed", (event) => {
+      if (!isMounted) return;
+      const changedNote = event.payload;
+      if (changedNote.gameId !== currentNoteIdRef.current) return;
+
+      // Dedup: skip if this event was triggered by our own save (within 2s window).
+      // Our saves set lastLocalSaveTimestampRef; if the event's updatedAt is close
+      // to our last save, it's our own echo.
+      const eventTime = changedNote.updatedAt;
+      if (Math.abs(eventTime - lastLocalSaveTimestampRef.current) <= 2) {
+        return;
+      }
+
+      // Update content from the other window's save
+      setContent(changedNote.content);
+      setLastSavedContent(changedNote.content);
+    }).then((fn) => {
+      if (isMounted) {
+        unlistenFn = fn;
+      } else {
+        fn();
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unlistenFn?.();
+    };
+  }, [currentNoteId]);
+
   const saveNote = useCallback((text: string) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
+      // Record the timestamp of our own save for dedup
+      lastLocalSaveTimestampRef.current = Math.floor(Date.now() / 1000);
       invoke("save_game_note", {
         gameId: currentNoteIdRef.current,
         content: text,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { audioMixerApi } from "../../services/tauri";
 import type { AudioSnapshot, AudioSession, AudioDevice } from "../../types";
+import { useOverlayVisible } from "./overlayVisibility";
 import { AppIcon } from "../common/AppIcon";
 import type { IconName } from "../../utils/icons";
 import "./OverlayAudioMixer.css";
@@ -15,6 +16,7 @@ export function OverlayAudioMixer() {
   const [showHidden, setShowHidden] = useState(false);
   const [revealedExes, setRevealedExes] = useState<Set<string>>(new Set());
   const mountedRef = useRef(true);
+  const isOverlayVisible = useOverlayVisible();
 
   // Track which sessions are being actively dragged to skip poll overwrites
   const draggingPidsRef = useRef<Set<number>>(new Set());
@@ -46,6 +48,7 @@ export function OverlayAudioMixer() {
   }, []);
 
   useEffect(() => {
+    if (!isOverlayVisible) return; // Pause polling when overlay is hidden
     mountedRef.current = true;
     fetchSnapshot();
     const id = setInterval(fetchSnapshot, AUDIO_POLL_MS);
@@ -53,7 +56,7 @@ export function OverlayAudioMixer() {
       mountedRef.current = false;
       clearInterval(id);
     };
-  }, [fetchSnapshot]);
+  }, [fetchSnapshot, isOverlayVisible]);
 
   // ── Auto-reveal based on peak level ─────────────────────────────
   useEffect(() => {

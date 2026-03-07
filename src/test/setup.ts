@@ -33,6 +33,13 @@ export function clearInvokeMocks(): void {
   invokeRegistry.clear();
 }
 
+// Mock Tauri event API — needed because store modules (favoritesSlice, hiddenGamesSlice)
+// call listen() at module scope for cross-window sync. Per-file mocks override this.
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(() => Promise.resolve(() => {})),
+  emit: vi.fn(() => Promise.resolve()),
+}));
+
 // Mock Tauri API for tests — prevents errors when components call invoke()
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn((command: string) => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { StarRating } from "../common/StarRating";
 import "./ActionConfirmationCard.css";
 
@@ -10,7 +10,7 @@ interface ReviewConfirmationCardProps {
   onDeny: () => void;
 }
 
-export function ReviewConfirmationCard({
+export const ReviewConfirmationCard = memo(function ReviewConfirmationCard({
   gameName,
   stars,
   reviewText,
@@ -55,4 +55,4 @@ export function ReviewConfirmationCard({
       </div>
     </div>
   );
-}
+});

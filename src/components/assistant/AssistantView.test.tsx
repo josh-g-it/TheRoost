@@ -4,8 +4,10 @@ import { AssistantView } from "./AssistantView";
 import { makeAiAvatar, makeAiPersonality } from "../../test/factories";
 
 type ListenCallback = (event: { payload: unknown }) => void;
-const listenCallbacks: Record<string, ListenCallback> = {};
-const mockUnlisten = vi.fn();
+const { listenCallbacks, mockUnlisten } = vi.hoisted(() => ({
+  listenCallbacks: {} as Record<string, ListenCallback>,
+  mockUnlisten: vi.fn(),
+}));
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn((eventName: string, callback: ListenCallback) => {
@@ -63,7 +65,7 @@ vi.mock("../../services/tauri", () => ({
 
 vi.mock("../../store/settingsSlice", () => ({
   useSettingsStore: (selector: (s: Record<string, unknown>) => unknown) =>
-    selector({ settings: { iconSet: "classic" } }),
+    selector({ settings: { iconSet: "classic", cloudAiEnabled: true } }),
 }));
 
 vi.mock("react-router-dom", () => ({

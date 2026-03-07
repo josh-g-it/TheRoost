@@ -16,6 +16,16 @@ export function SourceFilterPopover() {
 
   const allSources = useMemo(() => extractAllSources(library?.games ?? []), [library]);
 
+  const partitionedSources = useMemo(() => {
+    const selected = allSources.filter(({ source }) =>
+      filters.filterBySource.includes(source),
+    );
+    const unselected = allSources.filter(
+      ({ source }) => !filters.filterBySource.includes(source),
+    );
+    return { selected, unselected };
+  }, [allSources, filters.filterBySource]);
+
   // Close on outside click
   useEffect(() => {
     if (!open) return;
@@ -66,22 +76,32 @@ export function SourceFilterPopover() {
             )}
           </div>
           <div className="source-filter__list">
-            {allSources.map(({ source, count }) => {
-              const isSelected = filters.filterBySource.includes(source);
-              return (
-                <label key={source} className="source-filter__item">
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => handleToggle(source)}
-                  />
-                  <span className="source-filter__item-name">
-                    {GAME_SOURCE_LABELS[source]}
-                  </span>
-                  <span className="source-filter__item-count">{count}</span>
-                </label>
-              );
-            })}
+            {partitionedSources.selected.map(({ source, count }) => (
+              <label key={source} className="source-filter__item">
+                <input type="checkbox" checked onChange={() => handleToggle(source)} />
+                <span className="source-filter__item-name">
+                  {GAME_SOURCE_LABELS[source]}
+                </span>
+                <span className="source-filter__item-count">{count}</span>
+              </label>
+            ))}
+            {partitionedSources.selected.length > 0 &&
+              partitionedSources.unselected.length > 0 && (
+                <div className="source-filter__selected-divider" />
+              )}
+            {partitionedSources.unselected.map(({ source, count }) => (
+              <label key={source} className="source-filter__item">
+                <input
+                  type="checkbox"
+                  checked={false}
+                  onChange={() => handleToggle(source)}
+                />
+                <span className="source-filter__item-name">
+                  {GAME_SOURCE_LABELS[source]}
+                </span>
+                <span className="source-filter__item-count">{count}</span>
+              </label>
+            ))}
           </div>
         </div>
       )}

@@ -157,6 +157,12 @@ export function LibraryControls({
 
   const allGenres = useMemo(() => extractAllGenres(cache), [cache]);
 
+  const partitionedGenres = useMemo(() => {
+    const selected = allGenres.filter((g) => filters.filterByGenreIds.includes(g.id));
+    const unselected = allGenres.filter((g) => !filters.filterByGenreIds.includes(g.id));
+    return { selected, unselected };
+  }, [allGenres, filters.filterByGenreIds]);
+
   const hasActiveFilters =
     filters.showInstalledOnly ||
     filters.showFavoritesOnly ||
@@ -340,10 +346,23 @@ export function LibraryControls({
                       )}
                     </div>
                     <div className="library-controls__genre-chips">
-                      {allGenres.map((genre) => (
+                      {partitionedGenres.selected.map((genre) => (
                         <button
                           key={genre.id}
-                          className={`library-controls__genre-chip ${filters.filterByGenreIds.includes(genre.id) ? "library-controls__genre-chip--active" : ""}`}
+                          className="library-controls__genre-chip library-controls__genre-chip--active"
+                          onClick={() => handleGenreToggle(genre.id)}
+                        >
+                          {genre.description}
+                        </button>
+                      ))}
+                      {partitionedGenres.selected.length > 0 &&
+                        partitionedGenres.unselected.length > 0 && (
+                          <div className="library-controls__genre-divider" />
+                        )}
+                      {partitionedGenres.unselected.map((genre) => (
+                        <button
+                          key={genre.id}
+                          className="library-controls__genre-chip"
                           onClick={() => handleGenreToggle(genre.id)}
                         >
                           {genre.description}

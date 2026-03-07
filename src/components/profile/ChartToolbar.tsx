@@ -30,3 +30,21 @@ export function ChartToolbarSelect({
     </div>
   );
 }
+
+interface ChartToolbarToggleProps {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}
+
+export function ChartToolbarToggle({ label, active, onClick }: ChartToolbarToggleProps) {
+  return (
+    <button
+      className={`chart-toolbar-toggle${active ? " chart-toolbar-toggle--active" : ""}`}
+      onClick={onClick}
+      type="button"
+    >
+      {label}
+    </button>
+  );
+}

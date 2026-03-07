@@ -3577,7 +3577,16 @@ impl CacheDb {
             "INSERT INTO ai_personalities (id, name, prompt_text, is_builtin, created_at)
              VALUES (?1, ?2, ?3, 0, datetime('now'))",
             params![id, name, prompt_text],
-        )?;
+        ).map_err(|e| {
+            if let rusqlite::Error::SqliteFailure(err, _) = &e {
+                if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                    return AppError::Validation(
+                        "A personality with that name already exists. Please choose a different name.".into(),
+                    );
+                }
+            }
+            AppError::Database(e)
+        })?;
         let created_at: String = self.conn.query_row(
             "SELECT created_at FROM ai_personalities WHERE id = ?1",
             params![id],
@@ -3663,7 +3672,16 @@ impl CacheDb {
             "INSERT INTO ai_avatars (id, name, personality_id, image_path, is_active, created_at)
              VALUES (?1, ?2, ?3, NULL, 0, datetime('now'))",
             params![id, name, personality_id],
-        )?;
+        ).map_err(|e| {
+            if let rusqlite::Error::SqliteFailure(err, _) = &e {
+                if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                    return AppError::Validation(
+                        "An avatar with that name already exists. Please choose a different name.".into(),
+                    );
+                }
+            }
+            AppError::Database(e)
+        })?;
         let created_at: String = self.conn.query_row(
             "SELECT created_at FROM ai_avatars WHERE id = ?1",
             params![id],

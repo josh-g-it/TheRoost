@@ -15,11 +15,21 @@ export function SteamTagFilterPopover() {
 
   const allTags = useMemo(() => extractAllSteamTags(cache), [cache]);
 
+  const selectedSet = filters.filterBySteamTagNames;
+
   const filteredTags = useMemo(() => {
-    if (!search.trim()) return allTags.slice(0, 50);
-    const q = search.toLowerCase().trim();
-    return allTags.filter((t) => t.name.toLowerCase().includes(q)).slice(0, 50);
-  }, [allTags, search]);
+    let tags: typeof allTags;
+    if (!search.trim()) {
+      tags = allTags.slice(0, 50);
+    } else {
+      const q = search.toLowerCase().trim();
+      tags = allTags.filter((t) => t.name.toLowerCase().includes(q)).slice(0, 50);
+    }
+    // Float selected items to the top
+    const selected = tags.filter((t) => selectedSet.includes(t.name));
+    const unselected = tags.filter((t) => !selectedSet.includes(t.name));
+    return { selected, unselected };
+  }, [allTags, search, selectedSet]);
 
   // Close on outside click
   useEffect(() => {
@@ -78,23 +88,31 @@ export function SteamTagFilterPopover() {
             autoFocus
           />
           <div className="steam-tag-filter__list">
-            {filteredTags.map((tag) => {
-              const isSelected = filters.filterBySteamTagNames.includes(tag.name);
-              return (
-                <label key={tag.name} className="steam-tag-filter__item">
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => handleToggle(tag.name)}
-                  />
-                  <span className="steam-tag-filter__item-name">{tag.name}</span>
-                  <span className="steam-tag-filter__item-count">{tag.count}</span>
-                </label>
-              );
-            })}
-            {filteredTags.length === 0 && (
-              <div className="steam-tag-filter__empty">No matching tags</div>
+            {filteredTags.selected.map((tag) => (
+              <label key={tag.name} className="steam-tag-filter__item">
+                <input type="checkbox" checked onChange={() => handleToggle(tag.name)} />
+                <span className="steam-tag-filter__item-name">{tag.name}</span>
+                <span className="steam-tag-filter__item-count">{tag.count}</span>
+              </label>
+            ))}
+            {filteredTags.selected.length > 0 && filteredTags.unselected.length > 0 && (
+              <div className="steam-tag-filter__selected-divider" />
             )}
+            {filteredTags.unselected.map((tag) => (
+              <label key={tag.name} className="steam-tag-filter__item">
+                <input
+                  type="checkbox"
+                  checked={false}
+                  onChange={() => handleToggle(tag.name)}
+                />
+                <span className="steam-tag-filter__item-name">{tag.name}</span>
+                <span className="steam-tag-filter__item-count">{tag.count}</span>
+              </label>
+            ))}
+            {filteredTags.selected.length === 0 &&
+              filteredTags.unselected.length === 0 && (
+                <div className="steam-tag-filter__empty">No matching tags</div>
+              )}
           </div>
         </div>
       )}

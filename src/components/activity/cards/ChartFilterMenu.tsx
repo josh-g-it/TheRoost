@@ -298,22 +298,46 @@ export function ChartFilterMenu({
         {hasGenres && (
           <FilterSection label="Genre" count={filterByGenreIds.length} defaultOpen>
             <div className="chart-filter-menu__chips">
-              {allGenres.map((genre) => (
-                <button
-                  key={genre.id}
-                  className={`chart-filter-menu__chip${selectedGenreSet.has(genre.id) ? " chart-filter-menu__chip--active" : ""}`}
-                  onClick={() =>
-                    toggle(
-                      "filterByGenreIds",
-                      filterByGenreIds,
-                      genre.id,
-                      selectedGenreSet,
-                    )
-                  }
-                >
-                  {genre.description}
-                </button>
-              ))}
+              {allGenres
+                .filter((g) => selectedGenreSet.has(g.id))
+                .map((genre) => (
+                  <button
+                    key={genre.id}
+                    className="chart-filter-menu__chip chart-filter-menu__chip--active"
+                    onClick={() =>
+                      toggle(
+                        "filterByGenreIds",
+                        filterByGenreIds,
+                        genre.id,
+                        selectedGenreSet,
+                      )
+                    }
+                  >
+                    {genre.description}
+                  </button>
+                ))}
+              {filterByGenreIds.length > 0 &&
+                allGenres.length > filterByGenreIds.length && (
+                  <div className="chart-filter-menu__selected-divider" />
+                )}
+              {allGenres
+                .filter((g) => !selectedGenreSet.has(g.id))
+                .map((genre) => (
+                  <button
+                    key={genre.id}
+                    className="chart-filter-menu__chip"
+                    onClick={() =>
+                      toggle(
+                        "filterByGenreIds",
+                        filterByGenreIds,
+                        genre.id,
+                        selectedGenreSet,
+                      )
+                    }
+                  >
+                    {genre.description}
+                  </button>
+                ))}
             </div>
           </FilterSection>
         )}
@@ -329,24 +353,50 @@ export function ChartFilterMenu({
               autoFocus
             />
             <div className="chart-filter-menu__list">
-              {filteredSteamTags.map((tag) => (
-                <label key={tag.name} className="chart-filter-menu__item">
-                  <input
-                    type="checkbox"
-                    checked={selectedSteamTagSet.has(tag.name)}
-                    onChange={() =>
-                      toggle(
-                        "filterBySteamTagNames",
-                        filterBySteamTagNames,
-                        tag.name,
-                        selectedSteamTagSet,
-                      )
-                    }
-                  />
-                  <span className="chart-filter-menu__item-name">{tag.name}</span>
-                  <span className="chart-filter-menu__item-count">{tag.count}</span>
-                </label>
-              ))}
+              {filteredSteamTags
+                .filter((t) => selectedSteamTagSet.has(t.name))
+                .map((tag) => (
+                  <label key={tag.name} className="chart-filter-menu__item">
+                    <input
+                      type="checkbox"
+                      checked
+                      onChange={() =>
+                        toggle(
+                          "filterBySteamTagNames",
+                          filterBySteamTagNames,
+                          tag.name,
+                          selectedSteamTagSet,
+                        )
+                      }
+                    />
+                    <span className="chart-filter-menu__item-name">{tag.name}</span>
+                    <span className="chart-filter-menu__item-count">{tag.count}</span>
+                  </label>
+                ))}
+              {filteredSteamTags.some((t) => selectedSteamTagSet.has(t.name)) &&
+                filteredSteamTags.some((t) => !selectedSteamTagSet.has(t.name)) && (
+                  <div className="chart-filter-menu__selected-divider" />
+                )}
+              {filteredSteamTags
+                .filter((t) => !selectedSteamTagSet.has(t.name))
+                .map((tag) => (
+                  <label key={tag.name} className="chart-filter-menu__item">
+                    <input
+                      type="checkbox"
+                      checked={false}
+                      onChange={() =>
+                        toggle(
+                          "filterBySteamTagNames",
+                          filterBySteamTagNames,
+                          tag.name,
+                          selectedSteamTagSet,
+                        )
+                      }
+                    />
+                    <span className="chart-filter-menu__item-name">{tag.name}</span>
+                    <span className="chart-filter-menu__item-count">{tag.count}</span>
+                  </label>
+                ))}
               {filteredSteamTags.length === 0 && (
                 <div className="chart-filter-menu__empty">No matching tags</div>
               )}
@@ -357,24 +407,54 @@ export function ChartFilterMenu({
         {hasCategories && (
           <FilterSection label="Features" count={filterByCategoryIds.length}>
             <div className="chart-filter-menu__list">
-              {allCategories.map((cat) => (
-                <label key={cat.id} className="chart-filter-menu__item">
-                  <input
-                    type="checkbox"
-                    checked={selectedCategorySet.has(cat.id)}
-                    onChange={() =>
-                      toggle(
-                        "filterByCategoryIds",
-                        filterByCategoryIds,
-                        cat.id,
-                        selectedCategorySet,
-                      )
-                    }
-                  />
-                  <span className="chart-filter-menu__item-name">{cat.description}</span>
-                  <span className="chart-filter-menu__item-count">{cat.count}</span>
-                </label>
-              ))}
+              {allCategories
+                .filter((c) => selectedCategorySet.has(c.id))
+                .map((cat) => (
+                  <label key={cat.id} className="chart-filter-menu__item">
+                    <input
+                      type="checkbox"
+                      checked
+                      onChange={() =>
+                        toggle(
+                          "filterByCategoryIds",
+                          filterByCategoryIds,
+                          cat.id,
+                          selectedCategorySet,
+                        )
+                      }
+                    />
+                    <span className="chart-filter-menu__item-name">
+                      {cat.description}
+                    </span>
+                    <span className="chart-filter-menu__item-count">{cat.count}</span>
+                  </label>
+                ))}
+              {filterByCategoryIds.length > 0 &&
+                allCategories.length > filterByCategoryIds.length && (
+                  <div className="chart-filter-menu__selected-divider" />
+                )}
+              {allCategories
+                .filter((c) => !selectedCategorySet.has(c.id))
+                .map((cat) => (
+                  <label key={cat.id} className="chart-filter-menu__item">
+                    <input
+                      type="checkbox"
+                      checked={false}
+                      onChange={() =>
+                        toggle(
+                          "filterByCategoryIds",
+                          filterByCategoryIds,
+                          cat.id,
+                          selectedCategorySet,
+                        )
+                      }
+                    />
+                    <span className="chart-filter-menu__item-name">
+                      {cat.description}
+                    </span>
+                    <span className="chart-filter-menu__item-count">{cat.count}</span>
+                  </label>
+                ))}
             </div>
           </FilterSection>
         )}
@@ -382,17 +462,35 @@ export function ChartFilterMenu({
         {hasCustomTags && (
           <FilterSection label="Custom Tags" count={filterByTagIds.length}>
             <div className="chart-filter-menu__chips">
-              {scopedTags.map((tag) => (
-                <button
-                  key={tag.id}
-                  className={`chart-filter-menu__chip${selectedTagSet.has(tag.id) ? " chart-filter-menu__chip--active" : ""}`}
-                  onClick={() =>
-                    toggle("filterByTagIds", filterByTagIds, tag.id, selectedTagSet)
-                  }
-                >
-                  {tag.name}
-                </button>
-              ))}
+              {scopedTags
+                .filter((t) => selectedTagSet.has(t.id))
+                .map((tag) => (
+                  <button
+                    key={tag.id}
+                    className="chart-filter-menu__chip chart-filter-menu__chip--active"
+                    onClick={() =>
+                      toggle("filterByTagIds", filterByTagIds, tag.id, selectedTagSet)
+                    }
+                  >
+                    {tag.name}
+                  </button>
+                ))}
+              {filterByTagIds.length > 0 && scopedTags.length > filterByTagIds.length && (
+                <div className="chart-filter-menu__selected-divider" />
+              )}
+              {scopedTags
+                .filter((t) => !selectedTagSet.has(t.id))
+                .map((tag) => (
+                  <button
+                    key={tag.id}
+                    className="chart-filter-menu__chip"
+                    onClick={() =>
+                      toggle("filterByTagIds", filterByTagIds, tag.id, selectedTagSet)
+                    }
+                  >
+                    {tag.name}
+                  </button>
+                ))}
             </div>
           </FilterSection>
         )}
@@ -400,21 +498,53 @@ export function ChartFilterMenu({
         {hasSources && (
           <FilterSection label="Launcher" count={filterBySource.length}>
             <div className="chart-filter-menu__list">
-              {allSources.map(({ source, count }) => (
-                <label key={source} className="chart-filter-menu__item">
-                  <input
-                    type="checkbox"
-                    checked={selectedSourceSet.has(source)}
-                    onChange={() =>
-                      toggle("filterBySource", filterBySource, source, selectedSourceSet)
-                    }
-                  />
-                  <span className="chart-filter-menu__item-name">
-                    {GAME_SOURCE_LABELS[source as GameSource] ?? source}
-                  </span>
-                  <span className="chart-filter-menu__item-count">{count}</span>
-                </label>
-              ))}
+              {allSources
+                .filter(({ source }) => selectedSourceSet.has(source))
+                .map(({ source, count }) => (
+                  <label key={source} className="chart-filter-menu__item">
+                    <input
+                      type="checkbox"
+                      checked
+                      onChange={() =>
+                        toggle(
+                          "filterBySource",
+                          filterBySource,
+                          source,
+                          selectedSourceSet,
+                        )
+                      }
+                    />
+                    <span className="chart-filter-menu__item-name">
+                      {GAME_SOURCE_LABELS[source as GameSource] ?? source}
+                    </span>
+                    <span className="chart-filter-menu__item-count">{count}</span>
+                  </label>
+                ))}
+              {filterBySource.length > 0 && allSources.length > filterBySource.length && (
+                <div className="chart-filter-menu__selected-divider" />
+              )}
+              {allSources
+                .filter(({ source }) => !selectedSourceSet.has(source))
+                .map(({ source, count }) => (
+                  <label key={source} className="chart-filter-menu__item">
+                    <input
+                      type="checkbox"
+                      checked={false}
+                      onChange={() =>
+                        toggle(
+                          "filterBySource",
+                          filterBySource,
+                          source,
+                          selectedSourceSet,
+                        )
+                      }
+                    />
+                    <span className="chart-filter-menu__item-name">
+                      {GAME_SOURCE_LABELS[source as GameSource] ?? source}
+                    </span>
+                    <span className="chart-filter-menu__item-count">{count}</span>
+                  </label>
+                ))}
             </div>
           </FilterSection>
         )}

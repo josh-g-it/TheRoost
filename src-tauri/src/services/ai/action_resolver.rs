@@ -153,7 +153,7 @@ pub fn resolve_actions(
 }
 
 /// Resolve a game name to a (game_id, canonical_name) pair.
-/// Strategy: exact match → prefix/substring match → Jaro-Winkler fuzzy match (0.82+).
+/// Strategy: exact match → prefix match → substring containment → Jaro-Winkler fuzzy (0.82+).
 /// Rejects ambiguous matches (top two within 0.05 similarity).
 fn resolve_game_name(query: &str, library: &[(String, String)]) -> Option<(String, String)> {
     if library.is_empty() {
@@ -183,7 +183,33 @@ fn resolve_game_name(query: &str, library: &[(String, String)]) -> Option<(Strin
         return Some((prefix_matches[0].0.clone(), prefix_matches[0].1.clone()));
     }
 
-    // 3. Fuzzy match with Jaro-Winkler
+    // 3. Substring containment — handles abbreviated names like "Skyrim" →
+    //    "The Elder Scrolls V: Skyrim". Mirrors the pattern_matcher's find_game()
+    //    strategy. Requires ≥4 chars to avoid overly broad matches.
+    if query_lower.len() >= 4 {
+        let substring_matches: Vec<_> = library
+            .iter()
+            .filter(|(_, name)| name.to_lowercase().contains(&query_lower))
+            .collect();
+        if substring_matches.len() == 1 {
+            return Some((
+                substring_matches[0].0.clone(),
+                substring_matches[0].1.clone(),
+            ));
+        }
+        if substring_matches.len() > 1 {
+            // Multiple matches — prefer the shortest name (most specific).
+            // e.g., "Skyrim" matches 3 variants; shortest is the base game.
+            let shortest = substring_matches
+                .iter()
+                .min_by_key(|(_, name)| name.len());
+            if let Some((id, name)) = shortest {
+                return Some((id.to_string(), name.to_string()));
+            }
+        }
+    }
+
+    // 4. Fuzzy match with Jaro-Winkler
     let mut best_score = 0.0f64;
     let mut best_match: Option<(&str, &str)> = None;
     let mut second_best_score = 0.0f64;
@@ -727,43 +753,139 @@ mod tests {
     // ── Prefix match edge cases ─────────────────────────────────────
 
     #[test]
-    fn test_prefix_match_ambiguous_two_matches() {
+    fn test_prefix_ambiguous_falls_through_to_substring() {
         // Library with "Dark Souls II" and "Dark Souls III" but no exact "Dark Souls"
         let library = vec![
             ("uuid-ds2".to_string(), "Dark Souls II".to_string()),
             ("uuid-ds3".to_string(), "Dark Souls III".to_string()),
         ];
-        // "Dark Souls" is a prefix of both and meets the 60% length threshold for both
-        // (10 >= 13*3/5=7 and 10 >= 14*3/5=8), so prefix_matches.len() == 2 → rejected
+        // "Dark Souls" is a prefix of both → prefix match skipped (ambiguous).
+        // Substring match finds both → picks shortest ("Dark Souls II").
         let actions = vec![make_validated("game:Dark Souls", 1)];
         let result = resolve_actions(actions, &library, 0);
-        // Prefix match finds 2 matches → skipped. Fuzzy match then finds both too similar
-        // (within 0.05) → ambiguous → rejected.
+        assert_eq!(result.actions.len(), 1, "Substring should pick shortest");
+        assert_eq!(result.actions[0].action_id, "game:uuid-ds2");
         assert_eq!(
-            result.actions.len(),
-            0,
-            "Ambiguous prefix should be rejected"
+            result.actions[0].resolved_name.as_deref(),
+            Some("Dark Souls II")
         );
-        assert_eq!(result.rejected_count, 1);
     }
 
     #[test]
-    fn test_prefix_too_short_for_long_name() {
+    fn test_substring_match_partial_word_in_long_title() {
         let library = vec![(
             "uuid-skyrim".to_string(),
             "The Elder Scrolls V: Skyrim".to_string(),
         )];
-        // "Elder" (5 chars) doesn't start "the elder scrolls..." (prefix match fails on starts_with).
-        // JW("elder", "the elder scrolls v: skyrim") = ~0.63 — well below 0.82 threshold.
-        // So both prefix match and fuzzy match fail → rejected.
+        // "Elder" (5 chars, ≥4 min) is a substring of the title → matches via substring tier.
         let actions = vec![make_validated("game:Elder", 1)];
         let result = resolve_actions(actions, &library, 0);
+        assert_eq!(result.actions.len(), 1, "Substring should match");
+        assert_eq!(result.actions[0].action_id, "game:uuid-skyrim");
+    }
+
+    // ── Substring containment tier tests ──────────────────────────
+
+    #[test]
+    fn test_substring_match_skyrim_base_game() {
+        // "Skyrim" appears in all 3 variants; shortest name (base game) wins
+        let library = vec![
+            (
+                "uuid-skyrim".to_string(),
+                "The Elder Scrolls V: Skyrim".to_string(),
+            ),
+            (
+                "uuid-skyrim-se".to_string(),
+                "The Elder Scrolls V: Skyrim Special Edition".to_string(),
+            ),
+            (
+                "uuid-skyrim-vr".to_string(),
+                "The Elder Scrolls V: Skyrim VR".to_string(),
+            ),
+        ];
+        let result = resolve_game_name("Skyrim", &library);
+        assert!(result.is_some(), "Substring match should find Skyrim");
+        let (id, name) = result.unwrap();
+        assert_eq!(id, "uuid-skyrim");
+        assert_eq!(name, "The Elder Scrolls V: Skyrim");
+    }
+
+    #[test]
+    fn test_substring_match_specific_variant() {
+        let library = vec![
+            (
+                "uuid-skyrim".to_string(),
+                "The Elder Scrolls V: Skyrim".to_string(),
+            ),
+            (
+                "uuid-skyrim-se".to_string(),
+                "The Elder Scrolls V: Skyrim Special Edition".to_string(),
+            ),
+            (
+                "uuid-skyrim-vr".to_string(),
+                "The Elder Scrolls V: Skyrim VR".to_string(),
+            ),
+        ];
+        // "Skyrim VR" only matches the VR variant
+        let result = resolve_game_name("Skyrim VR", &library);
+        assert!(result.is_some());
+        let (id, _) = result.unwrap();
+        assert_eq!(id, "uuid-skyrim-vr");
+
+        // "Skyrim Special Edition" only matches the SE variant
+        let result = resolve_game_name("Skyrim Special Edition", &library);
+        assert!(result.is_some());
+        let (id, _) = result.unwrap();
+        assert_eq!(id, "uuid-skyrim-se");
+    }
+
+    #[test]
+    fn test_substring_match_single_result() {
+        let library = vec![
+            ("uuid-1".to_string(), "Hollow Knight".to_string()),
+            ("uuid-2".to_string(), "Celeste".to_string()),
+        ];
+        // "Hollow" is a substring of only "Hollow Knight"
+        let result = resolve_game_name("Hollow", &library);
+        assert!(result.is_some());
+        let (id, name) = result.unwrap();
+        assert_eq!(id, "uuid-1");
+        assert_eq!(name, "Hollow Knight");
+    }
+
+    #[test]
+    fn test_substring_match_too_short_query() {
+        let library = vec![(
+            "uuid-skyrim".to_string(),
+            "The Elder Scrolls V: Skyrim".to_string(),
+        )];
+        // "Sky" is only 3 chars — below the 4-char minimum for substring matching.
+        // Prefix match also fails. JW score too low. Should be rejected.
+        let result = resolve_game_name("Sky", &library);
+        assert!(result.is_none(), "3-char query should not substring-match");
+    }
+
+    #[test]
+    fn test_substring_match_game_action_resolves() {
+        let library = vec![
+            (
+                "uuid-skyrim".to_string(),
+                "The Elder Scrolls V: Skyrim".to_string(),
+            ),
+            (
+                "uuid-skyrim-se".to_string(),
+                "The Elder Scrolls V: Skyrim Special Edition".to_string(),
+            ),
+        ];
+        // Full action resolution: "favorite:Skyrim" should resolve via substring
+        let actions = vec![make_validated("favorite:Skyrim", 2)];
+        let result = resolve_actions(actions, &library, 0);
+        assert_eq!(result.actions.len(), 1);
+        assert_eq!(result.actions[0].action_id, "favorite:uuid-skyrim");
         assert_eq!(
-            result.actions.len(),
-            0,
-            "Short partial name should not match a much longer title"
+            result.actions[0].resolved_name.as_deref(),
+            Some("The Elder Scrolls V: Skyrim")
         );
-        assert_eq!(result.rejected_count, 1);
     }
 
     // ── Multiple resolution behaviors ───────────────────────────────

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Tag } from "../../types/tags";
 import "../layout/TagFilterPopover.css";
@@ -16,6 +16,12 @@ export function OverlayTagFilter({ onClose }: OverlayTagFilterProps) {
       .then((t) => setTags(t ?? []))
       .catch(() => {});
   }, []);
+
+  const partitionedTags = useMemo(() => {
+    const sel = tags.filter((t) => selected.has(t.id));
+    const unsel = tags.filter((t) => !selected.has(t.id));
+    return { selected: sel, unselected: unsel };
+  }, [tags, selected]);
 
   const handleToggle = (tagId: number) => {
     setSelected((prev) => {
@@ -46,11 +52,24 @@ export function OverlayTagFilter({ onClose }: OverlayTagFilterProps) {
     <div className="tag-filter-popover">
       <div className="tag-filter-popover__title">Filter by Tag</div>
       <div className="tag-filter-popover__list">
-        {tags.map((tag) => (
+        {partitionedTags.selected.map((tag) => (
+          <label key={tag.id} className="tag-filter-popover__item">
+            <input type="checkbox" checked onChange={() => handleToggle(tag.id)} />
+            <span
+              className="tag-filter-popover__swatch"
+              style={{ background: `var(--tag-color-${tag.colorIndex})` }}
+            />
+            <span className="tag-filter-popover__name">{tag.name}</span>
+          </label>
+        ))}
+        {partitionedTags.selected.length > 0 && partitionedTags.unselected.length > 0 && (
+          <div className="tag-filter-popover__selected-divider" />
+        )}
+        {partitionedTags.unselected.map((tag) => (
           <label key={tag.id} className="tag-filter-popover__item">
             <input
               type="checkbox"
-              checked={selected.has(tag.id)}
+              checked={false}
               onChange={() => handleToggle(tag.id)}
             />
             <span

@@ -134,6 +134,13 @@
   flex-shrink: 0;
 }
 
+.category-filter__selected-divider {
+  height: 1px;
+  background: var(--color-border-subtle);
+  margin: var(--space-xs) 0;
+  flex-shrink: 0;
+}
+
 .category-filter__empty {
   padding: var(--space-md);
   text-align: center;

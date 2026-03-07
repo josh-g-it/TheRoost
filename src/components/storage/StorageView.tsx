@@ -49,6 +49,14 @@ function getSourceColor(source: string): string {
 
 const DEFAULT_VISIBLE = 20;
 
+// Module-level cache — persists across navigations but not app restarts
+let cachedScanResult: StorageScanResult | null = null;
+
+/** Reset the module-level scan cache (for tests only). */
+export function __resetStorageCache() {
+  cachedScanResult = null;
+}
+
 interface ScanProgress {
   scanned: number;
   total: number;
@@ -388,8 +396,10 @@ function GamesBySize({
 // ── Main StorageView ────────────────────────────────────────
 
 export function StorageView() {
-  const [result, setResult] = useState<StorageScanResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const hasCached = cachedScanResult !== null;
+  const [result, setResult] = useState<StorageScanResult | null>(cachedScanResult);
+  const [loading, setLoading] = useState(!hasCached);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<ScanProgress | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -412,14 +422,25 @@ export function StorageView() {
     };
   }, []);
 
-  const runScan = useCallback(async () => {
+  const runScan = useCallback(async (isManual = false) => {
     if (scanInFlight.current) return;
     scanInFlight.current = true;
-    setLoading(true);
-    setError(null);
-    setProgress(null);
-    setShowAll(false);
-    setFilters({ drive: null, source: null });
+
+    const hasExistingData = cachedScanResult !== null;
+
+    if (hasExistingData && !isManual) {
+      // Background refresh — don't clear existing data or filters
+      setRefreshing(true);
+    } else {
+      // First load or manual rescan — show full loading state
+      setLoading(true);
+      setError(null);
+      setProgress(null);
+      if (isManual) {
+        setShowAll(false);
+        setFilters({ drive: null, source: null });
+      }
+    }
 
     const unlisten = await listen<ScanProgress>("storage-scan-progress", (event) =>
       setProgress(event.payload),
@@ -427,12 +448,18 @@ export function StorageView() {
 
     try {
       const data = await storageApi.scanStorage();
+      cachedScanResult = data;
       setResult(data);
+      setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // Only show error if we don't have cached data to fall back on
+      if (!hasExistingData) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       unlisten();
       setLoading(false);
+      setRefreshing(false);
       scanInFlight.current = false;
     }
   }, []);
@@ -522,7 +549,7 @@ export function StorageView() {
         actions={
           <button
             className="storage-view__toggle-btn"
-            onClick={runScan}
+            onClick={() => runScan(true)}
             disabled={loading}
             style={{ display: "flex", alignItems: "center", gap: 6 }}
           >
@@ -628,10 +655,21 @@ export function StorageView() {
 
             {/* ── Scan info ──────────────────────────────── */}
             <div className="storage-view__scan-info">
-              Scanned in{" "}
-              {result.scanDurationMs < 1000
-                ? `${result.scanDurationMs}ms`
-                : `${(result.scanDurationMs / 1000).toFixed(1)}s`}
+              {refreshing ? (
+                <span className="storage-view__refreshing">
+                  <AppIcon name="refresh" size={11} />
+                  {progress
+                    ? `Updating... ${progress.scanned}/${progress.total}`
+                    : "Updating..."}
+                </span>
+              ) : (
+                <>
+                  Scanned in{" "}
+                  {result.scanDurationMs < 1000
+                    ? `${result.scanDurationMs}ms`
+                    : `${(result.scanDurationMs / 1000).toFixed(1)}s`}
+                </>
+              )}
             </div>
           </>
         )}
@@ -664,7 +702,7 @@ export function StorageView() {
                   ),
                   setTimeout(() => {
                     useLibraryStore.getState().scanLocalOnly();
-                    runScan();
+                    runScan(true);
                   }, UNINSTALL_RESCAN_SECOND_MS),
                 );
                 setContextMenu(null);

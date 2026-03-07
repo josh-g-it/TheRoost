@@ -118,13 +118,18 @@ export function AssistantView() {
     load();
   }, []);
 
-  // Track local manual ends to prevent event handler from double-acting
+  // Track local manual ends to prevent event handler from double-acting.
+  // Set BEFORE the IPC call via onConversationEnding so the flag is true
+  // when the ai-conversation-ended event arrives during the IPC. (KI #8)
   const localManualEndRef = useRef(false);
+
+  const handleConversationEnding = useCallback(() => {
+    localManualEndRef.current = true;
+  }, []);
 
   // Handle locally-triggered conversation end (called after compaction completes)
   const handleConversationEnd = useCallback(async () => {
     if (!activeAvatar) return;
-    localManualEndRef.current = true;
     try {
       const newConvId = await assistantApi.startConversation(activeAvatar.id);
       setConversationId(newConvId);
@@ -437,6 +442,7 @@ export function AssistantView() {
                 avatarId={activeAvatar.id}
                 conversationId={conversationId}
                 onConversationStart={handleConversationStart}
+                onConversationEnding={handleConversationEnding}
                 onConversationEnd={handleConversationEnd}
                 isFirstConversation={isFirstConversation}
                 onStaleReset={handleStaleReset}
