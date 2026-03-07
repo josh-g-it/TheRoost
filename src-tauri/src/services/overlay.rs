@@ -100,7 +100,8 @@ pub fn create_overlay(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>>
         let size = m.size();
         let pos = m.position();
         let _ = win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
-            size.width, size.height,
+            size.width,
+            size.height,
         )));
         let _ = win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
             pos.x, pos.y,

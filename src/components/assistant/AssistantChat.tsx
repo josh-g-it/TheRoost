@@ -21,6 +21,7 @@ import { parseReviewFromResponse } from "../../utils/reviewParser";
 import { stripActions } from "../../utils/actionParser";
 import { logger } from "../../utils/logger";
 import type { ResolvedAction, ActionResult, PaletteContext } from "../../types";
+import type { AiMessage } from "../../types/assistant";
 import { AppIcon } from "../common/AppIcon";
 import { ReviewConfirmation } from "./ReviewConfirmation";
 import { ActionConfirmationCard } from "./ActionConfirmationCard";

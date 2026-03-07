@@ -311,7 +311,10 @@ pub async fn send_message_and_stream(
         // serializes these calls, so the second one sees the first's stored
         // messages and returns early — preventing duplicate greetings.
         if skip_user_persist && msg_count > 0 {
-            tracing::debug!(conv_id, "Skipping duplicate auto-greeting (conversation already has messages)");
+            tracing::debug!(
+                conv_id,
+                "Skipping duplicate auto-greeting (conversation already has messages)"
+            );
             return Ok(());
         }
     }

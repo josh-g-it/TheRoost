@@ -200,9 +200,7 @@ fn resolve_game_name(query: &str, library: &[(String, String)]) -> Option<(Strin
         if substring_matches.len() > 1 {
             // Multiple matches — prefer the shortest name (most specific).
             // e.g., "Skyrim" matches 3 variants; shortest is the base game.
-            let shortest = substring_matches
-                .iter()
-                .min_by_key(|(_, name)| name.len());
+            let shortest = substring_matches.iter().min_by_key(|(_, name)| name.len());
             if let Some((id, name)) = shortest {
                 return Some((id.to_string(), name.to_string()));
             }
