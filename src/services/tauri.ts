@@ -272,12 +272,16 @@ export const newsApi = {
     invoke<GameNewsItem[]>("fetch_game_news", { gameId, count: count ?? 10 }),
   fetchFollowedGames: (steamId: string) =>
     invoke<number[]>("fetch_followed_games", { steamId }),
-  fetchNewsFeed: (force?: boolean) =>
-    invoke<FeedNewsItem[]>("fetch_news_feed", { force: force ?? false }),
+  fetchNewsFeed: (force?: boolean, blockedSources?: string[]) =>
+    invoke<FeedNewsItem[]>("fetch_news_feed", {
+      force: force ?? false,
+      blockedSources: blockedSources ?? null,
+    }),
   markNewsRead: (newsId: string, gameId: string) =>
     invoke<void>("mark_news_read", { newsId, gameId }),
   getUnreadNewsCount: () => invoke<number>("get_unread_news_count"),
   clearNewsCache: () => invoke<number>("clear_news_cache"),
+  getNewsSources: () => invoke<string[]>("get_news_sources"),
 };
 
 export const savedFiltersApi = {
@@ -476,6 +480,7 @@ export const assistantApi = {
     hidden?: boolean,
     actionFeedback?: string,
     maxOutputTokens?: number,
+    pageContext?: string,
   ) =>
     invoke<void>("send_message", {
       conversationId,
@@ -484,6 +489,7 @@ export const assistantApi = {
       hidden,
       actionFeedback,
       maxOutputTokens,
+      pageContext,
     }),
   abandonConversation: (conversationId: string) =>
     invoke<void>("abandon_conversation", { conversationId }),

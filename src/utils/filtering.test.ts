@@ -74,39 +74,40 @@ describe("filterGames", () => {
     expect(result.map((g) => g.gameId)).toEqual(["g1", "g2"]);
   });
 
-  it("filters by genre IDs (OR logic)", () => {
+  it("filters by steam tag names (OR logic)", () => {
     const cache = new Map<string, StoreMetadata>([
-      ["g1", makeMeta("g1", { genres: [{ id: "1", description: "Action" }] })],
-      ["g2", makeMeta("g2", { genres: [{ id: "2", description: "Strategy" }] })],
+      ["g1", makeMeta("g1", { steamTags: [{ name: "RPG", count: 100 }] })],
+      ["g2", makeMeta("g2", { steamTags: [{ name: "Strategy", count: 80 }] })],
       [
         "g3",
         makeMeta("g3", {
-          genres: [
-            { id: "1", description: "Action" },
-            { id: "3", description: "RPG" },
+          steamTags: [
+            { name: "Action", count: 90 },
+            { name: "RPG", count: 50 },
           ],
         }),
       ],
     ]);
     const result = filterGames(
       games,
-      makeFilters({ filterByGenreIds: ["2", "3"] }),
+      makeFilters({ filterBySteamTagNames: ["Strategy", "RPG"] }),
       undefined,
       undefined,
       undefined,
       cache,
     );
-    expect(result).toHaveLength(2);
-    expect(result.map((g) => g.gameId)).toEqual(["g2", "g3"]);
+    // g1 (RPG), g2 (Strategy), g3 (RPG+Action) all match — OR logic
+    expect(result).toHaveLength(3);
+    expect(result.map((g) => g.gameId)).toEqual(["g1", "g2", "g3"]);
   });
 
-  it("excludes games with no metadata when genre filter is active", () => {
+  it("excludes games with no metadata when steam tag filter is active", () => {
     const cache = new Map<string, StoreMetadata>([
-      ["g1", makeMeta("g1", { genres: [{ id: "1", description: "Action" }] })],
+      ["g1", makeMeta("g1", { steamTags: [{ name: "Action", count: 100 }] })],
     ]);
     const result = filterGames(
       games,
-      makeFilters({ filterByGenreIds: ["1"] }),
+      makeFilters({ filterBySteamTagNames: ["Action"] }),
       undefined,
       undefined,
       undefined,
@@ -201,10 +202,43 @@ describe("extractAllGenres", () => {
     ]);
     const genres = extractAllGenres(cache);
     expect(genres).toEqual([
-      { id: "2", description: "RPG", count: 2 },
-      { id: "1", description: "Action", count: 1 },
-      { id: "3", description: "Indie", count: 1 },
+      { id: "2", description: "RPG", count: 2, aliasIds: [] },
+      { id: "1", description: "Action", count: 1, aliasIds: [] },
+      { id: "3", description: "Indie", count: 1, aliasIds: [] },
     ]);
+  });
+
+  it("merges genres with same description but different IDs", () => {
+    const cache = new Map<string, StoreMetadata>([
+      [
+        "g1",
+        makeMeta("g1", {
+          genres: [{ id: "28", description: "RPG" }],
+        }),
+      ],
+      [
+        "g2",
+        makeMeta("g2", {
+          genres: [{ id: "99", description: "RPG" }],
+        }),
+      ],
+      [
+        "g3",
+        makeMeta("g3", {
+          genres: [
+            { id: "28", description: "RPG" },
+            { id: "1", description: "Action" },
+          ],
+        }),
+      ],
+    ]);
+    const genres = extractAllGenres(cache);
+    // "RPG" appears 3 times across 2 IDs — merged into one entry
+    const rpg = genres.find((g) => g.description === "RPG")!;
+    expect(rpg.count).toBe(3);
+    expect(rpg.id).toBe("28"); // canonical: higher count
+    expect(rpg.aliasIds).toEqual(["99"]);
+    expect(genres).toHaveLength(2); // RPG + Action
   });
 });
 

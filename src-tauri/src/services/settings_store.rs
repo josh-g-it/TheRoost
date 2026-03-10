@@ -49,15 +49,25 @@ pub fn save_settings(
     app_handle: &tauri::AppHandle,
     settings: &AppSettings,
 ) -> Result<(), AppError> {
-    // Store API key securely, separate from the JSON file
-    if let Some(ref key) = settings.steam_api_key {
-        if !key.is_empty() {
-            credential_store::store_api_key(key)?;
-        } else {
+    // Store API key securely, separate from the JSON file.
+    // Only write to credential store if the key actually changed to avoid
+    // redundant writes on every settings save (e.g., bubble toggle).
+    match (&settings.steam_api_key, credential_store::load_api_key()) {
+        (Some(key), _) if key.is_empty() => {
             credential_store::delete_api_key()?;
         }
-    } else {
-        credential_store::delete_api_key()?;
+        (Some(key), Ok(Some(ref existing))) if key == existing => {
+            // Key unchanged — skip credential store write
+        }
+        (Some(key), _) => {
+            credential_store::store_api_key(key)?;
+        }
+        (None, Ok(Some(_))) => {
+            credential_store::delete_api_key()?;
+        }
+        (None, _) => {
+            // No key to store, none stored — nothing to do
+        }
     }
 
     // Save settings without the API key in the JSON file

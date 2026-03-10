@@ -145,7 +145,19 @@ export function finalizeStream(state: StreamParserState): {
 } {
   if (!state.delimiterFound) {
     // No delimiter — trailing buffer is just regular text
-    return { displayText: state.trailingBuffer.trimEnd(), actions: [] };
+    // Log if the response looks like it might have intended actions
+    const trail = state.trailingBuffer;
+    if (trail.includes("ACTIONS") || trail.includes("actionId")) {
+      logger.warn(
+        "actionParser",
+        "ai",
+        "Delimiter not found but response mentions actions",
+        {
+          trailingSnippet: trail.slice(-200),
+        },
+      );
+    }
+    return { displayText: trail.trimEnd(), actions: [] };
   }
 
   // Delimiter found — parse the actions buffer
@@ -185,6 +197,7 @@ export function finalizeStream(state: StreamParserState): {
       "actionParser",
       "ai",
       `Malformed streamed action JSON from AI: ${String(e)}`,
+      { rawBuffer: trimmed.slice(0, 500) },
     );
     return { displayText: "", actions: [] };
   }

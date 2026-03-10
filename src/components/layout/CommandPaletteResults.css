@@ -95,25 +95,6 @@
   color: var(--color-accent);
 }
 
-.command-palette__ai-loading .command-palette__result-label {
-  color: var(--color-text-tertiary);
-  font-style: italic;
-}
-
-.command-palette__ai-loading .command-palette__ai-icon {
-  animation: ai-pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes ai-pulse {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
 .command-palette__ai-tier-badge {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
@@ -121,48 +102,6 @@
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-accent) 15%, transparent);
   color: var(--color-accent);
-}
-
-/* Ask Assistant button row */
-.command-palette__ask-btn {
-  cursor: pointer;
-}
-
-/* AI response panel (summary + actions) */
-.command-palette__ai-response {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  margin: 0 var(--space-xs);
-  border-left: 2px solid var(--color-accent);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
-}
-
-.command-palette__ai-response .command-palette__result-icon {
-  margin-top: 2px;
-}
-
-.command-palette__ai-summary {
-  flex: 1;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* AI-suggested action rows */
-.command-palette__ai-action {
-  margin-left: var(--space-md);
-  border-left: 2px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
-}
-
-/* Game mention rows extracted from summary */
-.command-palette__ai-mention {
-  margin-left: var(--space-md);
-  border-left: 2px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
 .command-palette__empty {

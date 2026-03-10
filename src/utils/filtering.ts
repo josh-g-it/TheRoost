@@ -42,32 +42,16 @@ export function filterGames(
       }
     }
 
-    // Genre filtering (OR logic — game has any of the selected genres)
-    if (filters.filterByGenreIds.length > 0 && metadataCache) {
-      const meta = metadataCache.get(game.gameId);
-      if (!meta || meta.genres.length === 0) return false;
-      const gameGenreIds = meta.genres.map((g) => g.id);
-      if (!filters.filterByGenreIds.some((id) => gameGenreIds.includes(id))) {
-        return false;
-      }
-    }
-
-    // Steam community tag filtering (OR logic)
+    // Steam community tag filtering (OR logic, case-insensitive)
     if ((filters.filterBySteamTagNames ?? []).length > 0 && metadataCache) {
       const meta = metadataCache.get(game.gameId);
       if (!meta || meta.steamTags.length === 0) return false;
-      const gameTagNames = meta.steamTags.map((t) => t.name);
-      if (!filters.filterBySteamTagNames.some((name) => gameTagNames.includes(name))) {
-        return false;
-      }
-    }
-
-    // Category filtering (OR logic)
-    if ((filters.filterByCategoryIds ?? []).length > 0 && metadataCache) {
-      const meta = metadataCache.get(game.gameId);
-      if (!meta || meta.categories.length === 0) return false;
-      const gameCatIds = meta.categories.map((c) => c.id);
-      if (!filters.filterByCategoryIds.some((id) => gameCatIds.includes(id))) {
+      const gameTagNames = new Set(meta.steamTags.map((t) => t.name.toLowerCase()));
+      if (
+        !filters.filterBySteamTagNames.some((name) =>
+          gameTagNames.has(name.toLowerCase()),
+        )
+      ) {
         return false;
       }
     }
@@ -99,59 +83,110 @@ export function filterGames(
   });
 }
 
-/** Extract all unique genres from metadata cache, sorted by frequency. */
+/** Extract all unique genres from metadata cache, sorted by frequency.
+ *  Deduplicates by description (case-insensitive) to merge genre IDs
+ *  that share the same display name (e.g. two different IDs both called "RPG").
+ *  The ID with the highest game count wins as the canonical ID. */
 export function extractAllGenres(
   metadataCache: Map<string, StoreMetadata>,
-): { id: string; description: string; count: number }[] {
-  const genreMap = new Map<string, { description: string; count: number }>();
+): { id: string; description: string; count: number; aliasIds: string[] }[] {
+  // First pass: count per ID
+  const byId = new Map<string, { description: string; count: number }>();
   for (const meta of metadataCache.values()) {
     for (const genre of meta.genres) {
-      const existing = genreMap.get(genre.id);
+      const existing = byId.get(genre.id);
       if (existing) {
         existing.count++;
       } else {
-        genreMap.set(genre.id, { description: genre.description, count: 1 });
+        byId.set(genre.id, { description: genre.description, count: 1 });
       }
     }
   }
-  return [...genreMap.entries()]
-    .map(([id, { description, count }]) => ({ id, description, count }))
-    .sort((a, b) => b.count - a.count);
+  // Second pass: merge by description (case-insensitive)
+  const byDesc = new Map<
+    string,
+    { id: string; description: string; count: number; aliasIds: string[] }
+  >();
+  for (const [id, { description, count }] of byId) {
+    const key = description.toLowerCase();
+    const existing = byDesc.get(key);
+    if (existing) {
+      existing.count += count;
+      existing.aliasIds.push(id);
+      // Keep the ID with the higher count as canonical
+      if (count > (byId.get(existing.id)?.count ?? 0)) {
+        existing.aliasIds.push(existing.id);
+        existing.aliasIds = existing.aliasIds.filter((a) => a !== id);
+        existing.id = id;
+        existing.description = description;
+      }
+    } else {
+      byDesc.set(key, { id, description, count, aliasIds: [] });
+    }
+  }
+  return [...byDesc.values()].sort((a, b) => b.count - a.count);
 }
 
-/** Extract all unique Steam community tags from metadata cache, with game counts. */
+/** Extract all unique Steam community tags from metadata cache, with game counts.
+ *  Deduplicates by name (case-insensitive) — keeps the casing with the highest count. */
 export function extractAllSteamTags(
   metadataCache: Map<string, StoreMetadata>,
 ): { name: string; count: number }[] {
-  const tagCounts = new Map<string, number>();
+  const tagMap = new Map<string, { name: string; count: number }>();
   for (const meta of metadataCache.values()) {
     for (const tag of meta.steamTags) {
-      tagCounts.set(tag.name, (tagCounts.get(tag.name) ?? 0) + 1);
-    }
-  }
-  return [...tagCounts.entries()]
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count);
-}
-
-/** Extract all unique categories from metadata cache, sorted by frequency. */
-export function extractAllCategories(
-  metadataCache: Map<string, StoreMetadata>,
-): { id: number; description: string; count: number }[] {
-  const catMap = new Map<number, { description: string; count: number }>();
-  for (const meta of metadataCache.values()) {
-    for (const cat of meta.categories) {
-      const existing = catMap.get(cat.id);
+      const key = tag.name.toLowerCase();
+      const existing = tagMap.get(key);
       if (existing) {
         existing.count++;
       } else {
-        catMap.set(cat.id, { description: cat.description, count: 1 });
+        tagMap.set(key, { name: tag.name, count: 1 });
       }
     }
   }
-  return [...catMap.entries()]
-    .map(([id, { description, count }]) => ({ id, description, count }))
-    .sort((a, b) => b.count - a.count);
+  return [...tagMap.values()].sort((a, b) => b.count - a.count);
+}
+
+/** Extract all unique categories from metadata cache, sorted by frequency.
+ *  Deduplicates by description (case-insensitive) to merge category IDs
+ *  that share the same display name. The ID with the highest count wins. */
+export function extractAllCategories(
+  metadataCache: Map<string, StoreMetadata>,
+): { id: number; description: string; count: number; aliasIds: number[] }[] {
+  // First pass: count per ID
+  const byId = new Map<number, { description: string; count: number }>();
+  for (const meta of metadataCache.values()) {
+    for (const cat of meta.categories) {
+      const existing = byId.get(cat.id);
+      if (existing) {
+        existing.count++;
+      } else {
+        byId.set(cat.id, { description: cat.description, count: 1 });
+      }
+    }
+  }
+  // Second pass: merge by description (case-insensitive)
+  const byDesc = new Map<
+    string,
+    { id: number; description: string; count: number; aliasIds: number[] }
+  >();
+  for (const [id, { description, count }] of byId) {
+    const key = description.toLowerCase();
+    const existing = byDesc.get(key);
+    if (existing) {
+      existing.count += count;
+      existing.aliasIds.push(id);
+      if (count > (byId.get(existing.id)?.count ?? 0)) {
+        existing.aliasIds.push(existing.id);
+        existing.aliasIds = existing.aliasIds.filter((a) => a !== id);
+        existing.id = id;
+        existing.description = description;
+      }
+    } else {
+      byDesc.set(key, { id, description, count, aliasIds: [] });
+    }
+  }
+  return [...byDesc.values()].sort((a, b) => b.count - a.count);
 }
 
 /** Extract all unique sources from the games list, with game counts. */

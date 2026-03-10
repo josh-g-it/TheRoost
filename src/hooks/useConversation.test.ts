@@ -80,6 +80,7 @@ describe("useConversation", () => {
       undefined,
       undefined,
       undefined,
+      "Page: Unknown",
     );
     expect(result.current.messages).toHaveLength(1);
     expect(result.current.messages[0].role).toBe("user");
@@ -194,6 +195,7 @@ describe("useConversation", () => {
       undefined,
       undefined,
       undefined,
+      "Page: Unknown",
     );
   });
 
@@ -595,6 +597,7 @@ describe("useConversation", () => {
       true,
       undefined,
       undefined,
+      undefined,
     );
     // Hidden messages should not add a user message to local state
     expect(result.current.messages).toHaveLength(0);
@@ -619,6 +622,7 @@ describe("useConversation", () => {
       undefined,
       feedback,
       undefined,
+      "Page: Unknown",
     );
     // User message should show clean text, not the feedback
     expect(result.current.messages).toHaveLength(1);
@@ -642,6 +646,7 @@ describe("useConversation", () => {
       undefined,
       undefined,
       4096,
+      "Page: Unknown",
     );
   });
 
@@ -969,20 +974,7 @@ describe("useConversation", () => {
     expect(loaded[0].content).toBe("Here are your RPGs!");
   });
 
-  it("re-resolves actions from last assistant message on history load", async () => {
-    const resolvedActions = [
-      {
-        actionId: "sort:playtime",
-        originalActionId: "sort:playtime",
-        tier: 1,
-        description: "Sort by playtime",
-      },
-    ];
-    mockValidateAndResolveAiActions.mockResolvedValue({
-      actions: resolvedActions,
-      rejectedCount: 0,
-    });
-
+  it("does not re-resolve actions from history (v1.12.1 auto-execute safety)", async () => {
     const historyWithActions = [
       {
         id: "m1",
@@ -1004,11 +996,14 @@ describe("useConversation", () => {
       await result.current.loadHistory("c1");
     });
 
-    // Wait for the async validateAndResolveAiActions to complete
     await act(async () => {});
 
-    expect(mockValidateAndResolveAiActions).toHaveBeenCalled();
-    expect(result.current.pendingActions).toEqual(resolvedActions);
+    // v1.12.1: Actions are NOT re-resolved from history to prevent auto-execution
+    // of stale actions (e.g., nav actions bouncing user away on component remount)
+    expect(mockValidateAndResolveAiActions).not.toHaveBeenCalled();
+    expect(result.current.pendingActions).toEqual([]);
+    // But the action content should still be stripped for display
+    expect(result.current.messages[0].content).toBe("Here are your RPGs!");
   });
 
   it("does not re-resolve actions if a user message follows the action message", async () => {

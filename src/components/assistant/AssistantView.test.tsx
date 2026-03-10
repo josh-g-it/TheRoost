@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import { AssistantView } from "./AssistantView";
+import { ConversationProvider } from "./ConversationProvider";
 import { makeAiAvatar, makeAiPersonality } from "../../test/factories";
 
 type ListenCallback = (event: { payload: unknown }) => void;
@@ -113,7 +114,11 @@ describe("AssistantView", () => {
   it("shows first-run wizard when no active avatar", async () => {
     mockGetActiveAvatar.mockResolvedValue(null);
 
-    render(<AssistantView />);
+    render(
+      <ConversationProvider>
+        <AssistantView />
+      </ConversationProvider>,
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Create Your Assistant")).toBeInTheDocument();
@@ -125,7 +130,11 @@ describe("AssistantView", () => {
       makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
     );
 
-    render(<AssistantView />);
+    render(
+      <ConversationProvider>
+        <AssistantView />
+      </ConversationProvider>,
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Chat")).toBeInTheDocument();
@@ -140,7 +149,11 @@ describe("AssistantView", () => {
       makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
     );
 
-    render(<AssistantView />);
+    render(
+      <ConversationProvider>
+        <AssistantView />
+      </ConversationProvider>,
+    );
 
     await waitFor(() => {
       expect(screen.getAllByText("Buddy").length).toBeGreaterThanOrEqual(1);
@@ -153,7 +166,11 @@ describe("AssistantView", () => {
       makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
     );
 
-    render(<AssistantView />);
+    render(
+      <ConversationProvider>
+        <AssistantView />
+      </ConversationProvider>,
+    );
 
     await waitFor(() => {
       expect(screen.getByText("B")).toBeInTheDocument();
@@ -165,7 +182,11 @@ describe("AssistantView", () => {
       makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
     );
 
-    render(<AssistantView />);
+    render(
+      <ConversationProvider>
+        <AssistantView />
+      </ConversationProvider>,
+    );
 
     await waitFor(() => {
       expect(screen.getByText("In conversation")).toBeInTheDocument();
@@ -177,7 +198,11 @@ describe("AssistantView", () => {
       makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
     );
 
-    render(<AssistantView />);
+    render(
+      <ConversationProvider>
+        <AssistantView />
+      </ConversationProvider>,
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Assistant")).toBeInTheDocument();
@@ -197,7 +222,11 @@ describe("AssistantView", () => {
       .mockResolvedValueOnce("conv-1") // initial mount
       .mockResolvedValueOnce("conv-2"); // stale reset
 
-    render(<AssistantView />);
+    render(
+      <ConversationProvider>
+        <AssistantView />
+      </ConversationProvider>,
+    );
 
     await waitFor(() => {
       expect(mockStartConversation).toHaveBeenCalledTimes(2);
@@ -212,7 +241,11 @@ describe("AssistantView", () => {
       .mockResolvedValueOnce("conv-1") // initial
       .mockResolvedValueOnce("conv-2"); // auto-restart
 
-    render(<AssistantView />);
+    render(
+      <ConversationProvider>
+        <AssistantView />
+      </ConversationProvider>,
+    );
 
     await waitFor(() => {
       expect(screen.getByText("In conversation")).toBeInTheDocument();
@@ -238,7 +271,11 @@ describe("AssistantView", () => {
       .mockResolvedValueOnce("conv-1")
       .mockRejectedValueOnce(new Error("Network error"));
 
-    render(<AssistantView />);
+    render(
+      <ConversationProvider>
+        <AssistantView />
+      </ConversationProvider>,
+    );
 
     await waitFor(() => {
       expect(screen.getByText("In conversation")).toBeInTheDocument();
@@ -261,7 +298,11 @@ describe("AssistantView", () => {
       makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
     );
 
-    render(<AssistantView />);
+    render(
+      <ConversationProvider>
+        <AssistantView />
+      </ConversationProvider>,
+    );
 
     await waitFor(() => {
       expect(screen.getByText("In conversation")).toBeInTheDocument();
@@ -292,7 +333,11 @@ describe("AssistantView", () => {
       );
       mockCheckOrphanedConversations.mockResolvedValue(["orphan-conv-1"]);
 
-      render(<AssistantView />);
+      render(
+        <ConversationProvider>
+          <AssistantView />
+        </ConversationProvider>,
+      );
 
       // Should NOT show any recovery banner
       await waitFor(() => {
@@ -315,7 +360,11 @@ describe("AssistantView", () => {
       );
       mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
 
-      render(<AssistantView />);
+      render(
+        <ConversationProvider>
+          <AssistantView />
+        </ConversationProvider>,
+      );
 
       await waitFor(() => {
         expect(
@@ -335,7 +384,11 @@ describe("AssistantView", () => {
         ["compact-conv-1", "avatar-1"],
       ]);
 
-      render(<AssistantView />);
+      render(
+        <ConversationProvider>
+          <AssistantView />
+        </ConversationProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText("Compact Now")).toBeInTheDocument();
@@ -356,7 +409,11 @@ describe("AssistantView", () => {
       );
       mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
 
-      render(<AssistantView />);
+      render(
+        <ConversationProvider>
+          <AssistantView />
+        </ConversationProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText("Compact Now")).toBeInTheDocument();
@@ -380,7 +437,11 @@ describe("AssistantView", () => {
       mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
       mockRetryCompaction.mockRejectedValue(new Error("API offline"));
 
-      render(<AssistantView />);
+      render(
+        <ConversationProvider>
+          <AssistantView />
+        </ConversationProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText("Compact Now")).toBeInTheDocument();
@@ -407,7 +468,11 @@ describe("AssistantView", () => {
         clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
       });
 
-      render(<AssistantView />);
+      render(
+        <ConversationProvider>
+          <AssistantView />
+        </ConversationProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText("Copy Raw Data")).toBeInTheDocument();
@@ -431,7 +496,11 @@ describe("AssistantView", () => {
       );
       mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
 
-      render(<AssistantView />);
+      render(
+        <ConversationProvider>
+          <AssistantView />
+        </ConversationProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText("Paste Response")).toBeInTheDocument();
@@ -453,7 +522,11 @@ describe("AssistantView", () => {
         ["compact-conv-1", "avatar-1"],
       ]);
 
-      render(<AssistantView />);
+      render(
+        <ConversationProvider>
+          <AssistantView />
+        </ConversationProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText("Paste Response")).toBeInTheDocument();
@@ -493,7 +566,11 @@ describe("AssistantView", () => {
       mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
       mockApplyExternalCompaction.mockRejectedValue(new Error("Summary cannot be empty"));
 
-      render(<AssistantView />);
+      render(
+        <ConversationProvider>
+          <AssistantView />
+        </ConversationProvider>,
+      );
 
       // Wait for compaction banner to appear
       await waitFor(() => {
@@ -536,7 +613,11 @@ describe("AssistantView", () => {
       );
       mockGetCompactionPendingConversations.mockResolvedValue([["compact-conv-1", "a1"]]);
 
-      render(<AssistantView />);
+      render(
+        <ConversationProvider>
+          <AssistantView />
+        </ConversationProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText("Paste Response")).toBeInTheDocument();

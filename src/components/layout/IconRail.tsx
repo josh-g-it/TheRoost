@@ -7,13 +7,13 @@ import { useAppVersion } from "../../hooks/useAppVersion";
 import type { RailMode } from "../../types";
 import type { IconName } from "../../utils/icons";
 import { AppIcon } from "../common/AppIcon";
+import { Aicon } from "./Aicon";
 import { logger } from "../../utils/logger";
 import roostLogo from "../../assets/images/theroost.png";
 import "./IconRail.css";
 
 const navItems: { path: string; label: string; icon: IconName }[] = [
   { path: "/library", label: "Library", icon: "library" },
-  { path: "/assistant", label: "Assistant", icon: "assistant" },
   { path: "/activity", label: "Activity", icon: "activity" },
   { path: "/profile", label: "Profile", icon: "profile" },
   { path: "/notes", label: "Notes", icon: "notes" },
@@ -37,9 +37,18 @@ const RAIL_MODE_LABELS: Record<RailMode, string> = {
 interface IconRailProps {
   onCommandCenterToggle: () => void;
   railMode: RailMode;
+  bubbleExpanded: boolean;
+  onToggleBubble: () => void;
+  aiconRef?: React.RefObject<HTMLButtonElement>;
 }
 
-export function IconRail({ onCommandCenterToggle, railMode }: IconRailProps) {
+export function IconRail({
+  onCommandCenterToggle,
+  railMode,
+  bubbleExpanded,
+  onToggleBubble,
+  aiconRef,
+}: IconRailProps) {
   const settings = useSettingsStore((s) => s.settings);
   const saveSettings = useSettingsStore((s) => s.saveSettings);
   const appVersion = useAppVersion();
@@ -101,6 +110,14 @@ export function IconRail({ onCommandCenterToggle, railMode }: IconRailProps) {
           </NavLink>
         ))}
       </nav>
+
+      <div className="icon-rail__aicon-area">
+        <Aicon
+          ref={aiconRef}
+          onToggleBubble={onToggleBubble}
+          bubbleExpanded={bubbleExpanded}
+        />
+      </div>
 
       <div className="icon-rail__footer">
         <button

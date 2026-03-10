@@ -15,8 +15,8 @@ import {
   processChunk,
   finalizeStream,
   stripActions,
-  parseActionsFromContent,
 } from "../utils/actionParser";
+import { buildPageContext } from "../utils/pageContext";
 import type { StreamParserState } from "../utils/actionParser";
 import { useEventListener } from "./useEventListener";
 
@@ -131,6 +131,13 @@ export function useConversation({
           assistantApi
             .validateAndResolveAiActions(result.actions)
             .then((resolved) => {
+              logger.info("useConversation", "ai", "Actions validated", {
+                validCount: resolved.actions.length,
+                rejectedCount: resolved.rejectedCount,
+                actions: resolved.actions.map(
+                  (a) => `${a.originalActionId} → ${a.actionId} (T${a.tier})`,
+                ),
+              });
               if (resolved.actions.length > 0) {
                 setPendingActions(resolved.actions);
               }
@@ -261,46 +268,16 @@ export function useConversation({
     try {
       const history = await assistantApi.getConversationHistory(convId);
 
-      // Strip ---ACTIONS--- from all messages for display, and re-parse
-      // actions from the last assistant message if no user message follows it.
-      let lastActionIdx = -1;
-      const cleaned = history.map((msg, i) => {
+      // Strip ---ACTIONS--- from all messages for display.
+      // v1.12.1: We no longer restore actions from history. With auto-execute (Phase D),
+      // replaying them on component remount would cause unintended re-execution (e.g.,
+      // nav actions bouncing the user away from /assistant).
+      const cleaned = history.map((msg) => {
         if (msg.role === "assistant" && msg.content.includes("---ACTIONS---")) {
-          lastActionIdx = i;
           return { ...msg, content: stripActions(msg.content) };
         }
         return msg;
       });
-
-      // If the last assistant message with actions has no subsequent user message,
-      // re-resolve the actions so the "Run Actions" button reappears.
-      if (lastActionIdx >= 0) {
-        const hasUserAfter = history
-          .slice(lastActionIdx + 1)
-          .some((m) => m.role === "user");
-        if (!hasUserAfter) {
-          const { actions } = parseActionsFromContent(history[lastActionIdx].content);
-          if (actions.length > 0) {
-            assistantApi
-              .validateAndResolveAiActions(actions)
-              .then((resolved) => {
-                if (resolved.actions.length > 0) {
-                  setPendingActions(resolved.actions);
-                }
-              })
-              .catch((err) => {
-                logger.warn(
-                  "useConversation",
-                  "ai",
-                  "Failed to re-resolve history actions",
-                  {
-                    error: getErrorMessage(err),
-                  },
-                );
-              });
-          }
-        }
-      }
 
       setMessages(cleaned);
       logger.info("useConversation", "api", "Loaded conversation history", {
@@ -374,6 +351,11 @@ export function useConversation({
       parserStateRef.current = null;
 
       try {
+        // Build lightweight page context (~20-30 tokens) for the AI to know
+        // what the user is looking at. Only include for visible user messages;
+        // hidden messages (auto-greetings) don't need page context.
+        const pageContext = options?.hidden ? undefined : buildPageContext();
+
         await assistantApi.sendMessage(
           conversationId,
           avatarId,
@@ -381,6 +363,7 @@ export function useConversation({
           options?.hidden,
           options?.actionFeedback,
           maxOutputTokens,
+          pageContext,
         );
       } catch (err) {
         setIsStreaming(false);

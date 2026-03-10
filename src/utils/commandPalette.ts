@@ -10,6 +10,7 @@ import type {
   PaletteResults,
   StoreMetadata,
   SortBy,
+  SortOrder,
 } from "../types";
 import type { FontFamilyId, IconSetId, UIScaleId } from "../types/theme";
 import { FONT_OPTIONS, ICON_SET_OPTIONS, UI_SCALE_OPTIONS } from "../types/theme";
@@ -19,12 +20,7 @@ import { useMetadataStore } from "../store/metadataSlice";
 import { useNotesStore } from "../store/notesSlice";
 import { useFavoritesStore } from "../store/favoritesSlice";
 import { externalApi, steamInstallApi } from "../services/tauri";
-import {
-  extractAllSteamTags,
-  extractAllGenres,
-  extractAllCategories,
-  extractAllSources,
-} from "./filtering";
+import { extractAllSteamTags, extractAllSources } from "./filtering";
 import { GAME_SOURCE_LABELS } from "../types/game";
 import type { GameSource } from "../types/game";
 import {
@@ -425,6 +421,18 @@ function buildOptionDescriptors(): ActionDescriptor[] {
 
   return descriptors;
 }
+
+/** Smart default sort directions — used when AI or palette omits explicit direction. */
+const SORT_DEFAULT_DIRECTIONS: Record<string, SortOrder> = {
+  playtime: "desc",
+  lastPlayed: "desc",
+  recentlyAdded: "desc",
+  size: "desc",
+  name: "asc",
+  metacritic: "desc",
+  personalRating: "desc",
+  source: "asc",
+};
 
 /** Sort option descriptors. */
 const SORT_DESCRIPTORS: (ActionDescriptor & { sortBy: string })[] = [
@@ -909,12 +917,19 @@ export function resolveExecutor(actionId: string): ActionExecutor | null {
     };
   }
 
-  // Sort prefix
+  // Sort prefix — supports sort:field or sort:field:direction
   if (actionId.startsWith("sort:")) {
-    const sortBy = actionId.slice(5);
+    const rest = actionId.slice(5);
+    const colonIdx = rest.indexOf(":");
+    const sortBy = colonIdx === -1 ? rest : rest.slice(0, colonIdx);
+    const explicitDir = colonIdx === -1 ? undefined : rest.slice(colonIdx + 1);
+    const direction: SortOrder | undefined =
+      explicitDir === "asc" || explicitDir === "desc"
+        ? explicitDir
+        : SORT_DEFAULT_DIRECTIONS[sortBy];
     return (ctx) => {
       const ui = useUIStore.getState();
-      ui.setSorting(sortBy as SortBy);
+      ui.setSorting(sortBy as SortBy, direction);
       ui.setViewMode("list");
       ctx.navigate("/library");
       ctx.closeCommandCenter();
@@ -933,21 +948,7 @@ export function resolveExecutor(actionId: string): ActionExecutor | null {
     };
   }
 
-  // Dynamic metadata filter prefixes (genre-filter:*, tag-filter:*, category-filter:*, source-filter:*)
-  if (actionId.startsWith("genre-filter:")) {
-    const genreId = actionId.slice(13);
-    return (ctx) => {
-      const ui = useUIStore.getState();
-      const current = ui.filters.filterByGenreIds;
-      if (!current.includes(genreId)) {
-        ui.setFilterByGenreIds([...current, genreId]);
-      }
-      ui.setViewMode("list");
-      ctx.navigate("/library");
-      ctx.closeCommandCenter();
-    };
-  }
-
+  // Dynamic metadata filter prefixes (tag-filter:*, source-filter:*)
   if (actionId.startsWith("tag-filter:")) {
     const tagName = actionId.slice(11);
     return (ctx) => {
@@ -955,20 +956,6 @@ export function resolveExecutor(actionId: string): ActionExecutor | null {
       const current = ui.filters.filterBySteamTagNames;
       if (!current.includes(tagName)) {
         ui.setFilterBySteamTagNames([...current, tagName]);
-      }
-      ui.setViewMode("list");
-      ctx.navigate("/library");
-      ctx.closeCommandCenter();
-    };
-  }
-
-  if (actionId.startsWith("category-filter:")) {
-    const catId = Number(actionId.slice(16));
-    return (ctx) => {
-      const ui = useUIStore.getState();
-      const current = ui.filters.filterByCategoryIds;
-      if (!current.includes(catId)) {
-        ui.setFilterByCategoryIds([...current, catId]);
       }
       ui.setViewMode("list");
       ctx.navigate("/library");
@@ -1104,25 +1091,7 @@ function buildDynamicFilterActions(
 ): PaletteAction[] {
   const dynamicFilters: PaletteAction[] = [];
 
-  // Genre filter suggestions
-  const allGenres = extractAllGenres(metadataCache);
-  for (const genre of allGenres) {
-    if (genre.description.toLowerCase().includes(query)) {
-      const executor = resolveExecutor(`genre-filter:${genre.id}`);
-      dynamicFilters.push({
-        id: `genre-filter:${genre.id}`,
-        label: `Filter by genre: ${genre.description}`,
-        description: `Show only ${genre.description} games in the library`,
-        keywords: ["genre", "filter", genre.description.toLowerCase()],
-        icon: "genre",
-        category: "action",
-        execute: executor ?? ((ctx) => ctx.closeCommandCenter()),
-      } as PaletteAction);
-    }
-    if (dynamicFilters.length >= MAX_FILTER_RESULTS) break;
-  }
-
-  // Steam tag filter suggestions
+  // Tag filter suggestions (covers genres, features, themes, play styles)
   const allTags = extractAllSteamTags(metadataCache);
   const tagActions: PaletteAction[] = allTags
     .filter((t) => t.name.toLowerCase().includes(query))
@@ -1140,25 +1109,6 @@ function buildDynamicFilterActions(
       } as PaletteAction;
     });
   dynamicFilters.push(...tagActions);
-
-  // Category/feature filter suggestions
-  const allCategories = extractAllCategories(metadataCache);
-  const catActions: PaletteAction[] = allCategories
-    .filter((c) => c.description.toLowerCase().includes(query))
-    .slice(0, MAX_FILTER_RESULTS)
-    .map((c) => {
-      const executor = resolveExecutor(`category-filter:${c.id}`);
-      return {
-        id: `category-filter:${c.id}`,
-        label: `Filter by feature: ${c.description}`,
-        description: `Show only games with "${c.description}" feature`,
-        keywords: ["feature", "category", "filter", c.description.toLowerCase()],
-        icon: "filter",
-        category: "action",
-        execute: executor ?? ((ctx) => ctx.closeCommandCenter()),
-      } as PaletteAction;
-    });
-  dynamicFilters.push(...catActions);
 
   // Launcher/source filter suggestions (from library games, not metadata)
   const allSources = extractAllSources(games);
@@ -1324,89 +1274,6 @@ export function searchPalette(
 /** Total result count for keyboard navigation */
 export function totalResultCount(results: PaletteResults): number {
   return results.actions.length + results.games.length;
-}
-
-// ── AI Heuristic ────────────────────────────────────────────────
-
-const AI_TRIGGER_WORDS = [
-  "show me",
-  "find",
-  "launch",
-  "play",
-  "sort by",
-  "filter by",
-  "change",
-  "switch to",
-  "clear",
-  "reset",
-  "go to",
-  "open",
-  "set",
-  "favorite",
-  "installed",
-  "hidden",
-  "recommend",
-  "suggest",
-  "what should",
-  "help me",
-];
-
-/** All category prefixes that the palette already handles natively. */
-const CATEGORY_PREFIX_STRINGS = CATEGORY_PREFIX_DEFS.flatMap((d) => d.prefixes);
-
-/**
- * Determine whether to show the "Ask Assistant" button in the command palette.
- * Does NOT auto-fire — the user must click the button to send the query.
- *
- * Returns true when:
- *   - Query has 3+ words OR contains a known trigger phrase
- *   - AND query is NOT a recognized category prefix (theme, sort, filter, go to, navigate)
- *   - AND regular results have fewer than 3 action matches
- *
- * Note: This intentionally does NOT check the pattern matcher result — cloud AI
- * should always be available as a fallback below the pattern matcher suggestion.
- */
-export function shouldShowAskAssistant(query: string, results: PaletteResults): boolean {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) return false;
-
-  // Don't show if this is a category prefix query — the palette handles those natively
-  for (const prefix of CATEGORY_PREFIX_STRINGS) {
-    if (trimmed === prefix || trimmed.startsWith(prefix + " ")) {
-      return false;
-    }
-  }
-
-  // Also skip parameterized game-action prefixes ("favorite X", "notes X")
-  for (const desc of GAME_ACTION_DESCRIPTORS) {
-    for (const p of desc.prefixes) {
-      if (trimmed === p || trimmed.startsWith(p + " ")) {
-        return false;
-      }
-    }
-  }
-
-  const wordCount = trimmed.split(/\s+/).length;
-  const hasTrigger = AI_TRIGGER_WORDS.some((t) => trimmed.includes(t));
-
-  // Must be multi-word OR contain a trigger word
-  if (wordCount < 3 && !hasTrigger) return false;
-
-  // Only show when regular results are sparse
-  return results.actions.length < 3;
-}
-
-/**
- * Extract game mentions from an AI summary by matching against the user's library.
- * Returns games whose names appear in the summary text.
- */
-export function extractGameMentions(summary: string, games: Game[]): Game[] {
-  if (!summary) return [];
-  const lowerSummary = summary.toLowerCase();
-  // Only match games with names of 3+ chars to avoid false positives
-  return games.filter(
-    (g) => g.name.length >= 3 && lowerSummary.includes(g.name.toLowerCase()),
-  );
 }
 
 // ── AI Integration ──────────────────────────────────────────────

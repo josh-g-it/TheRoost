@@ -119,7 +119,13 @@ export interface ResolvedActionSet {
 }
 
 /** Pipeline execution status for the action state machine. */
-export type PipelineStatus = "idle" | "running" | "paused" | "completed" | "canceled";
+export type PipelineStatus =
+  | "idle"
+  | "running"
+  | "paused"
+  | "completed"
+  | "canceled"
+  | "delaying";
 
 /** Result of executing a single action in the pipeline. */
 export interface ActionResult {

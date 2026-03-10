@@ -14,6 +14,7 @@ const UPTIME_TICK_MS = 1000;
 
 const ALL_LEVELS: LogLevel[] = ["debug", "info", "warn", "error"];
 const ALL_CATEGORIES: LogCategory[] = [
+  "ai",
   "api",
   "ui",
   "settings",

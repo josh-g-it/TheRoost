@@ -96,12 +96,15 @@ export const useNewsStore = create<NewsState>((set, get) => ({
     set({ feedLoading: true, feedError: null });
 
     try {
-      const items = await newsApi.fetchNewsFeed(force);
+      const blockedSources =
+        useSettingsStore.getState().settings?.newsBlockedSources ?? [];
+      const items = await newsApi.fetchNewsFeed(force, blockedSources);
       const unreadCount = items.filter((i) => !i.isRead).length;
       set({ feed: items, unreadCount });
       logger.info("newsSlice", "news", "News feed fetched", {
         total: items.length,
         unread: unreadCount,
+        blockedSources: blockedSources.length,
       });
     } catch (e) {
       const msg = getErrorMessage(e);

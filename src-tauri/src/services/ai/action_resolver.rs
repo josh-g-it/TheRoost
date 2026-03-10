@@ -489,6 +489,22 @@ mod tests {
     }
 
     #[test]
+    fn sort_with_direction_passes_through_unchanged() {
+        let library = make_library();
+        let actions = vec![
+            make_validated("sort:playtime:desc", 1),
+            make_validated("sort:name:asc", 1),
+            make_validated("sort:lastPlayed:desc", 1),
+        ];
+        let result = resolve_actions(actions, &library, 0);
+        assert_eq!(result.actions.len(), 3);
+        assert_eq!(result.rejected_count, 0);
+        assert_eq!(result.actions[0].action_id, "sort:playtime:desc");
+        assert_eq!(result.actions[1].action_id, "sort:name:asc");
+        assert_eq!(result.actions[2].action_id, "sort:lastPlayed:desc");
+    }
+
+    #[test]
     fn game_targeting_actions_get_uuid_and_resolved_name() {
         let library = make_library();
         let actions = vec![ValidatedAction {

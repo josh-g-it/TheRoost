@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use tauri::State;
 
 use crate::models::news::{FeedNewsItem, GameNewsItem};
@@ -37,9 +39,11 @@ pub async fn fetch_followed_games(steam_id: String) -> Result<Vec<u32>, AppError
 #[tauri::command]
 pub async fn fetch_news_feed(
     force: Option<bool>,
+    blocked_sources: Option<Vec<String>>,
     db: State<'_, CacheDbHandle>,
 ) -> Result<Vec<FeedNewsItem>, AppError> {
-    news_service::fetch_news_feed(db.inner(), force.unwrap_or(false)).await
+    let blocked: HashSet<String> = blocked_sources.unwrap_or_default().into_iter().collect();
+    news_service::fetch_news_feed(db.inner(), force.unwrap_or(false), &blocked).await
 }
 
 #[tauri::command]
@@ -63,4 +67,15 @@ pub async fn get_unread_news_count(db: State<'_, CacheDbHandle>) -> Result<u32, 
 pub async fn clear_news_cache(db: State<'_, CacheDbHandle>) -> Result<u32, AppError> {
     let db = db.lock_or_err("DB")?;
     db.clear_news_cache()
+}
+
+#[tauri::command]
+pub async fn get_news_sources(db: State<'_, CacheDbHandle>) -> Result<Vec<String>, AppError> {
+    let db = db.lock_or_err("DB")?;
+    let sources = db.get_news_sources()?;
+    // Hide permanently blocked sources from the settings UI
+    Ok(sources
+        .into_iter()
+        .filter(|s| !news_service::is_permanently_blocked(s))
+        .collect())
 }

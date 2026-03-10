@@ -59,4 +59,10 @@ export interface AppSettings {
   aiConversationAutoEndEnabled?: boolean;
   aiMaxTokensMain?: number;
   aiMaxTokensOverlay?: number;
+  assistantBubbleEnabled?: boolean;
+  assistantBubbleExpanded?: boolean;
+  assistantBubbleWidth?: number | null;
+  assistantBubbleHeight?: number | null;
+  assistantActionDelay?: number;
+  newsBlockedSources?: string[];
 }

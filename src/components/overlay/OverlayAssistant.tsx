@@ -14,7 +14,7 @@ import { actionNeedsMainWindow } from "../../utils/commandPalette";
 import { getAvatarColor } from "../../utils/avatarColors";
 import { getErrorMessage } from "../../utils/errors";
 import { logger } from "../../utils/logger";
-import { AssistantChat } from "../assistant/AssistantChat";
+import { ChatCore } from "../assistant/shared";
 import "./OverlayAssistant.css";
 
 export const OverlayAssistant = memo(function OverlayAssistant() {
@@ -314,7 +314,7 @@ export const OverlayAssistant = memo(function OverlayAssistant() {
         className="overlay-assistant__chat-section"
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <AssistantChat
+        <ChatCore
           compact
           hideEndButton
           avatarId={activeAvatar.id}

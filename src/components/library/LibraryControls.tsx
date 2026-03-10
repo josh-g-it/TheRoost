@@ -1,17 +1,14 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Input } from "../common/Input";
 import { Button } from "../common/Button";
 import { AppIcon } from "../common/AppIcon";
 import { CardDisplayPopover } from "./CardDisplayPopover";
-import { SteamTagFilterPopover } from "./SteamTagFilterPopover";
-import { CategoryFilterPopover } from "./CategoryFilterPopover";
+import { TagFilterPopover } from "./TagFilterPopover";
 import { SourceFilterPopover } from "./SourceFilterPopover";
 import { useUIStore } from "../../store/uiSlice";
 import { useTagsStore } from "../../store/tagsSlice";
-import { useMetadataStore } from "../../store/metadataSlice";
 import { useSavedFiltersStore } from "../../store/savedFiltersSlice";
 import { useInstallStore } from "../../store/installSlice";
-import { extractAllGenres } from "../../utils/filtering";
 import { steamInstallApi } from "../../services/tauri";
 import type { SortBy, LibraryFilters, SortOrder } from "../../types";
 import "./LibraryControls.css";
@@ -57,9 +54,7 @@ export function LibraryControls({
   const setShowFavoritesOnly = useUIStore((s) => s.setShowFavoritesOnly);
   const setFilterByTagIds = useUIStore((s) => s.setFilterByTagIds);
   const setShowHiddenOnly = useUIStore((s) => s.setShowHiddenOnly);
-  const setFilterByGenreIds = useUIStore((s) => s.setFilterByGenreIds);
   const setFilterBySteamTagNames = useUIStore((s) => s.setFilterBySteamTagNames);
-  const setFilterByCategoryIds = useUIStore((s) => s.setFilterByCategoryIds);
   const setFilterBySource = useUIStore((s) => s.setFilterBySource);
   const setFilterByRated = useUIStore((s) => s.setFilterByRated);
   const setShowUpdatePendingOnly = useUIStore((s) => s.setShowUpdatePendingOnly);
@@ -67,36 +62,20 @@ export function LibraryControls({
   const activeInstalls = useInstallStore((s) => s.activeInstalls);
 
   const tags = useTagsStore((s) => s.tags);
-  const cache = useMetadataStore((s) => s.cache);
   const saveFilter = useSavedFiltersStore((s) => s.saveFilter);
   const savedFilters = useSavedFiltersStore((s) => s.savedFilters);
   const deleteFilter = useSavedFiltersStore((s) => s.deleteFilter);
   const [localSearch, setLocalSearch] = useState(filters.searchQuery);
-  const [genrePopoverOpen, setGenrePopoverOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [savedFiltersOpen, setSavedFiltersOpen] = useState(false);
   const savedFiltersRef = useRef<HTMLDivElement>(null);
   const [saveFilterName, setSaveFilterName] = useState("");
   const [duplicateFilterId, setDuplicateFilterId] = useState<number | null>(null);
-  const genreRef = useRef<HTMLDivElement>(null);
-
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => setSearchQuery(localSearch), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [localSearch]); // eslint-disable-line react-hooks/exhaustive-deps -- setSearchQuery is a stable Zustand setter
-
-  // Close genre popover on outside click
-  useEffect(() => {
-    if (!genrePopoverOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (genreRef.current && !genreRef.current.contains(e.target as Node)) {
-        setGenrePopoverOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [genrePopoverOpen]);
 
   // Close saved filters popover on outside click
   useEffect(() => {
@@ -124,9 +103,7 @@ export function LibraryControls({
     setShowFavoritesOnly(f.showFavoritesOnly);
     setFilterByTagIds(f.filterByTagIds);
     setShowHiddenOnly(f.showHiddenOnly ?? false);
-    setFilterByGenreIds(f.filterByGenreIds ?? []);
     setFilterBySteamTagNames(f.filterBySteamTagNames ?? []);
-    setFilterByCategoryIds(f.filterByCategoryIds ?? []);
     setFilterBySource(f.filterBySource ?? []);
     setFilterByRated(f.filterByRated ?? "all");
     setShowUpdatePendingOnly(f.showUpdatePendingOnly ?? false);
@@ -146,30 +123,11 @@ export function LibraryControls({
     }
   };
 
-  const handleGenreToggle = (genreId: string) => {
-    const current = filters.filterByGenreIds;
-    if (current.includes(genreId)) {
-      setFilterByGenreIds(current.filter((id) => id !== genreId));
-    } else {
-      setFilterByGenreIds([...current, genreId]);
-    }
-  };
-
-  const allGenres = useMemo(() => extractAllGenres(cache), [cache]);
-
-  const partitionedGenres = useMemo(() => {
-    const selected = allGenres.filter((g) => filters.filterByGenreIds.includes(g.id));
-    const unselected = allGenres.filter((g) => !filters.filterByGenreIds.includes(g.id));
-    return { selected, unselected };
-  }, [allGenres, filters.filterByGenreIds]);
-
   const hasActiveFilters =
     filters.showInstalledOnly ||
     filters.showFavoritesOnly ||
     filters.filterByTagIds.length > 0 ||
-    filters.filterByGenreIds.length > 0 ||
     filters.filterBySteamTagNames.length > 0 ||
-    filters.filterByCategoryIds.length > 0 ||
     (filters.filterBySource ?? []).length > 0 ||
     filters.filterByRated !== "all" ||
     filters.showUpdatePendingOnly ||
@@ -320,63 +278,8 @@ export function LibraryControls({
               </div>
             )}
 
-            {allGenres.length > 0 && (
-              <div className="library-controls__genre-filter" ref={genreRef}>
-                <button
-                  className={`library-controls__genre-trigger ${filters.filterByGenreIds.length > 0 ? "library-controls__genre-trigger--active" : ""}`}
-                  onClick={() => setGenrePopoverOpen(!genrePopoverOpen)}
-                  aria-label="Filter by genre"
-                  aria-expanded={genrePopoverOpen}
-                >
-                  {filters.filterByGenreIds.length > 0
-                    ? `Genres (${filters.filterByGenreIds.length})`
-                    : "Genres"}
-                </button>
-                {genrePopoverOpen && (
-                  <div className="library-controls__genre-popover" role="menu">
-                    <div className="library-controls__genre-header">
-                      <span>Filter by genre</span>
-                      {filters.filterByGenreIds.length > 0 && (
-                        <button
-                          className="library-controls__genre-clear"
-                          onClick={() => setFilterByGenreIds([])}
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                    <div className="library-controls__genre-chips">
-                      {partitionedGenres.selected.map((genre) => (
-                        <button
-                          key={genre.id}
-                          className="library-controls__genre-chip library-controls__genre-chip--active"
-                          onClick={() => handleGenreToggle(genre.id)}
-                        >
-                          {genre.description}
-                        </button>
-                      ))}
-                      {partitionedGenres.selected.length > 0 &&
-                        partitionedGenres.unselected.length > 0 && (
-                          <div className="library-controls__genre-divider" />
-                        )}
-                      {partitionedGenres.unselected.map((genre) => (
-                        <button
-                          key={genre.id}
-                          className="library-controls__genre-chip"
-                          onClick={() => handleGenreToggle(genre.id)}
-                        >
-                          {genre.description}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <SteamTagFilterPopover />
-
-            <CategoryFilterPopover />
+            <TagFilterPopover mode="genre" />
+            <TagFilterPopover mode="tags" />
 
             <SourceFilterPopover />
 

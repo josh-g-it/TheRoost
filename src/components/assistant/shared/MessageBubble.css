@@ -1,0 +1,72 @@
+/* ── Message Bubbles ─────────────────────────────────────────── */
+.assistant-chat__message {
+  max-width: 80%;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.assistant-chat__message--user {
+  align-self: flex-end;
+  background: var(--color-accent-primary);
+  color: var(--color-text-on-accent, #fff);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.assistant-chat__message--assistant {
+  align-self: flex-start;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+.assistant-chat__message--system {
+  align-self: center;
+  background: none;
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+  font-style: italic;
+  padding: 0.35rem 0.65rem;
+}
+
+/* ── Markdown in assistant messages ──────────────────────────── */
+.assistant-chat__message--assistant p {
+  margin: 0 0 0.5em;
+}
+
+.assistant-chat__message--assistant p:last-child {
+  margin-bottom: 0;
+}
+
+.assistant-chat__message--assistant code {
+  background: var(--color-bg-hover);
+  padding: 0.1em 0.3em;
+  border-radius: var(--radius-sm);
+  font-size: 0.8em;
+}
+
+.assistant-chat__message--assistant pre {
+  background: var(--color-bg-primary);
+  padding: 0.75rem;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.assistant-chat__message--assistant pre code {
+  background: none;
+  padding: 0;
+}
+
+.assistant-chat__message--assistant ul,
+.assistant-chat__message--assistant ol {
+  margin: 0.25em 0 0.5em;
+  padding-left: 1.5em;
+}
+
+.assistant-chat__message--assistant li {
+  margin: 0.15em 0;
+}

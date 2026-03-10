@@ -1,0 +1,141 @@
+.bubble-panel {
+  position: fixed;
+  left: var(--rail-width);
+  bottom: var(--space-md);
+  z-index: 19;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0, 0, 0, 0.25));
+  overflow: hidden;
+
+  /* Enter/exit animation — starts hidden */
+  opacity: 0;
+  transform: translateY(12px) scale(0.97);
+  transition:
+    left var(--transition-fast),
+    opacity 180ms ease-out,
+    transform 180ms ease-out;
+}
+
+/* Visible (animated in) — slightly transparent when idle */
+.bubble-panel--visible {
+  opacity: 0.65;
+  transform: translateY(0) scale(1);
+}
+
+/* Full opacity on hover or when any child has focus (e.g., chat input) */
+.bubble-panel--visible:hover,
+.bubble-panel--visible:focus-within {
+  opacity: 1;
+}
+
+/* Disable transitions during resize for snappy feel */
+.bubble-panel--resizing {
+  transition: none;
+}
+
+/* Expanded mode: always offset by expanded width so rail doesn't cover bubble */
+.bubble-panel[data-rail-mode="expanded"] {
+  left: var(--rail-expanded-width);
+}
+
+.bubble-panel__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+}
+
+.bubble-panel__avatar-circle {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.bubble-panel__name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bubble-panel__spacer {
+  flex: 1;
+}
+
+.bubble-panel__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.bubble-panel__btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.bubble-panel__btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+.bubble-panel__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Resize handle (top-right corner) ── */
+.bubble-panel__resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nesw-resize;
+  z-index: 2;
+}
+
+/* Visual grip indicator */
+.bubble-panel__resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--color-text-tertiary);
+  border-top: 2px solid var(--color-text-tertiary);
+  opacity: 0.4;
+  transition: opacity var(--transition-fast);
+}
+
+.bubble-panel__resize-handle:hover::after,
+.bubble-panel--resizing .bubble-panel__resize-handle::after {
+  opacity: 0.8;
+}

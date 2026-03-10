@@ -526,6 +526,16 @@
   color: var(--color-text-secondary);
 }
 
+/* ── News Sources ─────────────────────────────────────── */
+.settings-view__news-sources {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-view__news-sources .settings-view__field-row:first-child {
+  border-top: none;
+}
+
 @keyframes settings-overlay-fade-in {
   from {
     opacity: 0;

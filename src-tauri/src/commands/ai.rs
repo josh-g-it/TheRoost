@@ -506,6 +506,7 @@ pub async fn send_message(
     hidden: Option<bool>,
     action_feedback: Option<String>,
     max_output_tokens: Option<u32>,
+    page_context: Option<String>,
     db: State<'_, CacheDbHandle>,
     cloud: State<'_, CloudConfigHandle>,
     app_handle: tauri::AppHandle,
@@ -551,6 +552,7 @@ pub async fn send_message(
         skip_user_persist,
         action_feedback.as_deref(),
         max_output_tokens,
+        page_context.as_deref(),
     )
     .await?;
 

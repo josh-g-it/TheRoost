@@ -1,57 +1,21 @@
-import { useRef, useEffect, useState, type ReactNode } from "react";
+import { useRef, useEffect, useState } from "react";
 import type { PaletteAction, PaletteResults, Game, ResolvedIntent } from "../../types";
 import type { IconSetId } from "../../types/theme";
 import { FONT_OPTIONS } from "../../types/theme";
 import { formatPlaytime } from "../../utils/formatters";
-import { extractGameMentions } from "../../utils/commandPalette";
 import { getIcon } from "../../utils/icons";
 import { coverArtApi } from "../../services/tauri";
 import { AppIcon } from "../common/AppIcon";
 import "./CommandPaletteResults.css";
-
-/** Parse basic markdown (bold, italic) into React elements. */
-function renderMarkdown(text: string): ReactNode[] {
-  // Split on **bold** and *italic* patterns
-  const parts: ReactNode[] = [];
-  const re = /(\*\*(.+?)\*\*|\*(.+?)\*)/g;
-  let last = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-  while ((match = re.exec(text)) !== null) {
-    if (match.index > last) {
-      parts.push(text.slice(last, match.index));
-    }
-    if (match[2]) {
-      parts.push(<strong key={key++}>{match[2]}</strong>);
-    } else if (match[3]) {
-      parts.push(<em key={key++}>{match[3]}</em>);
-    }
-    last = match.index + match[0].length;
-  }
-  if (last < text.length) {
-    parts.push(text.slice(last));
-  }
-  return parts;
-}
-
-export type AiState =
-  | { mode: "idle" }
-  | { mode: "available" }
-  | { mode: "loading" }
-  | { mode: "result"; intent: ResolvedIntent };
 
 interface CommandPaletteResultsProps {
   results: PaletteResults;
   highlightIndex: number;
   onSelect: (index: number) => void;
   onHover: (index: number) => void;
-  aiState: AiState;
-  onAskAssistant?: () => void;
-  onAiActionSelect?: (actions: Array<{ actionId: string; gameId?: string }>) => void;
   /** Pattern matcher result (auto-fires locally, instant) */
   patternResult?: ResolvedIntent | null;
   onPatternActionSelect?: (actions: Array<{ actionId: string; gameId?: string }>) => void;
-  games?: Game[];
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -61,26 +25,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   settings: "Settings",
 };
 
-const TIER_LABELS: Record<string, string> = {
-  pattern_matcher: "Instant",
-  cloud_api: "Cloud AI",
-};
-
 export function CommandPaletteResults({
   results,
   highlightIndex,
   onSelect,
   onHover,
-  aiState,
-  onAskAssistant,
-  onAiActionSelect,
   patternResult,
   onPatternActionSelect,
-  games,
 }: CommandPaletteResultsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const showCloudAiSection = aiState.mode !== "idle";
   const hasActions = results.actions.length > 0;
   const hasGames = results.games.length > 0;
   // Only show pattern result when confidence is high enough (coverage >= 50% of tokens)
@@ -90,8 +44,7 @@ export function CommandPaletteResults({
     patternResult.confidence >= 0.5;
   // Suppress regular actions when pattern matcher covers the query
   const showRegularActions = hasActions && !hasPatternResult;
-  const isEmpty =
-    !showCloudAiSection && !showRegularActions && !hasGames && !hasPatternResult;
+  const isEmpty = !showRegularActions && !hasGames && !hasPatternResult;
 
   // Scroll the highlighted item into view
   useEffect(() => {
@@ -107,14 +60,8 @@ export function CommandPaletteResults({
     return <div className="command-palette__empty">No results found</div>;
   }
 
-  // Extract game mentions from cloud AI result summary
-  const aiMentions =
-    aiState.mode === "result" && games
-      ? extractGameMentions(aiState.intent.summary, games)
-      : [];
-
   // flatIndex tracks keyboard-navigable items in render order:
-  // 1. Regular actions  2. Games  3. Pattern matcher actions  4. Cloud AI items
+  // 1. Regular actions  2. Games  3. Pattern matcher actions
   let flatIndex = 0;
 
   return (
@@ -190,127 +137,6 @@ export function CommandPaletteResults({
             </>
           );
         })()}
-
-      {/* 4. Cloud AI Section */}
-      {showCloudAiSection && (
-        <>
-          <div className="command-palette__group-header">AI Assistant</div>
-
-          {aiState.mode === "available" &&
-            (() => {
-              const idx = flatIndex++;
-              return (
-                <div
-                  className={`command-palette__result command-palette__ai-suggestion command-palette__ask-btn ${idx === highlightIndex ? "command-palette__result--active" : ""}`}
-                  onClick={onAskAssistant}
-                  onMouseEnter={() => onHover(idx)}
-                >
-                  <span className="command-palette__result-icon command-palette__ai-icon">
-                    <AppIcon name="sparkle" size={18} />
-                  </span>
-                  <div className="command-palette__result-info">
-                    <span className="command-palette__result-label">Ask Assistant</span>
-                  </div>
-                  <span className="command-palette__result-hint">
-                    <span className="command-palette__ai-tier-badge">Cloud AI</span>
-                  </span>
-                </div>
-              );
-            })()}
-
-          {aiState.mode === "loading" && (
-            <div className="command-palette__result command-palette__ai-suggestion command-palette__ai-loading">
-              <span className="command-palette__result-icon command-palette__ai-icon">
-                <AppIcon name="sparkle" size={18} />
-              </span>
-              <div className="command-palette__result-info">
-                <span className="command-palette__result-label">Thinking...</span>
-              </div>
-            </div>
-          )}
-
-          {aiState.mode === "result" &&
-            (() => {
-              const { intent } = aiState;
-              return (
-                <>
-                  <div className="command-palette__ai-response">
-                    <span className="command-palette__result-icon command-palette__ai-icon">
-                      <AppIcon name="sparkle" size={18} />
-                    </span>
-                    <div className="command-palette__ai-summary">
-                      {renderMarkdown(intent.summary)}
-                    </div>
-                    <span className="command-palette__result-hint">
-                      <span className="command-palette__ai-tier-badge">
-                        {TIER_LABELS[intent.tier] ?? intent.tier}
-                      </span>
-                    </span>
-                  </div>
-
-                  {/* Cloud AI-suggested actions */}
-                  {intent.actions.length > 0 &&
-                    intent.actions.map((action) => {
-                      const idx = flatIndex++;
-                      return (
-                        <div
-                          key={action.actionId}
-                          className={`command-palette__result command-palette__ai-action ${idx === highlightIndex ? "command-palette__result--active" : ""}`}
-                          onClick={() =>
-                            onAiActionSelect?.(
-                              intent.actions.map((a) => ({
-                                actionId: a.actionId,
-                                gameId: a.gameId,
-                              })),
-                            )
-                          }
-                          onMouseEnter={() => onHover(idx)}
-                        >
-                          <span className="command-palette__result-icon">
-                            <AppIcon name="play" size={16} />
-                          </span>
-                          <div className="command-palette__result-info">
-                            <span className="command-palette__result-label">
-                              {action.description || action.actionId}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                  {/* Game mentions extracted from cloud AI summary */}
-                  {aiMentions.map((game) => {
-                    const idx = flatIndex++;
-                    return (
-                      <div
-                        key={`mention-${game.gameId}`}
-                        className={`command-palette__result command-palette__ai-mention ${idx === highlightIndex ? "command-palette__result--active" : ""}`}
-                        onClick={() =>
-                          onAiActionSelect?.([
-                            { actionId: "game:launch", gameId: game.gameId },
-                          ])
-                        }
-                        onMouseEnter={() => onHover(idx)}
-                      >
-                        <span className="command-palette__result-icon">
-                          <GameIconImage game={game} />
-                        </span>
-                        <div className="command-palette__result-info">
-                          <span className="command-palette__result-label">
-                            Launch {game.name}
-                          </span>
-                        </div>
-                        <span className="command-palette__result-hint">
-                          {formatPlaytime(game.playtimeForever)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </>
-              );
-            })()}
-        </>
-      )}
     </div>
   );
 }

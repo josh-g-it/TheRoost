@@ -110,6 +110,7 @@ pub fn run() {
             news::mark_news_read,
             news::get_unread_news_count,
             news::clear_news_cache,
+            news::get_news_sources,
             recaps::get_recap,
             recaps::list_recaps,
             recaps::generate_recap,

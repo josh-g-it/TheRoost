@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Header } from "../layout/Header";
 import { LoadingSpinner } from "../common/LoadingSpinner";
 import { AppIcon } from "../common/AppIcon";
@@ -18,6 +19,7 @@ const SOURCE_FILTER_LABELS: Record<SourceFilter, string> = {
 };
 
 export function NewsView() {
+  const navigate = useNavigate();
   const feed = useNewsStore((s) => s.feed);
   const feedLoading = useNewsStore((s) => s.feedLoading);
   const feedError = useNewsStore((s) => s.feedError);
@@ -120,6 +122,14 @@ export function NewsView() {
                 Mark All Read
               </button>
             )}
+            <button
+              className="news-view__action-btn"
+              onClick={() => navigate("/settings")}
+              title="Manage news sources in Settings"
+            >
+              <AppIcon name="settings" size={14} />
+              Manage Sources
+            </button>
             <button
               className="news-view__action-btn"
               onClick={() => fetchNewsFeed(true)}

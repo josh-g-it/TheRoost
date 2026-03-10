@@ -1,21 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   buildActionRegistry,
   searchPalette,
   totalResultCount,
   getActionManifest,
   executeActionById,
-  shouldShowAskAssistant,
-  extractGameMentions,
   PALETTE_HINTS,
 } from "./commandPalette";
-import type {
-  AppSettings,
-  PaletteAction,
-  PaletteContext,
-  PaletteResults,
-  StoreMetadata,
-} from "../types";
+import { useUIStore } from "../store/uiSlice";
+import type { AppSettings, PaletteAction, PaletteContext, StoreMetadata } from "../types";
 import { THEMES } from "../hooks/useTheme";
 import { FONT_OPTIONS, ICON_SET_OPTIONS, UI_SCALE_OPTIONS } from "../types/theme";
 import { makeGame } from "../test/factories";
@@ -372,7 +365,7 @@ describe("searchPalette", () => {
   });
 
   // Dynamic metadata filter tests
-  it("shows genre filter suggestions when metadata cache is populated", () => {
+  it("shows tag filter suggestions when metadata cache has tags", () => {
     const cache = new Map<string, StoreMetadata>();
     cache.set("g1", {
       gameId: "g1",
@@ -389,8 +382,8 @@ describe("searchPalette", () => {
       metacriticUrl: null,
       steamTags: [{ name: "Puzzle", votes: 100 }],
     });
-    const result = searchPalette("action", actions, testGames, cache);
-    expect(result.actions.some((a) => a.id === "genre-filter:1")).toBe(true);
+    const result = searchPalette("puzzle", actions, testGames, cache);
+    expect(result.actions.some((a) => a.id === "tag-filter:Puzzle")).toBe(true);
   });
 
   it("shows tag filter suggestions when metadata cache is populated", () => {
@@ -681,7 +674,7 @@ describe("category prefix matching", () => {
     expect(result.games).toHaveLength(0);
   });
 
-  it("'filter rpg' includes dynamic genre filters with metadata", () => {
+  it("'filter rpg' includes dynamic tag filters with metadata", () => {
     const cache = new Map<string, StoreMetadata>();
     cache.set("g1", {
       gameId: "g1",
@@ -696,10 +689,10 @@ describe("category prefix matching", () => {
       releaseDate: null,
       metacriticScore: null,
       metacriticUrl: null,
-      steamTags: [],
+      steamTags: [{ name: "RPG", votes: 200 }],
     });
     const result = searchPalette("filter rpg", actions, testGames, cache);
-    expect(result.actions.some((a) => a.id === "genre-filter:1")).toBe(true);
+    expect(result.actions.some((a) => a.id === "tag-filter:RPG")).toBe(true);
     expect(result.games).toHaveLength(0);
   });
 
@@ -721,127 +714,6 @@ describe("category prefix matching", () => {
     expect(result.actions.some((a) => a.id === "nav:library")).toBe(true);
     expect(result.actions.length).toBeLessThan(5);
     expect(result.games).toHaveLength(0);
-  });
-});
-
-// ── shouldShowAskAssistant ──────────────────────────────────────────────
-
-describe("shouldShowAskAssistant", () => {
-  const fewResults = { actions: [], games: [] };
-  const noop = () => {};
-  const manyResults: PaletteResults = {
-    actions: [
-      {
-        id: "a",
-        label: "A",
-        description: "",
-        keywords: [],
-        icon: "star-filled",
-        category: "action",
-        execute: noop,
-      },
-      {
-        id: "b",
-        label: "B",
-        description: "",
-        keywords: [],
-        icon: "star-filled",
-        category: "action",
-        execute: noop,
-      },
-      {
-        id: "c",
-        label: "C",
-        description: "",
-        keywords: [],
-        icon: "star-filled",
-        category: "action",
-        execute: noop,
-      },
-    ],
-    games: [],
-  };
-
-  it("triggers for multi-word NL query with few results", () => {
-    expect(shouldShowAskAssistant("show me installed rpg games", fewResults)).toBe(true);
-  });
-
-  it("does NOT trigger for category prefixes", () => {
-    expect(shouldShowAskAssistant("theme arctic frost", fewResults)).toBe(false);
-    expect(shouldShowAskAssistant("sort playtime", fewResults)).toBe(false);
-    expect(shouldShowAskAssistant("filter rpg", fewResults)).toBe(false);
-    expect(shouldShowAskAssistant("go to settings", fewResults)).toBe(false);
-    expect(shouldShowAskAssistant("navigate library", fewResults)).toBe(false);
-  });
-
-  it("triggers for trigger words even with fewer than 3 words", () => {
-    expect(shouldShowAskAssistant("show me", fewResults)).toBe(true);
-    expect(shouldShowAskAssistant("find rpg", fewResults)).toBe(true);
-    expect(shouldShowAskAssistant("clear", fewResults)).toBe(true);
-    expect(shouldShowAskAssistant("reset", fewResults)).toBe(true);
-  });
-
-  it("does NOT trigger when many regular results exist", () => {
-    expect(shouldShowAskAssistant("show me installed rpg games", manyResults)).toBe(
-      false,
-    );
-  });
-
-  it("does NOT trigger for empty query", () => {
-    expect(shouldShowAskAssistant("", fewResults)).toBe(false);
-    expect(shouldShowAskAssistant("   ", fewResults)).toBe(false);
-  });
-
-  it("does NOT trigger for game-action prefixes", () => {
-    expect(shouldShowAskAssistant("favorite skyrim", fewResults)).toBe(false);
-    expect(shouldShowAskAssistant("notes cyberpunk", fewResults)).toBe(false);
-  });
-});
-
-// ── extractGameMentions ──────────────────────────────────────────
-
-describe("extractGameMentions", () => {
-  const testGames = [
-    makeGame({ gameId: "g1", name: "Skyrim" }),
-    makeGame({ gameId: "g2", name: "Cities: Skylines" }),
-    makeGame({ gameId: "g3", name: "Portal 2" }),
-    makeGame({ gameId: "g4", name: "Dota 2" }),
-  ];
-
-  it("finds games mentioned in summary text", () => {
-    const summary = "You should try Skyrim or maybe Cities: Skylines!";
-    const mentions = extractGameMentions(summary, testGames);
-    expect(mentions).toHaveLength(2);
-    expect(mentions.map((g) => g.name)).toContain("Skyrim");
-    expect(mentions.map((g) => g.name)).toContain("Cities: Skylines");
-  });
-
-  it("is case-insensitive", () => {
-    const summary = "Have you played PORTAL 2 recently?";
-    const mentions = extractGameMentions(summary, testGames);
-    expect(mentions).toHaveLength(1);
-    expect(mentions[0].name).toBe("Portal 2");
-  });
-
-  it("returns empty array when no games mentioned", () => {
-    const summary = "I recommend trying something new.";
-    const mentions = extractGameMentions(summary, testGames);
-    expect(mentions).toHaveLength(0);
-  });
-
-  it("returns empty array for empty summary", () => {
-    expect(extractGameMentions("", testGames)).toHaveLength(0);
-  });
-
-  it("skips games with very short names (< 3 chars)", () => {
-    const gamesWithShort = [
-      makeGame({ gameId: "g5", name: "It" }),
-      makeGame({ gameId: "g1", name: "Skyrim" }),
-    ];
-    const summary = "It is a great game, but try Skyrim instead.";
-    const mentions = extractGameMentions(summary, gamesWithShort);
-    expect(mentions).toHaveLength(1);
-    expect(mentions[0].name).toBe("Skyrim");
   });
 });
 
@@ -964,5 +836,80 @@ describe("install/uninstall game actions", () => {
   it("PALETTE_HINTS includes Update", () => {
     const labels = PALETTE_HINTS.map((h) => h.label);
     expect(labels).toContain("Update");
+  });
+});
+
+// ── Sort Direction Support ─────────────────────────────────────
+
+describe("sort direction support", () => {
+  const setSortingMock = vi.fn();
+
+  beforeEach(() => {
+    setSortingMock.mockClear();
+    // Replace getState with a version that returns our stable mock
+    vi.spyOn(useUIStore, "getState").mockReturnValue({
+      ...useUIStore.getState(),
+      setSorting: setSortingMock,
+    } as unknown as ReturnType<typeof useUIStore.getState>);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sort:playtime without direction uses smart default (desc)", () => {
+    const ctx = makeCtx();
+    const result = executeActionById("sort:playtime", ctx);
+    expect(result).toBe(true);
+    expect(setSortingMock).toHaveBeenCalledWith("playtime", "desc");
+  });
+
+  it("sort:name without direction uses smart default (asc)", () => {
+    const ctx = makeCtx();
+    executeActionById("sort:name", ctx);
+    expect(setSortingMock).toHaveBeenCalledWith("name", "asc");
+  });
+
+  it("sort:playtime:asc uses explicit direction override", () => {
+    const ctx = makeCtx();
+    const result = executeActionById("sort:playtime:asc", ctx);
+    expect(result).toBe(true);
+    expect(setSortingMock).toHaveBeenCalledWith("playtime", "asc");
+  });
+
+  it("sort:name:desc uses explicit direction override", () => {
+    const ctx = makeCtx();
+    executeActionById("sort:name:desc", ctx);
+    expect(setSortingMock).toHaveBeenCalledWith("name", "desc");
+  });
+
+  it("sort:lastPlayed:desc uses explicit direction", () => {
+    const ctx = makeCtx();
+    executeActionById("sort:lastPlayed:desc", ctx);
+    expect(setSortingMock).toHaveBeenCalledWith("lastPlayed", "desc");
+  });
+
+  it("sort:source without direction uses smart default (asc)", () => {
+    const ctx = makeCtx();
+    executeActionById("sort:source", ctx);
+    expect(setSortingMock).toHaveBeenCalledWith("source", "asc");
+  });
+
+  it("sort:metacritic without direction uses smart default (desc)", () => {
+    const ctx = makeCtx();
+    executeActionById("sort:metacritic", ctx);
+    expect(setSortingMock).toHaveBeenCalledWith("metacritic", "desc");
+  });
+
+  it("sort:personalRating without direction uses smart default (desc)", () => {
+    const ctx = makeCtx();
+    executeActionById("sort:personalRating", ctx);
+    expect(setSortingMock).toHaveBeenCalledWith("personalRating", "desc");
+  });
+
+  it("sort with direction still navigates to library", () => {
+    const ctx = makeCtx();
+    executeActionById("sort:playtime:desc", ctx);
+    expect(ctx.navigate).toHaveBeenCalledWith("/library");
   });
 });

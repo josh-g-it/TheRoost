@@ -26,7 +26,6 @@ const TIER1_PREFIXES: &[&str] = &[
     "nav:",
     "sort:",
     "filter:",
-    "genre-filter:",
     "tag-filter:",
     "theme:",
     "font:",
@@ -142,8 +141,8 @@ mod tests {
             "filter:installed",
             "filter:favorites",
             "filter:source:steam",
-            "genre-filter:1",
             "tag-filter:RPG",
+            "tag-filter:Action",
             "theme:dark-gaming",
             "font:monospace",
             "icons:minimal",
@@ -173,6 +172,27 @@ mod tests {
         assert_eq!(valid.len(), 1);
         assert_eq!(valid[0].tier, 1);
         assert_eq!(rejected, 0);
+    }
+
+    #[test]
+    fn allows_sort_with_direction_suffix() {
+        let ids = vec![
+            "sort:playtime:desc",
+            "sort:name:asc",
+            "sort:lastPlayed:desc",
+            "sort:metacritic:desc",
+        ];
+        for id in ids {
+            let (valid, rejected) = validate_actions(vec![RawAiAction {
+                action_id: id.to_string(),
+                tier: 1,
+                description: None,
+                payload: None,
+            }]);
+            assert_eq!(valid.len(), 1, "Expected {id} to be valid");
+            assert_eq!(valid[0].tier, 1, "Expected {id} to be Tier 1");
+            assert_eq!(rejected, 0);
+        }
     }
 
     #[test]

@@ -4,6 +4,7 @@ import type { AudioSnapshot, AudioSession, AudioDevice } from "../../types";
 import { useOverlayVisible } from "./overlayVisibility";
 import { AppIcon } from "../common/AppIcon";
 import type { IconName } from "../../utils/icons";
+import { logger } from "../../utils/logger";
 import "./OverlayAudioMixer.css";
 
 const AUDIO_POLL_MS = 2000;
@@ -44,7 +45,11 @@ export function OverlayAudioMixer() {
           return merged;
         });
       })
-      .catch(() => {});
+      .catch((e) =>
+        logger.warn("AudioMixer", "system", "Failed to fetch audio snapshot", {
+          error: String(e),
+        }),
+      );
   }, []);
 
   useEffect(() => {
@@ -105,14 +110,26 @@ export function OverlayAudioMixer() {
   // ── Master volume handlers ──────────────────────────────────────
   const handleMasterVolume = useCallback((volume: number) => {
     setSnapshot((prev) => (prev ? { ...prev, masterVolume: volume } : prev));
-    audioMixerApi.setMasterVolume(volume).catch(() => {});
+    audioMixerApi
+      .setMasterVolume(volume)
+      .catch((e) =>
+        logger.warn("AudioMixer", "system", "Failed to set master volume", {
+          error: String(e),
+        }),
+      );
   }, []);
 
   const handleMasterMute = useCallback(() => {
     if (!snapshot) return;
     const muted = !snapshot.masterMuted;
     setSnapshot((prev) => (prev ? { ...prev, masterMuted: muted } : prev));
-    audioMixerApi.setMasterMute(muted).catch(() => {});
+    audioMixerApi
+      .setMasterMute(muted)
+      .catch((e) =>
+        logger.warn("AudioMixer", "system", "Failed to set master mute", {
+          error: String(e),
+        }),
+      );
   }, [snapshot]);
 
   // ── Per-session handlers ────────────────────────────────────────
@@ -124,7 +141,13 @@ export function OverlayAudioMixer() {
         sessions: prev.sessions.map((s) => (s.pid === pid ? { ...s, volume } : s)),
       };
     });
-    audioMixerApi.setSessionVolume(pid, volume).catch(() => {});
+    audioMixerApi
+      .setSessionVolume(pid, volume)
+      .catch((e) =>
+        logger.warn("AudioMixer", "system", `Failed to set volume for PID ${pid}`, {
+          error: String(e),
+        }),
+      );
   }, []);
 
   const handleSessionDragStart = useCallback((pid: number) => {
@@ -150,7 +173,13 @@ export function OverlayAudioMixer() {
           ),
         };
       });
-      audioMixerApi.setSessionMute(pid, muted).catch(() => {});
+      audioMixerApi
+        .setSessionMute(pid, muted)
+        .catch((e) =>
+          logger.warn("AudioMixer", "system", `Failed to set mute for PID ${pid}`, {
+            error: String(e),
+          }),
+        );
     },
     [snapshot],
   );
@@ -161,17 +190,27 @@ export function OverlayAudioMixer() {
       audioMixerApi
         .setSessionHidden(exeName, true)
         .then(fetchSnapshot)
-        .catch(() => {});
+        .catch((e) =>
+          logger.warn("AudioMixer", "system", `Failed to hide session "${exeName}"`, {
+            error: String(e),
+          }),
+        );
     },
     [fetchSnapshot],
   );
 
   const handleUnhideSession = useCallback(
     (exeName: string) => {
+      // Mark as revealed so it stays visible even without peak activity
+      setRevealedExes((prev) => new Set(prev).add(exeName));
       audioMixerApi
         .setSessionHidden(exeName, false)
         .then(fetchSnapshot)
-        .catch(() => {});
+        .catch((e) =>
+          logger.warn("AudioMixer", "system", `Failed to unhide session "${exeName}"`, {
+            error: String(e),
+          }),
+        );
     },
     [fetchSnapshot],
   );
@@ -193,7 +232,11 @@ export function OverlayAudioMixer() {
           : audioMixerApi.setDefaultInputDevice;
       fn(deviceId)
         .then(fetchSnapshot)
-        .catch(() => {});
+        .catch((e) =>
+          logger.warn("AudioMixer", "system", `Failed to switch ${tab} device`, {
+            error: String(e),
+          }),
+        );
     },
     [fetchSnapshot],
   );
@@ -205,12 +248,20 @@ export function OverlayAudioMixer() {
         audioMixerApi
           .deleteDeviceAlias(deviceId)
           .then(fetchSnapshot)
-          .catch(() => {});
+          .catch((e) =>
+            logger.warn("AudioMixer", "system", "Failed to delete device alias", {
+              error: String(e),
+            }),
+          );
       } else {
         audioMixerApi
           .setDeviceAlias(deviceId, customName.trim())
           .then(fetchSnapshot)
-          .catch(() => {});
+          .catch((e) =>
+            logger.warn("AudioMixer", "system", "Failed to set device alias", {
+              error: String(e),
+            }),
+          );
       }
     },
     [fetchSnapshot],

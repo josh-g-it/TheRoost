@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ResolvedAction, PipelineStatus, ActionResult } from "../types";
 import type { PaletteContext } from "../types";
 import { resolveExecutor } from "../utils/commandPalette";
@@ -43,8 +43,8 @@ export function serializeActionFeedback(results: ActionResult[]): string {
     if (r.error === "denied by user") {
       return `- ${id} → denied by user`;
     }
-    if (r.error === "canceled (sequence stopped)") {
-      return `- ${id} → canceled (sequence stopped)`;
+    if (r.error === "canceled (dependency)") {
+      return `- ${id} → canceled (dependency)`;
     }
     return `- ${id} → failed: ${r.error ?? "unknown error"}`;
   });
@@ -59,6 +59,9 @@ export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineO
 
   // Ref for synchronous access to completed results (survives React batching)
   const feedbackResultsRef = useRef<ActionResult[]>([]);
+
+  // Delay timer ref for cleanup
+  const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Build PaletteContext for executor calls
   const buildContext = useCallback((): PaletteContext => {
@@ -115,9 +118,10 @@ export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineO
   );
 
   // Process the pipeline from the current index.
-  // Batch-executes all consecutive Tier 1 actions in a single synchronous pass
+  // Without delay: batch-execute all consecutive T1 actions in a single synchronous pass
   // so that navigation + filter actions all fire before any component unmount
   // (from route change) can interrupt the sequence.
+  // With delay: execute one T1, enter "delaying" status, then resume after timeout.
   useEffect(() => {
     if (state.status !== "running") return;
 
@@ -140,47 +144,89 @@ export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineO
 
     // Tier 2: pause for user confirmation
     if (action.tier === 2) {
+      logger.info("useActionPipeline", "ai", "Paused for T2 confirmation", {
+        actionId: action.originalActionId,
+      });
       setState((prev) => ({ ...prev, status: "paused" }));
       return;
     }
 
-    // Tier 1: batch-execute all consecutive Tier 1 actions synchronously.
-    // When executeTier1 is provided (overlay), actions are relayed to the main
-    // window via IPC instead of executing locally against isolated stores.
-    let idx = currentIndex;
-    const batchResults: ActionResult[] = [];
-    while (idx < actions.length && actions[idx].tier === 1) {
-      batchResults.push(
-        executeTier1 ? executeTier1(actions[idx]) : executeAction(actions[idx]),
-      );
-      idx++;
+    const delay = useSettingsStore.getState().settings?.assistantActionDelay ?? 0;
+
+    if (delay > 0) {
+      // With delay: execute one T1 action, then enter "delaying" status
+      const result = executeTier1 ? executeTier1(action) : executeAction(action);
+      const hasMore = currentIndex + 1 < actions.length;
+
+      if (hasMore) {
+        setState((prev) => ({
+          ...prev,
+          currentIndex: prev.currentIndex + 1,
+          results: [...prev.results, result],
+          status: "delaying",
+        }));
+        delayTimerRef.current = setTimeout(() => {
+          delayTimerRef.current = null;
+          setState((prev) => ({ ...prev, status: "running" }));
+        }, delay);
+      } else {
+        // Last action — advance immediately (completed on next effect cycle)
+        setState((prev) => ({
+          ...prev,
+          currentIndex: prev.currentIndex + 1,
+          results: [...prev.results, result],
+        }));
+      }
+    } else {
+      // No delay: batch-execute all consecutive T1 actions synchronously
+      let idx = currentIndex;
+      const batchResults: ActionResult[] = [];
+      while (idx < actions.length && actions[idx].tier === 1) {
+        batchResults.push(
+          executeTier1 ? executeTier1(actions[idx]) : executeAction(actions[idx]),
+        );
+        idx++;
+      }
+      logger.info("useActionPipeline", "ai", "Batch T1 executed", {
+        count: batchResults.length,
+        next: idx < actions.length ? `T${actions[idx].tier} at index ${idx}` : "end",
+      });
+      setState((prev) => ({
+        ...prev,
+        currentIndex: idx,
+        results: [...prev.results, ...batchResults],
+      }));
     }
 
-    setState((prev) => ({
-      ...prev,
-      currentIndex: idx,
-      results: [...prev.results, ...batchResults],
-    }));
+    return () => {
+      if (delayTimerRef.current) {
+        clearTimeout(delayTimerRef.current);
+        delayTimerRef.current = null;
+      }
+    };
   }, [state, executeAction, executeTier1]);
 
+  // v1.12.1: Actions execute in AI-specified order (no T2-before-T1 reordering).
+  // The persistent bubble + ConversationProvider ensures pipeline state survives
+  // T1 navigation actions, eliminating the v1.12.0 unmount concern.
   const setActions = useCallback((actions: ResolvedAction[]) => {
     feedbackResultsRef.current = [];
+    if (delayTimerRef.current) {
+      clearTimeout(delayTimerRef.current);
+      delayTimerRef.current = null;
+    }
     if (actions.length === 0) {
       setState({ ...INITIAL_STATE, status: "completed" });
       return;
     }
-    // Reorder: Tier 2 (confirmation) before Tier 1 (auto-execute).
-    // Tier 1 actions can navigate away from /assistant, which unmounts the
-    // component and destroys pipeline state before Tier 2 cards render.
-    const sorted = [...actions].sort((a, b) => b.tier - a.tier);
+    logger.info("useActionPipeline", "ai", "Pipeline started", {
+      actionCount: actions.length,
+    });
     setState({
-      actions: sorted,
+      actions,
       currentIndex: 0,
       status: "running",
       results: [],
-    });
-    logger.info("useActionPipeline", "ai", "Pipeline started", {
-      actionCount: sorted.length,
     });
   }, []);
 
@@ -188,17 +234,42 @@ export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineO
     (action: ResolvedAction, precomputedResult?: ActionResult) => {
       const result = precomputedResult ?? executeAction(action);
       const confirmedResult = { ...result, confirmed: true };
-      setState((prev) => ({
-        ...prev,
-        status: "running",
-        currentIndex: prev.currentIndex + 1,
-        results: [...prev.results, confirmedResult],
-      }));
+      const delay = useSettingsStore.getState().settings?.assistantActionDelay ?? 0;
+
+      setState((prev) => {
+        const nextIndex = prev.currentIndex + 1;
+        const hasMore = nextIndex < prev.actions.length;
+
+        if (delay > 0 && hasMore) {
+          // Enter delaying state after T2 confirmation
+          delayTimerRef.current = setTimeout(() => {
+            delayTimerRef.current = null;
+            setState((p) => ({ ...p, status: "running" }));
+          }, delay);
+          return {
+            ...prev,
+            status: "delaying" as PipelineStatus,
+            currentIndex: nextIndex,
+            results: [...prev.results, confirmedResult],
+          };
+        }
+
+        return {
+          ...prev,
+          status: "running",
+          currentIndex: nextIndex,
+          results: [...prev.results, confirmedResult],
+        };
+      });
     },
     [executeAction],
   );
 
   const denyTier2 = useCallback(() => {
+    if (delayTimerRef.current) {
+      clearTimeout(delayTimerRef.current);
+      delayTimerRef.current = null;
+    }
     setState((prev) => {
       const currentAction = prev.actions[prev.currentIndex];
       const deniedResult: ActionResult = {
@@ -214,7 +285,7 @@ export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineO
           actionId: a.actionId,
           originalActionId: a.originalActionId,
           success: false,
-          error: "canceled (sequence stopped)",
+          error: "canceled (dependency)",
           executedAt: new Date().toISOString(),
         }));
       const allResults = [...prev.results, deniedResult, ...remainingResults];
@@ -225,6 +296,10 @@ export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineO
   }, []);
 
   const cancelAll = useCallback(() => {
+    if (delayTimerRef.current) {
+      clearTimeout(delayTimerRef.current);
+      delayTimerRef.current = null;
+    }
     setState((prev) => {
       if (
         prev.status === "idle" ||
@@ -239,7 +314,7 @@ export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineO
           actionId: a.actionId,
           originalActionId: a.originalActionId,
           success: false,
-          error: "canceled (sequence stopped)",
+          error: "canceled (dependency)",
           executedAt: new Date().toISOString(),
         }));
       const allResults = [...prev.results, ...remainingResults];
@@ -256,17 +331,24 @@ export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineO
   }, []);
 
   const reset = useCallback(() => {
+    if (delayTimerRef.current) {
+      clearTimeout(delayTimerRef.current);
+      delayTimerRef.current = null;
+    }
     feedbackResultsRef.current = [];
     setState(INITIAL_STATE);
   }, []);
 
-  return {
-    state,
-    setActions,
-    confirmTier2,
-    denyTier2,
-    cancelAll,
-    consumeResults,
-    reset,
-  };
+  return useMemo(
+    () => ({
+      state,
+      setActions,
+      confirmTier2,
+      denyTier2,
+      cancelAll,
+      consumeResults,
+      reset,
+    }),
+    [state, setActions, confirmTier2, denyTier2, cancelAll, consumeResults, reset],
+  );
 }

@@ -1,8 +1,8 @@
-.steam-tag-filter {
+.tag-filter {
   position: relative;
 }
 
-.steam-tag-filter__trigger {
+.tag-filter__trigger {
   padding: var(--space-xs) var(--space-sm);
   background: var(--color-bg-tertiary);
   border: 1px solid var(--color-border);
@@ -13,21 +13,21 @@
   transition: all var(--transition-fast);
 }
 
-.steam-tag-filter__trigger:hover {
+.tag-filter__trigger:hover {
   border-color: var(--color-border-focus);
 }
 
-.steam-tag-filter__trigger--active {
+.tag-filter__trigger--active {
   border-color: var(--color-accent-primary);
   color: var(--color-accent-primary);
 }
 
-.steam-tag-filter__popover {
+.tag-filter__popover {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  width: 300px;
-  max-height: 420px;
+  width: 340px;
+  max-height: 480px;
   display: flex;
   flex-direction: column;
   background: var(--color-bg-elevated);
@@ -38,7 +38,7 @@
   z-index: 50;
 }
 
-.steam-tag-filter__header {
+.tag-filter__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -52,7 +52,7 @@
   margin-bottom: var(--space-xs);
 }
 
-.steam-tag-filter__clear {
+.tag-filter__clear {
   background: none;
   border: none;
   color: var(--color-accent-primary);
@@ -63,11 +63,11 @@
   letter-spacing: normal;
 }
 
-.steam-tag-filter__clear:hover {
+.tag-filter__clear:hover {
   text-decoration: underline;
 }
 
-.steam-tag-filter__search {
+.tag-filter__search {
   width: 100%;
   padding: var(--space-xs) var(--space-sm);
   background: var(--color-bg-tertiary);
@@ -78,27 +78,64 @@
   margin-bottom: var(--space-xs);
 }
 
-.steam-tag-filter__search:focus {
+.tag-filter__search:focus {
   outline: none;
   border-color: var(--color-border-focus);
 }
 
-.steam-tag-filter__search::placeholder {
+.tag-filter__search::placeholder {
   color: var(--color-text-tertiary);
 }
 
-.steam-tag-filter__list {
+.tag-filter__list {
   flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 1px;
-  max-height: 300px;
+  max-height: 380px;
   scrollbar-width: thin;
   scrollbar-color: var(--color-bg-active) transparent;
 }
 
-.steam-tag-filter__item {
+/* ── Selected tags section (always at top) ── */
+.tag-filter__selected-section {
+  padding-bottom: var(--space-xs);
+  margin-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.tag-filter__selected-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px var(--space-xs);
+  margin-bottom: 2px;
+}
+
+/* ── Category group headers ── */
+.tag-filter__category-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--space-xs) var(--space-xs) 2px;
+  margin-top: var(--space-xs);
+  position: sticky;
+  top: 0;
+  background: var(--color-bg-elevated);
+  z-index: 1;
+}
+
+.tag-filter__category-label:first-child {
+  margin-top: 0;
+}
+
+/* ── Individual tag items ── */
+.tag-filter__item {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
@@ -110,37 +147,30 @@
   transition: background var(--transition-fast);
 }
 
-.steam-tag-filter__item:hover {
+.tag-filter__item:hover {
   background: var(--color-bg-hover);
   color: var(--color-text-primary);
 }
 
-.steam-tag-filter__item input[type="checkbox"] {
+.tag-filter__item input[type="checkbox"] {
   accent-color: var(--color-accent-primary);
   flex-shrink: 0;
 }
 
-.steam-tag-filter__item-name {
+.tag-filter__item-name {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.steam-tag-filter__item-count {
+.tag-filter__item-count {
   font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
   flex-shrink: 0;
 }
 
-.steam-tag-filter__selected-divider {
-  height: 1px;
-  background: var(--color-border-subtle);
-  margin: var(--space-xs) 0;
-  flex-shrink: 0;
-}
-
-.steam-tag-filter__empty {
+.tag-filter__empty {
   padding: var(--space-md);
   text-align: center;
   font-size: var(--font-size-sm);

@@ -264,7 +264,7 @@ describe("end-to-end scenarios", () => {
     display += processChunk(state, "most played!");
     display += processChunk(
       state,
-      '\n---ACTIONS---\n[{"actionId": "genre-filter:1", "tier": 1}, {"actionId": "sort:playtime", "tier": 1}]',
+      '\n---ACTIONS---\n[{"actionId": "tag-filter:RPG", "tier": 1}, {"actionId": "sort:playtime", "tier": 1}]',
     );
 
     const result = finalizeStream(state);
@@ -273,7 +273,7 @@ describe("end-to-end scenarios", () => {
     expect(fullText).toBe("Here are your RPGs sorted by most played!");
     expect(fullText).not.toContain("ACTIONS");
     expect(result.actions).toHaveLength(2);
-    expect(result.actions[0].actionId).toBe("genre-filter:1");
+    expect(result.actions[0].actionId).toBe("tag-filter:RPG");
     expect(result.actions[1].actionId).toBe("sort:playtime");
   });
 
@@ -355,12 +355,12 @@ describe("parseActionsFromContent", () => {
 
   it("parses actions from a complete message", () => {
     const content =
-      'Here are your RPGs!\n---ACTIONS---\n[{"actionId":"sort:playtime","tier":1},{"actionId":"genre-filter:RPG","tier":1}]';
+      'Here are your RPGs!\n---ACTIONS---\n[{"actionId":"sort:playtime","tier":1},{"actionId":"tag-filter:RPG","tier":1}]';
     const result = parseActionsFromContent(content);
     expect(result.displayText).toBe("Here are your RPGs!");
     expect(result.actions).toHaveLength(2);
     expect(result.actions[0].actionId).toBe("sort:playtime");
-    expect(result.actions[1].actionId).toBe("genre-filter:RPG");
+    expect(result.actions[1].actionId).toBe("tag-filter:RPG");
   });
 
   it("returns empty actions on malformed JSON", () => {

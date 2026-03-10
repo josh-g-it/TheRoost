@@ -22,6 +22,7 @@ import {
   updaterApi,
   autostartApi,
   assistantApi,
+  newsApi,
 } from "../../services/tauri";
 import { getErrorMessage } from "../../utils/errors";
 import { logger } from "../../utils/logger";
@@ -110,6 +111,10 @@ export function SettingsView() {
   const [exportedKey, setExportedKey] = useState("");
   const clipboardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // News source filtering state
+  const [newsSources, setNewsSources] = useState<string[]>([]);
+  const [newsSourcesLoading, setNewsSourcesLoading] = useState(false);
+
   // Clear exported key from memory on unmount
   useEffect(() => {
     return () => {
@@ -159,6 +164,13 @@ export function SettingsView() {
       .checkEncryptionKeyExists()
       .then(setEncryptionKeyExists)
       .catch(() => {});
+    // Load available news sources for filtering
+    setNewsSourcesLoading(true);
+    newsApi
+      .getNewsSources()
+      .then(setNewsSources)
+      .catch(() => {})
+      .finally(() => setNewsSourcesLoading(false));
   }, []);
 
   useEffect(() => {
@@ -490,6 +502,51 @@ export function SettingsView() {
                 className="settings-view__checkbox"
               />
             </div>
+          </section>
+
+          <section className="settings-view__section">
+            <h3 className="settings-view__section-title">News Sources</h3>
+            <p className="settings-view__section-desc">
+              Choose which news sources appear in your News Feed. Uncheck a source to hide
+              its articles. Changes take effect the next time the feed is loaded.
+            </p>
+
+            {newsSourcesLoading && (
+              <p className="settings-view__field-hint">Loading sources...</p>
+            )}
+
+            {!newsSourcesLoading && newsSources.length === 0 && (
+              <p className="settings-view__field-hint">
+                No news sources found. Visit the News Feed to populate sources from your
+                games.
+              </p>
+            )}
+
+            {!newsSourcesLoading && newsSources.length > 0 && (
+              <div className="settings-view__news-sources">
+                {newsSources.map((source) => {
+                  const blocked = form.newsBlockedSources ?? [];
+                  const isBlocked = blocked.includes(source);
+                  return (
+                    <div key={source} className="settings-view__field-row">
+                      <label className="settings-view__label">{source}</label>
+                      <input
+                        type="checkbox"
+                        checked={!isBlocked}
+                        onChange={() => {
+                          const current = form.newsBlockedSources ?? [];
+                          const updated = isBlocked
+                            ? current.filter((s) => s !== source)
+                            : [...current, source];
+                          setForm({ ...form, newsBlockedSources: updated });
+                        }}
+                        className="settings-view__checkbox"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
         </div>
 

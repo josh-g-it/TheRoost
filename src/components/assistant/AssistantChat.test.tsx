@@ -218,6 +218,7 @@ describe("AssistantChat", () => {
         true,
         undefined,
         undefined,
+        undefined,
       );
     });
   });
@@ -232,6 +233,7 @@ describe("AssistantChat", () => {
         "a1",
         expect.stringContaining("your very first conversation"),
         true,
+        undefined,
         undefined,
         undefined,
       );
@@ -318,6 +320,7 @@ describe("AssistantChat", () => {
         "a1",
         expect.stringContaining("A new conversation has started"),
         true,
+        undefined,
         undefined,
         undefined,
       );

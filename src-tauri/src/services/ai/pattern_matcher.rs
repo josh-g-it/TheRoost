@@ -578,21 +578,21 @@ fn extract_genre_tag_category(
     }
 
     // Try multi-word genre matches first (e.g., "role playing" for RPG)
-    for (genre_id, genre_name) in &ctx.genres {
-        if remaining.contains(genre_name.as_str())
-            && !actions
-                .iter()
-                .any(|a| a.action_id == format!("genre-filter:{}", genre_id))
-        {
-            actions.push(IntentAction {
-                action_id: format!("genre-filter:{}", genre_id),
-                game_id: None,
-                description: format!("Genre: {}", genre_name),
-            });
-            // Mark consumed tokens
-            for (i, t) in tokens.iter().enumerate() {
-                if !consumed[i] && genre_name.contains(t) {
-                    consumed[i] = true;
+    // Genres are emitted as tag-filter:{GenreName} for the unified tag system
+    for (_genre_id, genre_name) in &ctx.genres {
+        if remaining.contains(genre_name.as_str()) {
+            let aid = format!("tag-filter:{}", genre_name);
+            if !actions.iter().any(|a| a.action_id == aid) {
+                actions.push(IntentAction {
+                    action_id: aid,
+                    game_id: None,
+                    description: format!("Genre: {}", genre_name),
+                });
+                // Mark consumed tokens
+                for (i, t) in tokens.iter().enumerate() {
+                    if !consumed[i] && genre_name.contains(t) {
+                        consumed[i] = true;
+                    }
                 }
             }
         }
@@ -603,9 +603,9 @@ fn extract_genre_tag_category(
         if consumed[i] {
             continue;
         }
-        for (genre_id, genre_name) in &ctx.genres {
+        for (_genre_id, genre_name) in &ctx.genres {
             if genre_name == token || (token.len() >= 3 && genre_name.starts_with(token)) {
-                let aid = format!("genre-filter:{}", genre_id);
+                let aid = format!("tag-filter:{}", genre_name);
                 if !actions.iter().any(|a| a.action_id == aid) {
                     actions.push(IntentAction {
                         action_id: aid,
@@ -694,10 +694,10 @@ fn extract_genre_tag_category(
         return;
     }
 
-    // Multi-word category matches
-    for (cat_id, lower_desc, original_desc) in &ctx.categories {
+    // Multi-word category matches — emitted as tag-filter:{description}
+    for (_cat_id, lower_desc, original_desc) in &ctx.categories {
         if remaining_after_tags.contains(lower_desc.as_str()) {
-            let aid = format!("category-filter:{}", cat_id);
+            let aid = format!("tag-filter:{}", original_desc);
             if !actions.iter().any(|a| a.action_id == aid) {
                 actions.push(IntentAction {
                     action_id: aid,
@@ -718,9 +718,9 @@ fn extract_genre_tag_category(
         if consumed[i] {
             continue;
         }
-        for (cat_id, lower_desc, original_desc) in &ctx.categories {
+        for (_cat_id, lower_desc, original_desc) in &ctx.categories {
             if lower_desc == token || (token.len() >= 4 && lower_desc.contains(token)) {
-                let aid = format!("category-filter:{}", cat_id);
+                let aid = format!("tag-filter:{}", original_desc);
                 if !actions.iter().any(|a| a.action_id == aid) {
                     actions.push(IntentAction {
                         action_id: aid,
@@ -960,7 +960,7 @@ mod tests {
             .map(|a| a.action_id.as_str())
             .collect();
         assert!(ids.contains(&"filter:installed"));
-        assert!(ids.contains(&"genre-filter:4"));
+        assert!(ids.contains(&"tag-filter:rpg"));
     }
 
     #[test]
@@ -1023,7 +1023,7 @@ mod tests {
         assert!(result
             .actions
             .iter()
-            .any(|a| a.action_id == "genre-filter:1"));
+            .any(|a| a.action_id == "tag-filter:action"));
     }
 
     #[test]
@@ -1117,7 +1117,7 @@ mod tests {
         assert!(result
             .actions
             .iter()
-            .any(|a| a.action_id == "category-filter:28"));
+            .any(|a| a.action_id == "tag-filter:Full controller support"));
     }
 
     #[test]
@@ -1127,7 +1127,7 @@ mod tests {
         assert!(result
             .actions
             .iter()
-            .any(|a| a.action_id == "category-filter:22"));
+            .any(|a| a.action_id == "tag-filter:Steam Achievements"));
     }
 
     #[test]
@@ -1137,7 +1137,7 @@ mod tests {
         assert!(result
             .actions
             .iter()
-            .any(|a| a.action_id == "category-filter:29"));
+            .any(|a| a.action_id == "tag-filter:Steam Trading Cards"));
     }
 
     // ── Source/launcher tests ──
@@ -1202,7 +1202,7 @@ mod tests {
             .map(|a| a.action_id.as_str())
             .collect();
         assert!(ids.contains(&"filter:source:epic"));
-        assert!(ids.contains(&"genre-filter:4"));
+        assert!(ids.contains(&"tag-filter:rpg"));
     }
 
     #[test]

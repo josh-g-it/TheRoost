@@ -162,6 +162,18 @@ pub struct AppSettings {
     pub ai_max_tokens_main: u32,
     #[serde(default = "default_ai_max_tokens_overlay")]
     pub ai_max_tokens_overlay: u32,
+    #[serde(default = "default_true")]
+    pub assistant_bubble_enabled: bool,
+    #[serde(default)]
+    pub assistant_bubble_expanded: bool,
+    #[serde(default)]
+    pub assistant_bubble_width: Option<u32>,
+    #[serde(default)]
+    pub assistant_bubble_height: Option<u32>,
+    #[serde(default)]
+    pub assistant_action_delay: u32,
+    #[serde(default)]
+    pub news_blocked_sources: Vec<String>,
 }
 
 impl Default for AppSettings {
@@ -197,6 +209,12 @@ impl Default for AppSettings {
             ai_conversation_auto_end_enabled: true,
             ai_max_tokens_main: default_ai_max_tokens_main(),
             ai_max_tokens_overlay: default_ai_max_tokens_overlay(),
+            assistant_bubble_enabled: true,
+            assistant_bubble_expanded: false,
+            assistant_bubble_width: None,
+            assistant_bubble_height: None,
+            assistant_action_delay: 0,
+            news_blocked_sources: Vec::new(),
         }
     }
 }

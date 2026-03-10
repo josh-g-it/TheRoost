@@ -19,7 +19,11 @@ export const NoteConfirmationCard = memo(function NoteConfirmationCard({
   const [editText, setEditText] = useState(noteText);
 
   return (
-    <div className="action-confirmation-card">
+    <div
+      className="action-confirmation-card"
+      role="alertdialog"
+      aria-label={`Note confirmation for ${gameName}`}
+    >
       <div className="action-confirmation-card__header">
         <span className="action-confirmation-card__game-name">
           {existingContent ? "Append to Note: " : "Note: "}
@@ -47,12 +51,14 @@ export const NoteConfirmationCard = memo(function NoteConfirmationCard({
         <button
           className="action-confirmation-card__btn action-confirmation-card__btn--cancel"
           onClick={onDeny}
+          aria-label="Cancel note"
         >
           Cancel
         </button>
         <button
           className="action-confirmation-card__btn action-confirmation-card__btn--confirm"
           onClick={() => onConfirm(editText)}
+          aria-label={existingContent ? "Append to note" : "Save note"}
         >
           {existingContent ? "Append to Note" : "Save Note"}
         </button>

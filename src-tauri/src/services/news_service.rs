@@ -72,9 +72,11 @@ pub async fn fetch_game_news(
 
 /// Build an aggregated news feed from favorites + recently played games.
 /// Reuses `fetch_game_news` per-game (respects 1-hour cache TTL unless `force` is true).
+/// Articles whose `feed_label` is in `blocked_sources` are excluded from the result.
 pub async fn fetch_news_feed(
     db: &CacheDbHandle,
     force: bool,
+    blocked_sources: &std::collections::HashSet<String>,
 ) -> Result<Vec<FeedNewsItem>, AppError> {
     // Step 1: Gather candidate game IDs (favorites + recent 15 days)
     let games: Vec<(String, u32, String)> = {
@@ -131,6 +133,19 @@ pub async fn fetch_news_feed(
         }
     }
 
+    // Step 2b: Filter out permanently banned + user-blocked sources
+    {
+        let before = all_items.len();
+        all_items.retain(|(item, _, _)| {
+            !is_permanently_blocked(&item.feed_label)
+                && !blocked_sources.contains(&item.feed_label)
+        });
+        let filtered = before - all_items.len();
+        if filtered > 0 {
+            tracing::debug!(filtered, "Excluded articles from blocked news sources");
+        }
+    }
+
     if all_items.is_empty() {
         return Ok(Vec::new());
     }
@@ -172,6 +187,26 @@ pub async fn fetch_news_feed(
 
     tracing::info!(count = feed.len(), "News feed assembled");
     Ok(feed)
+}
+
+/// Domain suffixes that are permanently blocked from the news feed.
+/// These sources are excluded at fetch time and hidden from the settings UI.
+const PERMANENTLY_BLOCKED_DOMAINS: &[&str] = &[
+    ".ru", ".cn", ".com.cn",
+];
+
+/// Exact feed labels that are permanently blocked.
+const PERMANENTLY_BLOCKED_LABELS: &[&str] = &[
+    "Gamemag.ru",
+];
+
+/// Check if a feed label is permanently blocked (banned domains or exact matches).
+pub fn is_permanently_blocked(label: &str) -> bool {
+    let lower = label.to_lowercase();
+    if PERMANENTLY_BLOCKED_LABELS.iter().any(|b| lower == b.to_lowercase()) {
+        return true;
+    }
+    PERMANENTLY_BLOCKED_DOMAINS.iter().any(|suffix| lower.ends_with(suffix))
 }
 
 /// Fetch the list of game appids the user follows on Steam.

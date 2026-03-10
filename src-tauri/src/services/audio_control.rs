@@ -192,73 +192,91 @@ unsafe fn get_master_volume_info(enumerator: &IMMDeviceEnumerator) -> (f32, bool
     (volume, muted)
 }
 
+/// Enumerate audio sessions across **all active render devices**, not just the default.
+/// This ensures apps targeting non-default devices (e.g. Chrome on eMultimedia) are captured.
+/// Sessions are deduplicated by PID (first occurrence wins).
 unsafe fn enumerate_sessions(enumerator: &IMMDeviceEnumerator) -> Vec<AudioSession> {
-    let device = match enumerator.GetDefaultAudioEndpoint(eRender, eConsole) {
-        Ok(d) => d,
-        Err(_) => return vec![],
-    };
+    let collection: IMMDeviceCollection =
+        match enumerator.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE) {
+            Ok(c) => c,
+            Err(_) => return vec![],
+        };
 
-    let session_mgr: IAudioSessionManager2 = match device.Activate(CLSCTX_ALL, None) {
-        Ok(m) => m,
-        Err(_) => return vec![],
-    };
-
-    let session_enum: IAudioSessionEnumerator = match session_mgr.GetSessionEnumerator() {
-        Ok(e) => e,
-        Err(_) => return vec![],
-    };
-
-    let count = match session_enum.GetCount() {
+    let device_count = match collection.GetCount() {
         Ok(c) => c,
         Err(_) => return vec![],
     };
 
     let mut sessions = Vec::new();
+    let mut seen_pids = std::collections::HashSet::new();
 
-    for i in 0..count {
-        let control: IAudioSessionControl = match session_enum.GetSession(i) {
+    for dev_idx in 0..device_count {
+        let device: IMMDevice = match collection.Item(dev_idx) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+
+        let session_mgr: IAudioSessionManager2 = match device.Activate(CLSCTX_ALL, None) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+
+        let session_enum: IAudioSessionEnumerator = match session_mgr.GetSessionEnumerator() {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        let count = match session_enum.GetCount() {
             Ok(c) => c,
             Err(_) => continue,
         };
 
-        // Get extended control for PID
-        let control2: IAudioSessionControl2 = match control.cast() {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
+        for i in 0..count {
+            let control: IAudioSessionControl = match session_enum.GetSession(i) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
 
-        let pid = match control2.GetProcessId() {
-            Ok(p) => p,
-            Err(_) => continue,
-        };
+            let control2: IAudioSessionControl2 = match control.cast() {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
 
-        // Get volume interface
-        let volume_iface: ISimpleAudioVolume = match control.cast() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
+            let pid = match control2.GetProcessId() {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
 
-        let volume = volume_iface.GetMasterVolume().unwrap_or(1.0);
-        let is_muted = volume_iface.GetMute().map(|b| b.as_bool()).unwrap_or(false);
+            // Deduplicate by PID (a process may appear on multiple devices)
+            if !seen_pids.insert(pid) {
+                continue;
+            }
 
-        // Get peak level from IAudioMeterInformation (graceful fallback)
-        let peak_level = match control.cast::<IAudioMeterInformation>() {
-            Ok(meter) => meter.GetPeakValue().unwrap_or(0.0),
-            Err(_) => 0.0,
-        };
+            let volume_iface: ISimpleAudioVolume = match control.cast() {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
 
-        // Resolve display name
-        let display_name = get_session_display_name(&control2, pid);
-        let exe_name = get_process_exe_name(pid);
+            let volume = volume_iface.GetMasterVolume().unwrap_or(1.0);
+            let is_muted = volume_iface.GetMute().map(|b| b.as_bool()).unwrap_or(false);
 
-        sessions.push(AudioSession {
-            pid,
-            display_name,
-            exe_name,
-            volume,
-            is_muted,
-            peak_level,
-        });
+            let peak_level = match control.cast::<IAudioMeterInformation>() {
+                Ok(meter) => meter.GetPeakValue().unwrap_or(0.0),
+                Err(_) => 0.0,
+            };
+
+            let display_name = get_session_display_name(&control2, pid);
+            let exe_name = get_process_exe_name(pid);
+
+            sessions.push(AudioSession {
+                pid,
+                display_name,
+                exe_name,
+                volume,
+                is_muted,
+                peak_level,
+            });
+        }
     }
 
     sessions
@@ -390,7 +408,8 @@ fn pwstr_to_string(pwstr: PWSTR) -> String {
     }
 }
 
-/// Find an audio session by PID and apply a closure to its ISimpleAudioVolume.
+/// Find an audio session by PID across all active render devices and apply a closure
+/// to its ISimpleAudioVolume. Mirrors `enumerate_sessions` by searching all devices.
 fn with_session_volume<F>(pid: u32, f: F) -> Result<(), String>
 where
     F: FnOnce(&ISimpleAudioVolume) -> windows::core::Result<()>,
@@ -398,35 +417,48 @@ where
     unsafe {
         init_com();
         let enumerator = create_device_enumerator().map_err(|e| e.to_string())?;
-        let device = enumerator
-            .GetDefaultAudioEndpoint(eRender, eConsole)
+        let collection: IMMDeviceCollection = enumerator
+            .EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE)
             .map_err(|e| e.to_string())?;
+        let device_count = collection.GetCount().map_err(|e| e.to_string())?;
 
-        let session_mgr: IAudioSessionManager2 = device
-            .Activate(CLSCTX_ALL, None)
-            .map_err(|e| e.to_string())?;
+        for dev_idx in 0..device_count {
+            let device: IMMDevice = match collection.Item(dev_idx) {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
 
-        let session_enum = session_mgr
-            .GetSessionEnumerator()
-            .map_err(|e| e.to_string())?;
-        let count = session_enum.GetCount().map_err(|e| e.to_string())?;
+            let session_mgr: IAudioSessionManager2 = match device.Activate(CLSCTX_ALL, None) {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
 
-        for i in 0..count {
-            let control: IAudioSessionControl = match session_enum.GetSession(i) {
+            let session_enum = match session_mgr.GetSessionEnumerator() {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            let count = match session_enum.GetCount() {
                 Ok(c) => c,
                 Err(_) => continue,
             };
 
-            let control2: IAudioSessionControl2 = match control.cast() {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
+            for i in 0..count {
+                let control: IAudioSessionControl = match session_enum.GetSession(i) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
 
-            if let Ok(session_pid) = control2.GetProcessId() {
-                if session_pid == pid {
-                    let volume_iface: ISimpleAudioVolume =
-                        control.cast().map_err(|e| e.to_string())?;
-                    return f(&volume_iface).map_err(|e| e.to_string());
+                let control2: IAudioSessionControl2 = match control.cast() {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+
+                if let Ok(session_pid) = control2.GetProcessId() {
+                    if session_pid == pid {
+                        let volume_iface: ISimpleAudioVolume =
+                            control.cast().map_err(|e| e.to_string())?;
+                        return f(&volume_iface).map_err(|e| e.to_string());
+                    }
                 }
             }
         }

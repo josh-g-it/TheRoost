@@ -176,7 +176,6 @@ fn is_valid_action_id(id: &str) -> bool {
     id.starts_with("nav:")
         || id.starts_with("sort:")
         || id.starts_with("filter:")
-        || id.starts_with("genre-filter:")
         || id.starts_with("tag-filter:")
         || id.starts_with("theme:")
         || id.starts_with("font:")
@@ -230,8 +229,8 @@ mod tests {
         assert!(is_valid_action_id("sort:playtime"));
         assert!(is_valid_action_id("filter:installed"));
         assert!(is_valid_action_id("filter:source:steam"));
-        assert!(is_valid_action_id("genre-filter:4"));
         assert!(is_valid_action_id("tag-filter:Single-player"));
+        assert!(is_valid_action_id("tag-filter:RPG"));
         assert!(is_valid_action_id("theme:arctic-frost"));
         assert!(is_valid_action_id("font:inter"));
         assert!(is_valid_action_id("icons:minimal"));

@@ -114,6 +114,10 @@ Analyze the conversation and produce a JSON object with:
    on this conversation. Only include IDs that should be replaced.
 
 ## Rules
+- Base ALL memories, journal entries, and summaries ONLY on what the user said
+  in the conversation. Do NOT extract facts from pre-existing system prompt data
+  (library stats, game lists, tags, playtime, etc.) — that data is injected context,
+  not something the user told you. Only record things the user explicitly discussed.
 - Maximum 10 memories per conversation (focus on quality over quantity)
 - If nothing meaningful was discussed, return empty memories array
 - Be specific: "User likes Elden Ring" is better than "User likes games"
@@ -292,6 +296,7 @@ pub async fn send_message_and_stream(
     skip_user_persist: bool,
     action_feedback: Option<&str>,
     max_output_tokens: Option<u32>,
+    page_context: Option<&str>,
 ) -> Result<(), AppError> {
     // Serialize concurrent calls to the same conversation
     let conv_lock = acquire_conversation_lock(conv_id);
@@ -336,10 +341,19 @@ pub async fn send_message_and_stream(
     }
 
     // Step 1: Build context (under lock)
-    let (system_prompt, mut messages) = {
+    let (mut system_prompt, mut messages) = {
         let db_guard = db.lock_or_err("DB")?;
         assemble_context(&db_guard, conv_id, avatar_id, key, settings)?
     }; // lock dropped
+
+    // Append page context (lightweight ~20-30 tokens describing current UI state)
+    if let Some(ctx) = page_context {
+        let sanitized = context_builder::sanitize_for_prompt_context(ctx);
+        if !sanitized.is_empty() {
+            system_prompt.push_str("\n\n## Current Page Context\n");
+            system_prompt.push_str(&sanitized);
+        }
+    }
 
     // Inject action feedback as ephemeral context (not stored in DB)
     if let Some(feedback) = action_feedback {

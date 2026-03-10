@@ -201,6 +201,13 @@
   opacity: 0;
 }
 
+/* ── Aicon area ───────────────────────────────────────────────── */
+.icon-rail__aicon-area {
+  display: flex;
+  padding: var(--space-xs) 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
 /* ── Footer ────────────────────────────────────────────────────── */
 .icon-rail__footer {
   display: flex;

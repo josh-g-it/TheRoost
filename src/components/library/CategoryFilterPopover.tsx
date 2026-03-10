@@ -38,8 +38,11 @@ export function CategoryFilterPopover() {
       const q = search.toLowerCase().trim();
       cats = allCategories.filter((c) => c.description.toLowerCase().includes(q));
     }
-    const selected = cats.filter((c) => selectedIds.includes(c.id));
-    const unselected = cats.filter((c) => !selectedIds.includes(c.id));
+    const selectedSet = new Set(selectedIds);
+    const isSelected = (c: (typeof allCategories)[0]) =>
+      selectedSet.has(c.id) || c.aliasIds.some((a) => selectedSet.has(a));
+    const selected = cats.filter(isSelected);
+    const unselected = cats.filter((c) => !isSelected(c));
     return { selected, unselected };
   }, [allCategories, search, selectedIds]);
 
@@ -56,11 +59,16 @@ export function CategoryFilterPopover() {
   }, [open]);
 
   const handleToggle = (catId: number) => {
+    const cat = allCategories.find((c) => c.id === catId);
+    const allIds = cat ? [cat.id, ...cat.aliasIds] : [catId];
     const current = filters.filterByCategoryIds;
-    if (current.includes(catId)) {
-      setFilterByCategoryIds(current.filter((id) => id !== catId));
+    const isCurrentlySelected = allIds.some((id) => current.includes(id));
+    if (isCurrentlySelected) {
+      const removeSet = new Set(allIds);
+      setFilterByCategoryIds(current.filter((id) => !removeSet.has(id)));
     } else {
-      setFilterByCategoryIds([...current, catId]);
+      const merged = new Set([...current, ...allIds]);
+      setFilterByCategoryIds([...merged]);
     }
   };
 

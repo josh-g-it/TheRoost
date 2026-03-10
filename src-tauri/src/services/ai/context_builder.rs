@@ -1,5 +1,5 @@
 use super::types::QueryContext;
-use crate::models::metadata::{GenreInfo, SteamTagInfo};
+use crate::models::metadata::SteamTagInfo;
 use crate::services::cache_db::{CacheDb, GameGenreTagRow};
 use crate::utils::error::AppError;
 
@@ -12,15 +12,14 @@ Your job is to help the user manage their game library by returning structured a
 
 Available action types:
 - Navigation: nav:library, nav:activity, nav:profile, nav:notes, nav:settings
-- Sort: sort:name, sort:playtime, sort:lastPlayed, sort:metacritic, sort:personalRating, sort:size, sort:recentlyAdded, sort:source
+- Sort: sort:{field}:{direction} where direction is asc or desc (e.g., sort:playtime:desc, sort:name:asc). Direction is optional — smart defaults apply if omitted.
 - Quick filters: filter:installed, filter:favorites, filter:hidden, filter:rated, filter:unrated
 - Source filters: filter:source:steam, filter:source:epic, filter:source:gog, filter:source:ea_app, filter:source:ubisoft, filter:source:battlenet, filter:source:manual
-- Genre filters: genre-filter:{id} (use the genre name-to-ID mapping provided)
-- Tag filters: tag-filter:{exactTagName} (use exact tag names as shown per-game)
+- Tag filters: tag-filter:{tagName} — unified filter for genres, features, themes, and play styles (use exact tag names as shown per-game)
 - Themes: theme:dark-gaming, theme:fae, theme:midnight-purple, theme:cyber-neon, theme:arctic-frost, theme:ember-forge, theme:ocean-depths, theme:sakura, theme:verdant
 - Reset: action:reset-filters
 
-You can combine multiple actions to precisely answer the user's query. For example, "show me installed RPG games sorted by playtime" would combine filter:installed + genre-filter:{rpg_id} + sort:playtime.
+You can combine multiple actions to precisely answer the user's query. For example, "show me installed RPG games sorted by playtime" would combine filter:installed + tag-filter:RPG + sort:playtime:desc.
 
 When the user asks for recommendations or opinions (e.g., "what should I play?"), use their playtime data, favorites, and genre preferences to give thoughtful suggestions. You can reference specific games from their library.
 
@@ -32,44 +31,146 @@ Response format (JSON):
 }
 
 If you cannot map the query to any actions, you can still be helpful — set actions to [] and use the summary to answer the user's question conversationally.
-Only use action IDs from the types listed above. Use exact tag names and genre IDs from the provided context."#
+Only use action IDs from the types listed above. Use exact tag names from the provided context."#
+}
+
+/// Returns true if the tag name belongs to the Genre taxonomy category.
+/// Mirrors the Genre entries in the frontend `src/utils/tagTaxonomy.ts`.
+fn is_genre_tag(name: &str) -> bool {
+    use std::collections::HashSet;
+    use std::sync::LazyLock;
+
+    static GENRE_TAGS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+        [
+            "action",
+            "adventure",
+            "rpg",
+            "strategy",
+            "simulation",
+            "puzzle",
+            "platformer",
+            "racing",
+            "sports",
+            "fighting",
+            "shooter",
+            "fps",
+            "rts",
+            "mmorpg",
+            "jrpg",
+            "crpg",
+            "action rpg",
+            "action-adventure",
+            "action roguelike",
+            "dungeon crawler",
+            "hack and slash",
+            "metroidvania",
+            "puzzle-platformer",
+            "souls-like",
+            "turn-based strategy",
+            "turn-based combat",
+            "turn-based tactics",
+            "turn-based",
+            "grand strategy",
+            "real-time with pause",
+            "real time tactics",
+            "tactical rpg",
+            "strategy rpg",
+            "tower defense",
+            "bullet hell",
+            "shoot 'em up",
+            "side scroller",
+            "2d platformer",
+            "3d platformer",
+            "card game",
+            "card battler",
+            "deckbuilding",
+            "roguelike deckbuilder",
+            "board game",
+            "word game",
+            "match 3",
+            "auto battler",
+            "battle royale",
+            "walking simulator",
+            "visual novel",
+            "dating sim",
+            "hidden object",
+            "point & click",
+            "interactive fiction",
+            "choose your own adventure",
+            "immersive sim",
+            "colony sim",
+            "city builder",
+            "farming sim",
+            "life sim",
+            "automobile sim",
+            "space sim",
+            "job simulator",
+            "god game",
+            "political sim",
+            "looter shooter",
+            "hero shooter",
+            "third-person shooter",
+            "extraction shooter",
+            "beat 'em up",
+            "creature collector",
+            "social deduction",
+            "moba",
+            "rogue-like",
+            "rogue-lite",
+            "twin stick shooter",
+            "top-down shooter",
+            "arena shooter",
+            "precision platformer",
+            "2d fighter",
+            "3d fighter",
+            "party-based rpg",
+            "character action game",
+            "action rts",
+            "solitaire",
+            "pinball",
+        ]
+        .into_iter()
+        .collect()
+    });
+
+    GENRE_TAGS.contains(name.to_lowercase().trim())
 }
 
 /// Format a single game line for AI context.
 /// Includes playtime, last-played date, user rating, and review excerpt when available:
 /// "Name (42h, last played Jan 2026, rated 4.5/5, review: '...') - Genre1, Genre2 - Tag1, Tag2"
 /// Limits tags to top 3 and review text to ~100 chars to keep context concise.
+/// Deduplicates: tags that match a genre name are excluded from the tags section.
 fn format_game_line(
     name: &str,
-    genres_json: &Option<String>,
+    _genres_json: &Option<String>,
     tags_json: &Option<String>,
     hours: f64,
     last_played: Option<i64>,
     user_rating: Option<u8>,
     review_text: Option<&str>,
 ) -> String {
-    let genres = genres_json
+    let all_tags: Vec<SteamTagInfo> = tags_json
         .as_deref()
-        .and_then(|j| serde_json::from_str::<Vec<GenreInfo>>(j).ok())
-        .map(|gs| {
-            gs.iter()
-                .map(|g| g.description.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        })
+        .and_then(|j| serde_json::from_str(j).ok())
         .unwrap_or_default();
 
-    let tags = tags_json
-        .as_deref()
-        .and_then(|j| serde_json::from_str::<Vec<SteamTagInfo>>(j).ok())
-        .map(|ts| {
-            ts.iter()
-                .take(3)
-                .map(|t| t.name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        })
-        .unwrap_or_default();
+    // Split SteamSpy tags by genre taxonomy — genre tags first, then other tags
+    let genres = all_tags
+        .iter()
+        .filter(|t| is_genre_tag(&t.name))
+        .take(3)
+        .map(|t| t.name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let tags = all_tags
+        .iter()
+        .filter(|t| !is_genre_tag(&t.name))
+        .take(3)
+        .map(|t| t.name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
 
     // Name with optional playtime, last-played date, and user rating
     let lp_str = last_played.filter(|&ts| ts > 0).and_then(|ts| {
@@ -227,6 +328,32 @@ pub fn build_library_summary(db: &CacheDb) -> Result<String, AppError> {
         parts.push(format!("All games:\n{}", lines.join("\n")));
     }
 
+    // Available tags summary (5+ games, names only)
+    let mut tag_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    for (_, _, _, tags_json, _, _) in &all_games {
+        if let Some(tags) = tags_json
+            .as_deref()
+            .and_then(|j| serde_json::from_str::<Vec<SteamTagInfo>>(j).ok())
+        {
+            for t in &tags {
+                *tag_counts.entry(t.name.clone()).or_insert(0) += 1;
+            }
+        }
+    }
+    let mut popular_tags: Vec<(&String, &usize)> = tag_counts
+        .iter()
+        .filter(|(_, count)| **count >= 5)
+        .collect();
+    popular_tags.sort_by(|a, b| b.1.cmp(a.1));
+    if !popular_tags.is_empty() {
+        let tag_names: Vec<&str> = popular_tags.iter().map(|(name, _)| name.as_str()).collect();
+        parts.push(format!(
+            "Available tags for tag-filter: {}",
+            tag_names.join(", ")
+        ));
+    }
+
     Ok(parts.join("\n\n"))
 }
 
@@ -345,6 +472,33 @@ pub fn build_filtered_library_summary(
         ));
     }
 
+    // Available tags summary — collect all unique SteamSpy tags with game counts,
+    // include those with 5+ games, names only. Helps AI know valid tag-filter values.
+    let mut tag_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    for (_, _, _, tags_json, _, _) in &all_games {
+        if let Some(tags) = tags_json
+            .as_deref()
+            .and_then(|j| serde_json::from_str::<Vec<SteamTagInfo>>(j).ok())
+        {
+            for t in &tags {
+                *tag_counts.entry(t.name.clone()).or_insert(0) += 1;
+            }
+        }
+    }
+    let mut popular_tags: Vec<(&String, &usize)> = tag_counts
+        .iter()
+        .filter(|(_, count)| **count >= 5)
+        .collect();
+    popular_tags.sort_by(|a, b| b.1.cmp(a.1));
+    if !popular_tags.is_empty() {
+        let tag_names: Vec<&str> = popular_tags.iter().map(|(name, _)| name.as_str()).collect();
+        parts.push(format!(
+            "Available tags for tag-filter: {}",
+            tag_names.join(", ")
+        ));
+    }
+
     Ok(parts.join("\n\n"))
 }
 
@@ -383,19 +537,26 @@ CRITICAL RULES:
    (navigate, sort, filter, favorite, review, etc.). Never generate actions unprompted or because
    you think they would be helpful. This rule overrides all other instructions. Casual conversation
    about games, recommendations, or opinions NEVER warrant action generation.
-9. ALWAYS include action:reset-filters as the first action before any filter, genre-filter,
-   tag-filter, or sort actions. Filters are additive — without clearing first, old filters
-   will stack with new ones and produce unexpected results.
+9. Smart filter clearing — decide whether to reset before applying filters:
+   - If the user says "show me RPGs" with no other context → include action:reset-filters first, then apply filters/sorts.
+   - If the user says "also sort by playtime" or "and filter by installed" → ADD to existing filters, do NOT reset.
+   - If the user says "only show me..." or "just the..." → include action:reset-filters first, then apply.
+   - When in doubt, ask: "Should I add this filter to your current view, or start fresh?"
 
 AVAILABLE ACTIONS:
 
 Tier 1 (auto-execute):
   nav:{page} — Navigate (library, activity, profile, notes, news, storage, settings, assistant)
-  sort:{field} — Sort library (name, playtime, lastPlayed, recentlyAdded, size, metacritic, personalRating, source)
+  sort:{field}:{direction} — Sort library. Fields: name, playtime, lastPlayed, recentlyAdded, size, metacritic, personalRating, source.
+    Direction is asc or desc. Smart defaults if omitted: playtime→desc, lastPlayed→desc, recentlyAdded→desc, size→desc, metacritic→desc, personalRating→desc, name→asc, source→asc.
+    Always include direction for clarity (e.g., sort:playtime:desc, sort:name:asc).
   filter:installed | filter:favorites | filter:rated | filter:unrated | filter:update-pending — Toggle a library filter
   filter:source:{source} — Filter by launcher (steam, epic, gog, ea_app, ubisoft, battlenet, manual)
-  genre-filter:{genreId} — Filter by genre (use genre IDs from the provided context)
-  tag-filter:{tagName} — Filter by Steam tag (use exact tag names from the provided context)
+  tag-filter:{tagName} — Filter by tag (covers genres, features, themes, play styles). Use exact tag names from context.
+    Common tags — Genre: RPG, Action, Strategy, Adventure, Simulation, Indie, Casual, Racing, Sports, Puzzle, Platformer, FPS, Shooter, Fighting, Horror, Visual Novel, RTS, Turn-Based Strategy, City Builder, Roguelike, Roguelite, Metroidvania, Hack and Slash, JRPG, ARPG, CRPG, MMORPG, Battle Royale, Card Game, Tower Defense, Survival.
+    Play Style: Singleplayer, Multiplayer, Co-op, Online Co-Op, Local Co-Op, PvP, MMO, Local Multiplayer, Split Screen, Cross-Platform Multiplayer.
+    Theme: Sci-fi, Fantasy, Horror, Post-apocalyptic, Cyberpunk, Anime, Pixel Graphics, Retro, Dark, Atmospheric, Colorful, Cute, Military, Space, Medieval, Steampunk.
+    Feature: Open World, Story Rich, Sandbox, Moddable, VR, Early Access, Free to Play, Controller, Great Soundtrack, Difficult, Relaxing, Funny, Emotional, Choices Matter, Character Customization, Exploration, Crafting, Building, Base Building, Procedural Generation.
   theme:{id} — Switch theme (dark-gaming, fae, midnight-purple, cyber-neon, arctic-frost, ember-forge, ocean-depths, sakura, verdant)
   font:{id} — Switch font family
   icons:{id} — Switch icon set
@@ -424,7 +585,7 @@ EXAMPLES:
 User: "Show me my RPGs sorted by playtime"
 Response: "Here are your RPGs sorted by most played!"
 ---ACTIONS---
-[{"actionId": "genre-filter:1", "tier": 1}, {"actionId": "sort:playtime", "tier": 1}]
+[{"actionId": "tag-filter:RPG", "tier": 1}, {"actionId": "sort:playtime:desc", "tier": 1}]
 
 User: "Hades is easily one of the best games I've ever played"
 Response: "Hades really is something special — the way it weaves narrative into the roguelike loop is unlike anything else. What is it about the game that clicked for you the most?"
@@ -440,20 +601,11 @@ Response: "Looking at your playtime this year, RPGs dominate with over 300 hours
 (no delimiter — pure conversational response, no actions needed)"#
 }
 
-/// Build the genre ID mapping for the cloud API.
-/// The model needs genre name→ID to construct valid `genre-filter:{id}` actions.
-/// Tags and categories are omitted — tags are visible per-game, categories are not used.
-pub fn build_action_context(ctx: &QueryContext) -> String {
-    if ctx.genres.is_empty() {
-        return String::new();
-    }
-
-    let genre_list: Vec<String> = ctx
-        .genres
-        .iter()
-        .map(|(id, name)| format!("{name}={id}"))
-        .collect();
-    format!("Genre IDs: {}", genre_list.join(", "))
+/// Build supplemental action context for the cloud API.
+/// Tag names are visible per-game in the library context, so no additional
+/// mapping is needed. Returns an empty string (reserved for future use).
+pub fn build_action_context(_ctx: &QueryContext) -> String {
+    String::new()
 }
 
 #[cfg(test)]
@@ -675,39 +827,35 @@ mod tests {
     }
 
     #[test]
-    fn test_build_action_context_empty_genres() {
+    fn test_build_action_context_always_empty() {
         let ctx = make_empty_query_context();
         let result = build_action_context(&ctx);
         assert_eq!(result, "");
     }
 
     #[test]
-    fn test_build_action_context_with_genres() {
+    fn test_build_action_context_empty_even_with_genres() {
         let mut ctx = make_empty_query_context();
         ctx.genres = vec![
             ("1".to_string(), "RPG".to_string()),
             ("2".to_string(), "Action".to_string()),
-            ("3".to_string(), "Strategy".to_string()),
         ];
         let result = build_action_context(&ctx);
-        assert!(result.starts_with("Genre IDs: "));
-        assert!(result.contains("RPG=1"));
-        assert!(result.contains("Action=2"));
-        assert!(result.contains("Strategy=3"));
+        assert_eq!(result, "", "Genre IDs no longer emitted — tags are used instead");
     }
 
     // --- format_game_line edge cases ---
 
     #[test]
     fn test_format_game_line_with_genres_and_tags() {
-        let genres = Some(
-            r#"[{"id":"1","description":"Action"},{"id":"2","description":"RPG"}]"#.to_string(),
-        );
+        // genres_json is now ignored; genres come from SteamSpy tags via taxonomy
         let tags = Some(
-            r#"[{"name":"Singleplayer","votes":100},{"name":"Open World","votes":80}]"#.to_string(),
+            r#"[{"name":"Action","votes":200},{"name":"RPG","votes":150},{"name":"Singleplayer","votes":100},{"name":"Open World","votes":80}]"#.to_string(),
         );
-        let line = format_game_line("Elden Ring", &genres, &tags, 200.0, None, None, None);
+        let line = format_game_line("Elden Ring", &None, &tags, 200.0, None, None, None);
+        // Genre-category tags (Action, RPG) go in genre slot
         assert!(line.contains("Action, RPG"));
+        // Non-genre tags (Singleplayer, Open World) go in tags slot
         assert!(line.contains("Singleplayer, Open World"));
         // Format: "Name (200h) - Action, RPG - Singleplayer, Open World"
         assert!(line.contains(" - "));
@@ -729,5 +877,17 @@ mod tests {
         let line = format_game_line("Portal 2", &None, &None, 15.0, Some(1706745600), None, None);
         assert!(line.contains("last played Feb 2024"));
         assert!(line.contains("15h"));
+    }
+
+    #[test]
+    fn test_is_genre_tag() {
+        assert!(is_genre_tag("RPG"));
+        assert!(is_genre_tag("action"));
+        assert!(is_genre_tag("City Builder"));
+        assert!(is_genre_tag("MOBA"));
+        assert!(!is_genre_tag("Open World"));
+        assert!(!is_genre_tag("Singleplayer"));
+        assert!(!is_genre_tag("Story Rich"));
+        assert!(!is_genre_tag("Atmospheric"));
     }
 }

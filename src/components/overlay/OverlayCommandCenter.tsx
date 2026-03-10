@@ -15,17 +15,15 @@ import { formatPlaytime } from "../../utils/formatters";
 import {
   buildActionRegistry,
   searchPalette,
-  shouldShowAskAssistant,
-  extractGameMentions,
   actionNeedsMainWindow,
   PALETTE_HINTS,
 } from "../../utils/commandPalette";
-import { aiApi, cloudAiApi } from "../../services/tauri";
+import { aiApi } from "../../services/tauri";
 import { logger } from "../../utils/logger";
 import { getErrorMessage } from "../../utils/errors";
 import { AppIcon } from "../common/AppIcon";
 import { CommandSlot } from "../layout/CommandSlot";
-import { CommandPaletteResults, type AiState } from "../layout/CommandPaletteResults";
+import { CommandPaletteResults } from "../layout/CommandPaletteResults";
 import { ThemePickerPopover } from "../layout/ThemePickerPopover";
 import { QuickStatsPopover } from "../layout/QuickStatsPopover";
 import { RandomGamePopover } from "../layout/RandomGamePopover";
@@ -83,7 +81,6 @@ export function OverlayCommandCenter({
   const [searchQuery, setSearchQuery] = useState("");
   const [highlightIndex, setHighlightIndex] = useState(0);
   const [showHints, setShowHints] = useState(false);
-  const [aiState, setAiState] = useState<AiState>({ mode: "idle" });
   const [patternResult, setPatternResult] = useState<ResolvedIntent | null>(null);
   const patternSeqRef = useRef(0);
 
@@ -113,25 +110,8 @@ export function OverlayCommandCenter({
   // Regular actions are suppressed when pattern matcher covers the query
   const renderedActionCount = isConfidentPattern ? 0 : paletteResults.actions.length;
 
-  const aiMentions = useMemo(
-    () =>
-      aiState.mode === "result" ? extractGameMentions(aiState.intent.summary, games) : [],
-    [aiState, games],
-  );
-
-  const cloudAiItemCount = useMemo(() => {
-    if (aiState.mode === "available") return 1; // "Ask Assistant" button
-    if (aiState.mode === "result") {
-      return aiState.intent.actions.length + aiMentions.length;
-    }
-    return 0;
-  }, [aiState, aiMentions]);
-
   const resultCount =
-    renderedActionCount +
-    paletteResults.games.length +
-    patternActionCount +
-    cloudAiItemCount;
+    renderedActionCount + paletteResults.games.length + patternActionCount;
   const isSearching = searchQuery.trim().length > 0;
 
   // Quick stats
@@ -216,7 +196,6 @@ export function OverlayCommandCenter({
         setEditingSlotIndex(null);
         setShowHints(false);
         setPatternResult(null);
-        setAiState({ mode: "idle" });
         setTimeout(() => searchRef.current?.focus(), SEARCH_FOCUS_DELAY_MS);
       }
     });
@@ -253,19 +232,6 @@ export function OverlayCommandCenter({
     }, 150);
     return () => clearTimeout(timer);
   }, [searchQuery]);
-
-  // Show "Ask Assistant" button when conditions are met (no auto-fire)
-  const cloudEnabled = settings.cloudAiEnabled === true;
-  useEffect(() => {
-    if (cloudEnabled && shouldShowAskAssistant(searchQuery, paletteResults)) {
-      setAiState((prev) => (prev.mode === "idle" ? { mode: "available" } : prev));
-    } else {
-      // Don't reset if we're already loading or showing a cloud result
-      setAiState((prev) =>
-        prev.mode === "loading" || prev.mode === "result" ? prev : { mode: "idle" },
-      );
-    }
-  }, [searchQuery, paletteResults, cloudEnabled]);
 
   const handleSlotClick = useCallback(
     (action: SlotAction, index: number) => {
@@ -325,20 +291,6 @@ export function OverlayCommandCenter({
     [editingSlotIndex, settings, slotIds, onSaveSettings],
   );
 
-  const handleAskAssistant = useCallback(async () => {
-    setAiState({ mode: "loading" });
-    try {
-      const result = await cloudAiApi.cloudResolve(searchQuery.trim());
-      if (result) {
-        setAiState({ mode: "result", intent: result });
-      } else {
-        setAiState({ mode: "idle" });
-      }
-    } catch {
-      setAiState({ mode: "idle" });
-    }
-  }, [searchQuery]);
-
   const handlePatternActionSelect = useCallback(
     (actions: Array<{ actionId: string; gameId?: string }>) => {
       for (const action of actions) {
@@ -348,25 +300,6 @@ export function OverlayCommandCenter({
           showMain: actionNeedsMainWindow(action.actionId),
         }).catch((err: unknown) => {
           logger.warn("OverlayCommandCenter", "ui", "Palette action failed", {
-            actionId: action.actionId,
-            error: getErrorMessage(err),
-          });
-        });
-      }
-      hideOverlay();
-    },
-    [hideOverlay],
-  );
-
-  const handleAiActionSelect = useCallback(
-    (actions: Array<{ actionId: string; gameId?: string }>) => {
-      for (const action of actions) {
-        invoke("overlay_execute_palette_action", {
-          actionId: action.actionId,
-          gameId: action.gameId ?? null,
-          showMain: actionNeedsMainWindow(action.actionId),
-        }).catch((err: unknown) => {
-          logger.warn("OverlayCommandCenter", "ui", "AI action relay failed", {
             actionId: action.actionId,
             error: getErrorMessage(err),
           });
@@ -416,12 +349,6 @@ export function OverlayCommandCenter({
             })),
           );
         }
-      } else {
-        // Cloud AI item — Enter on "Ask Assistant" button
-        if (aiState.mode === "available") {
-          handleAskAssistant();
-        }
-        // Cloud result actions/mentions are handled by onClick in CommandPaletteResults
       }
     },
     [
@@ -431,8 +358,6 @@ export function OverlayCommandCenter({
       patternActionCount,
       patternResult,
       handlePatternActionSelect,
-      aiState,
-      handleAskAssistant,
     ],
   );
 
@@ -511,12 +436,8 @@ export function OverlayCommandCenter({
             highlightIndex={highlightIndex}
             onSelect={handlePaletteSelect}
             onHover={setHighlightIndex}
-            aiState={aiState}
-            onAskAssistant={handleAskAssistant}
-            onAiActionSelect={handleAiActionSelect}
             patternResult={patternResult}
             onPatternActionSelect={handlePatternActionSelect}
-            games={games}
           />
         ) : showInlinePopover ? (
           <div className="overlay-inline-popover">

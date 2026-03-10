@@ -142,6 +142,42 @@ export function DeveloperSettings() {
 
           <div className="settings-view__field-row">
             <div>
+              <label className="settings-view__label">
+                Delay Between Assistant Actions
+              </label>
+              <p className="settings-view__field-hint">
+                Add a pause between sequential AI actions so you can watch them execute
+                one by one. 0ms = instant (default).
+              </p>
+            </div>
+            <div
+              style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}
+            >
+              <input
+                type="range"
+                min={0}
+                max={2500}
+                step={100}
+                value={settings.assistantActionDelay ?? 0}
+                onChange={(e) =>
+                  saveSettings({
+                    ...settings,
+                    assistantActionDelay: Number(e.target.value),
+                  })
+                }
+                style={{ width: 120 }}
+              />
+              <span
+                className="settings-view__label"
+                style={{ minWidth: 52, textAlign: "right" }}
+              >
+                {settings.assistantActionDelay ?? 0}ms
+              </span>
+            </div>
+          </div>
+
+          <div className="settings-view__field-row">
+            <div>
               <label className="settings-view__label">Re-run Setup Wizard</label>
               <p className="settings-view__field-hint">
                 Go through the initial setup again. Your current API key and Steam account

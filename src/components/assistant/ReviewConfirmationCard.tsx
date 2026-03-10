@@ -21,7 +21,11 @@ export const ReviewConfirmationCard = memo(function ReviewConfirmationCard({
   const [editText, setEditText] = useState(reviewText);
 
   return (
-    <div className="action-confirmation-card">
+    <div
+      className="action-confirmation-card"
+      role="alertdialog"
+      aria-label={`Review confirmation for ${gameName}`}
+    >
       <div className="action-confirmation-card__header">
         <span className="action-confirmation-card__game-name">Review: {gameName}</span>
       </div>
@@ -43,12 +47,14 @@ export const ReviewConfirmationCard = memo(function ReviewConfirmationCard({
         <button
           className="action-confirmation-card__btn action-confirmation-card__btn--cancel"
           onClick={onDeny}
+          aria-label="Cancel review"
         >
           Cancel
         </button>
         <button
           className="action-confirmation-card__btn action-confirmation-card__btn--confirm"
           onClick={() => onConfirm(editStars, editText)}
+          aria-label="Save review"
         >
           Save Review
         </button>

@@ -2955,6 +2955,17 @@ impl CacheDb {
         Ok(count)
     }
 
+    /// Return all distinct feed labels from the news cache, sorted alphabetically.
+    pub fn get_news_sources(&self) -> Result<Vec<String>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT feed_label FROM game_news WHERE feed_label IS NOT NULL AND feed_label != '' ORDER BY feed_label",
+        )?;
+        let sources = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<String>, _>>()?;
+        Ok(sources)
+    }
+
     /// Get all cached news items with game name, annotated with read status.
     #[allow(dead_code)]
     pub fn get_all_cached_news_with_read_status(
