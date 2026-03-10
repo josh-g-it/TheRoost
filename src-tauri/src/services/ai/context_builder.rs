@@ -329,8 +329,7 @@ pub fn build_library_summary(db: &CacheDb) -> Result<String, AppError> {
     }
 
     // Available tags summary (5+ games, names only)
-    let mut tag_counts: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
+    let mut tag_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for (_, _, _, tags_json, _, _) in &all_games {
         if let Some(tags) = tags_json
             .as_deref()
@@ -474,8 +473,7 @@ pub fn build_filtered_library_summary(
 
     // Available tags summary — collect all unique SteamSpy tags with game counts,
     // include those with 5+ games, names only. Helps AI know valid tag-filter values.
-    let mut tag_counts: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
+    let mut tag_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for (_, _, _, tags_json, _, _) in &all_games {
         if let Some(tags) = tags_json
             .as_deref()
@@ -841,7 +839,10 @@ mod tests {
             ("2".to_string(), "Action".to_string()),
         ];
         let result = build_action_context(&ctx);
-        assert_eq!(result, "", "Genre IDs no longer emitted — tags are used instead");
+        assert_eq!(
+            result, "",
+            "Genre IDs no longer emitted — tags are used instead"
+        );
     }
 
     // --- format_game_line edge cases ---

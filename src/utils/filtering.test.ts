@@ -76,14 +76,14 @@ describe("filterGames", () => {
 
   it("filters by steam tag names (OR logic)", () => {
     const cache = new Map<string, StoreMetadata>([
-      ["g1", makeMeta("g1", { steamTags: [{ name: "RPG", count: 100 }] })],
-      ["g2", makeMeta("g2", { steamTags: [{ name: "Strategy", count: 80 }] })],
+      ["g1", makeMeta("g1", { steamTags: [{ name: "RPG", votes: 100 }] })],
+      ["g2", makeMeta("g2", { steamTags: [{ name: "Strategy", votes: 80 }] })],
       [
         "g3",
         makeMeta("g3", {
           steamTags: [
-            { name: "Action", count: 90 },
-            { name: "RPG", count: 50 },
+            { name: "Action", votes: 90 },
+            { name: "RPG", votes: 50 },
           ],
         }),
       ],
@@ -103,7 +103,7 @@ describe("filterGames", () => {
 
   it("excludes games with no metadata when steam tag filter is active", () => {
     const cache = new Map<string, StoreMetadata>([
-      ["g1", makeMeta("g1", { steamTags: [{ name: "Action", count: 100 }] })],
+      ["g1", makeMeta("g1", { steamTags: [{ name: "Action", votes: 100 }] })],
     ]);
     const result = filterGames(
       games,
