@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.10.0-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/version-1.12.1-blue" alt="Version" />
   <img src="https://img.shields.io/badge/platform-Windows-0078D6" alt="Platform" />
   <img src="https://img.shields.io/badge/built_with-Tauri_v2-FFC131" alt="Tauri v2" />
   <img src="https://img.shields.io/badge/license-GPL--3.0-green" alt="License" />
@@ -43,14 +43,17 @@ The Roost is a multi-launcher game library manager for Windows. It brings togeth
 ### News Feed
 - **Aggregated articles** from games you've favorited or recently played
 - **In-app reading** with full article rendering, game and source filters, and read tracking
+- **Per-source filtering** &mdash; Block unwanted news sources in Settings
 
 ### System Overlay
 - **Global hotkey HUD** (Ctrl+Space) with floating panels for quick commands, game notes, system monitor, media controls, and audio mixer
 
-### AI Command Palette
+### AI Assistant
+- **Persistent assistant bubble** &mdash; Always-accessible chat panel with auto-executing actions
 - **Natural language search** &mdash; "installed RPGs sorted by playtime" resolves instantly into library actions
-- **Optional cloud AI** (Gemini Flash) for recommendations and conversational queries
+- **Optional cloud AI** (Gemini Flash) for recommendations, conversational queries, and game journals
 - **40+ actions** for navigation, themes, fonts, icon sets, view modes, sorting, and more
+- **Memory vault** &mdash; AI remembers your preferences and past conversations across sessions
 
 ### Storage Overview
 - **Per-drive breakdown** &mdash; Visual bars showing total, game, and free space on each drive
@@ -75,7 +78,7 @@ The Roost is a multi-launcher game library manager for Windows. It brings togeth
 | Frontend | React 18, TypeScript, Vite |
 | State | Zustand |
 | Charts | Recharts |
-| Testing | Vitest + Rust unit tests (718 total) |
+| Testing | Vitest + Rust unit tests (1,406 total) |
 
 ## Installation
 
