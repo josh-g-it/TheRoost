@@ -165,12 +165,17 @@ pub fn run() {
             ai::update_cloud_ai_settings,
             ai::list_personalities,
             ai::create_personality,
+            ai::delete_personality,
             ai::list_avatars,
             ai::get_active_avatar,
             ai::create_avatar,
             ai::switch_avatar,
             ai::delete_avatar,
             ai::wipe_avatar_data,
+            ai::update_avatar,
+            ai::list_companion_roles,
+            ai::create_companion_role,
+            ai::delete_companion_role,
             ai::get_memories,
             ai::delete_memory,
             ai::get_journal,
@@ -198,6 +203,21 @@ pub fn run() {
             ai::get_compaction_pending_conversations,
             ai::get_compaction_raw_data,
             ai::apply_external_compaction,
+            ai::list_sprites,
+            ai::save_sprite,
+            ai::delete_sprite,
+            ai::rename_sprite,
+            ai::read_sprite,
+            ai::set_active_sprite,
+            ai::get_active_sprite,
+            ai::save_crop_offsets,
+            ai::validate_sprite,
+            ai::get_avatar_stats,
+            ai::export_sprite,
+            ai::import_sprite_from_path,
+            ai::generate_sprite,
+            ai::set_conversation_timer_viewing,
+            ai::relay_event,
             updater::check_for_update,
             updater::install_update,
             updater::get_app_version,
@@ -218,10 +238,17 @@ pub fn run() {
         ])
         .setup(|app| {
             // Initialize tracing with our custom layer that forwards events to the frontend
+            // + fmt layer for terminal output (visible even when app freezes)
             let tauri_layer = TauriLogLayer::new(app.handle().clone());
             tracing_subscriber::registry()
                 .with(tauri_layer)
-                .with(tracing_subscriber::filter::LevelFilter::DEBUG)
+                .with(
+                    tracing_subscriber::fmt::layer()
+                        .with_target(false)
+                        .with_level(true)
+                        .compact(),
+                )
+                .with(tracing_subscriber::filter::LevelFilter::INFO)
                 .init();
 
             tracing::info!("The Roost backend initialized");
@@ -240,6 +267,36 @@ pub fn run() {
             let db_handle = Arc::new(Mutex::new(cache_db));
             app.manage(db_handle.clone());
             tracing::info!("Cache database initialized");
+
+            // Ensure sprites directory exists + copy pre-built sprites from bundled resources
+            match services::ai::sprite::ensure_sprites_dir(&app_data) {
+                Ok(sprites_dir) => {
+                    let mut resource_dir = app.path().resource_dir().unwrap_or_default();
+                    // In dev mode resource_dir points to target/debug which may have a stale
+                    // resources/sprites/ dir missing newly added files. Check for an actual
+                    // prebuilt sprite; if absent, fall back to the src-tauri source directory.
+                    let probe = resource_dir
+                        .join("resources")
+                        .join("sprites")
+                        .join(format!(
+                            "{}.png",
+                            services::ai::sprite::PREBUILT_SPRITE_NAMES[0]
+                        ));
+                    if !probe.exists() {
+                        if let Some(ancestor) = resource_dir.parent().and_then(|p| p.parent()) {
+                            resource_dir = ancestor.to_path_buf();
+                        }
+                    }
+                    if let Err(e) =
+                        services::ai::sprite::copy_prebuilt_sprites(&resource_dir, &sprites_dir)
+                    {
+                        tracing::warn!(error = %e, "Failed to copy pre-built sprites");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to create sprites directory");
+                }
+            }
 
             // Initialize cloud AI config from settings
             let cloud_settings = settings_store::load_settings(app.handle()).unwrap_or_default();
@@ -327,9 +384,12 @@ pub fn run() {
                     }
                 }
                 tauri::WindowEvent::Focused(false) => {
-                    // Auto-hide overlay when it loses focus
+                    // Overlay focus management is handled by the JS side
+                    // (OverlayApp.tsx reclaims focus or hides intentionally).
+                    // Auto-hiding here fights with the JS reclaim logic and
+                    // can cause a rapid show/hide loop that freezes the app.
                     if window.label() == "overlay" {
-                        let _ = window.hide();
+                        tracing::trace!("Overlay lost focus");
                     }
                 }
                 _ => {}

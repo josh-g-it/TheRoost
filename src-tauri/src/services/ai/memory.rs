@@ -233,12 +233,16 @@ pub fn seed_system_memories(
     db: &CacheDb,
     avatar_id: &str,
     avatar_name: &str,
+    companion_role_id: Option<&str>,
+    companion_role_custom: Option<&str>,
     key: &[u8; 32],
 ) -> Result<(), AppError> {
+    let role_text = db.resolve_companion_role_prompt(companion_role_id, companion_role_custom);
+
     let system_memories = [
         format!(
-            "Your name is {}. You are the user's AI gaming companion in The Roost.",
-            avatar_name
+            "Your name is {}. You are {} in The Roost.",
+            avatar_name, role_text
         ),
         "You have access to the user's game library, playtime data, and gaming preferences through context provided with each message.".to_string(),
         "When the user asks you to perform actions (like filtering games, adding favorites, etc.), respond with the appropriate action format so the system can execute it. Always clear existing filters first (action:reset-filters) before applying new filter or sort actions.".to_string(),
@@ -318,7 +322,7 @@ mod tests {
     fn setup_avatar(db: &CacheDb) -> String {
         let personalities = db.list_ai_personalities().unwrap();
         let avatar = db
-            .create_ai_avatar("TestBot", &personalities[0].id)
+            .create_ai_avatar("TestBot", &personalities[0].id, None, None, None)
             .unwrap();
         avatar.id
     }
@@ -327,7 +331,7 @@ mod tests {
     fn test_seed_system_memories() {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
-        seed_system_memories(&db, &avatar_id, "TestBot", &TEST_KEY).unwrap();
+        seed_system_memories(&db, &avatar_id, "TestBot", None, None, &TEST_KEY).unwrap();
         let mems = load_system_memories(&db, &avatar_id, &TEST_KEY).unwrap();
         assert_eq!(mems.len(), 4);
         assert!(mems.iter().all(|m| m.is_system));
@@ -420,7 +424,7 @@ mod tests {
     fn test_prune_never_touches_system_memories() {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
-        seed_system_memories(&db, &avatar_id, "Bot", &TEST_KEY).unwrap();
+        seed_system_memories(&db, &avatar_id, "Bot", None, None, &TEST_KEY).unwrap();
         for i in 0..105 {
             insert_memory(
                 &db,
@@ -536,8 +540,12 @@ mod tests {
     fn test_load_cross_avatar_memories() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let a1 = db.create_ai_avatar("Bot1", &personalities[0].id).unwrap();
-        let a2 = db.create_ai_avatar("Bot2", &personalities[0].id).unwrap();
+        let a1 = db
+            .create_ai_avatar("Bot1", &personalities[0].id, None, None, None)
+            .unwrap();
+        let a2 = db
+            .create_ai_avatar("Bot2", &personalities[0].id, None, None, None)
+            .unwrap();
 
         // High-importance on a2
         insert_memory(
@@ -849,7 +857,7 @@ mod tests {
     fn test_seed_system_memories_custom_name() {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
-        seed_system_memories(&db, &avatar_id, "PixelPal", &TEST_KEY).unwrap();
+        seed_system_memories(&db, &avatar_id, "PixelPal", None, None, &TEST_KEY).unwrap();
 
         let mems = load_system_memories(&db, &avatar_id, &TEST_KEY).unwrap();
         // The first memory should contain the custom avatar name
@@ -864,7 +872,7 @@ mod tests {
     fn test_seed_system_memories_all_importance_10() {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
-        seed_system_memories(&db, &avatar_id, "Bot", &TEST_KEY).unwrap();
+        seed_system_memories(&db, &avatar_id, "Bot", None, None, &TEST_KEY).unwrap();
 
         let mems = load_system_memories(&db, &avatar_id, &TEST_KEY).unwrap();
         assert_eq!(mems.len(), 4);
@@ -881,7 +889,7 @@ mod tests {
     fn test_seed_system_memories_all_marked_system() {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
-        seed_system_memories(&db, &avatar_id, "Bot", &TEST_KEY).unwrap();
+        seed_system_memories(&db, &avatar_id, "Bot", None, None, &TEST_KEY).unwrap();
 
         let mems = load_system_memories(&db, &avatar_id, &TEST_KEY).unwrap();
         assert_eq!(mems.len(), 4);

@@ -500,10 +500,32 @@ pub fn build_filtered_library_summary(
     Ok(parts.join("\n\n"))
 }
 
-/// Static action instructions block for the conversation system prompt.
+/// Expression instructions appended when the avatar has a sprite assigned.
+/// Kept as a separate constant so it's only injected conditionally (~60 tokens).
+const EXPRESSION_INSTRUCTIONS: &str = r#"
+
+## Expressions
+
+You can set your visual expression to match your emotional response.
+Available expressions: happy, sad, interested, bored
+Use the format in your actions array: {"actionId": "expression:<name>", "tier": 0}
+Choose one that fits your reaction. If none feels right, omit it and you'll stay neutral.
+Only use one expression action per response. Expression actions (tier 0) are invisible to the user."#;
+
+/// Action instructions block for the conversation system prompt.
 /// Instructs the AI on the delimiter protocol, available actions, tiers, and rules.
-/// Total cost: ~400 tokens.
-pub fn build_actions_system_prompt() -> &'static str {
+/// When `avatar_has_sprite` is true, appends expression instructions (~60 extra tokens).
+/// Total cost: ~400-460 tokens.
+pub fn build_actions_system_prompt(avatar_has_sprite: bool) -> String {
+    let base = actions_base_prompt();
+    if avatar_has_sprite {
+        format!("{}{}", base, EXPRESSION_INSTRUCTIONS)
+    } else {
+        base.to_string()
+    }
+}
+
+fn actions_base_prompt() -> &'static str {
     r#"## Actions
 
 Your PRIMARY purpose is conversation — actions are a secondary capability.
@@ -730,9 +752,22 @@ mod tests {
 
     #[test]
     fn actions_prompt_emphasizes_conversation_primary() {
-        let prompt = build_actions_system_prompt();
+        let prompt = build_actions_system_prompt(false);
         assert!(prompt.contains("PRIMARY purpose is conversation"));
         assert!(prompt.contains("NON-NEGOTIABLE"));
+    }
+
+    #[test]
+    fn actions_prompt_includes_expressions_when_sprite() {
+        let prompt = build_actions_system_prompt(true);
+        assert!(prompt.contains("## Expressions"));
+        assert!(prompt.contains("expression:<name>"));
+    }
+
+    #[test]
+    fn actions_prompt_omits_expressions_when_no_sprite() {
+        let prompt = build_actions_system_prompt(false);
+        assert!(!prompt.contains("## Expressions"));
     }
 
     // --- sanitize_for_prompt_context additional edge cases ---

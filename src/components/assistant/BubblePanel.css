@@ -1,8 +1,6 @@
 .bubble-panel {
   position: fixed;
-  left: var(--rail-width);
-  bottom: var(--space-md);
-  z-index: 19;
+  z-index: 150;
   display: flex;
   flex-direction: column;
   background: var(--color-bg-primary);
@@ -15,7 +13,6 @@
   opacity: 0;
   transform: translateY(12px) scale(0.97);
   transition:
-    left var(--transition-fast),
     opacity 180ms ease-out,
     transform 180ms ease-out;
 }
@@ -32,52 +29,54 @@
   opacity: 1;
 }
 
-/* Disable transitions during resize for snappy feel */
-.bubble-panel--resizing {
+/* Disable transitions during resize or drag for snappy feel */
+.bubble-panel--resizing,
+.bubble-panel--dragging {
   transition: none;
+  opacity: 1;
 }
 
-/* Expanded mode: always offset by expanded width so rail doesn't cover bubble */
-.bubble-panel[data-rail-mode="expanded"] {
-  left: var(--rail-expanded-width);
-}
-
+/* ── Header — sprite left, name right ── */
 .bubble-panel__header {
+  position: relative;
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   border-bottom: 1px solid var(--color-border-subtle);
   flex-shrink: 0;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
 }
 
-.bubble-panel__avatar-circle {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: #fff;
+.bubble-panel--dragging .bubble-panel__header {
+  cursor: grabbing;
+}
+
+.bubble-panel__sprite {
+  pointer-events: none;
   flex-shrink: 0;
 }
 
 .bubble-panel__name {
+  flex: 1;
+  min-width: 0;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  pointer-events: none;
 }
 
-.bubble-panel__spacer {
-  flex: 1;
-}
-
-.bubble-panel__btn {
+/* Close button — top-right overlay */
+.bubble-panel__close-btn {
+  position: absolute;
+  top: var(--space-xs);
+  right: var(--space-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -93,12 +92,12 @@
     color var(--transition-fast);
 }
 
-.bubble-panel__btn:hover {
+.bubble-panel__close-btn:hover {
   background: var(--color-bg-hover);
   color: var(--color-text-primary);
 }
 
-.bubble-panel__btn:focus-visible {
+.bubble-panel__close-btn:focus-visible {
   outline: 2px solid var(--color-border-focus);
   outline-offset: -2px;
 }
@@ -110,14 +109,46 @@
   flex-direction: column;
 }
 
-/* ── Resize handle (top-right corner) ── */
+/* ── Footer — subtle end conversation ── */
+.bubble-panel__footer {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-xs) var(--space-md);
+  border-top: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+}
+
+.bubble-panel__end-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  font-size: 0.7rem;
+  cursor: pointer;
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-sm);
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.bubble-panel__end-btn:hover:not(:disabled) {
+  color: var(--color-danger, #ef4444);
+  background: color-mix(in srgb, var(--color-danger, #ef4444) 8%, transparent);
+}
+
+.bubble-panel__end-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Resize handle (bottom-right corner) ── */
 .bubble-panel__resize-handle {
   position: absolute;
-  top: 0;
+  bottom: 0;
   right: 0;
   width: 16px;
   height: 16px;
-  cursor: nesw-resize;
+  cursor: nwse-resize;
   z-index: 2;
 }
 
@@ -125,12 +156,12 @@
 .bubble-panel__resize-handle::after {
   content: "";
   position: absolute;
-  top: 3px;
+  bottom: 3px;
   right: 3px;
   width: 8px;
   height: 8px;
   border-right: 2px solid var(--color-text-tertiary);
-  border-top: 2px solid var(--color-text-tertiary);
+  border-bottom: 2px solid var(--color-text-tertiary);
   opacity: 0.4;
   transition: opacity var(--transition-fast);
 }

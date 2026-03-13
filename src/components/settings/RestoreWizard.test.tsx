@@ -35,6 +35,8 @@ const baseValidation: RestoreValidation = {
     settingsSizeBytes: 1024 * 5,
     artFileCount: 3,
     artTotalBytes: 1024 * 1024,
+    spriteFileCount: 1,
+    spriteTotalBytes: 50000,
     credentialHints: ["steam_api_key", "steamgriddb_api_key"],
   },
   error: null,

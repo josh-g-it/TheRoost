@@ -14,8 +14,18 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
+/// Emit an event to the **main window only**.
+///
+/// On Windows, `WebviewWindow::emit()` / `app_handle.emit()` can block when
+/// delivering to the overlay's transparent webview (DWM compositor + message
+/// pump issues). The overlay uses invoke-only communication, so we only ever
+/// emit events to the main window.
+pub fn emit_safe<S: Serialize + Clone>(app: &tauri::AppHandle, event: &str, payload: &S) {
+    let _ = app.emit_to("main", event, payload);
+}
+
 /// Payload broadcast via `ai-user-message` for cross-window conversation sync.
-/// Both the main window and overlay receive this; the sender deduplicates by timestamp.
+/// The sender deduplicates by timestamp.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserMessagePayload {
@@ -24,6 +34,14 @@ pub struct UserMessagePayload {
     /// Unix timestamp (seconds) — used by the frontend to deduplicate messages
     /// that originated from the local window.
     pub timestamp: i64,
+}
+
+/// Payload emitted via `ai-stream-chunk` for progressive text rendering.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StreamChunkPayload {
+    conversation_id: String,
+    text: String,
 }
 
 const CHARS_PER_TOKEN: usize = 3;
@@ -57,25 +75,31 @@ fn release_conversation_lock(conv_id: &str) {
     map.remove(conv_id);
 }
 
-fn build_conversation_system_prompt(personality_prompt: &str) -> String {
-    let actions_prompt = context_builder::build_actions_system_prompt();
+fn build_conversation_system_prompt(
+    personality_prompt: &str,
+    role_prompt: &str,
+    avatar_has_sprite: bool,
+) -> String {
+    let actions_prompt = context_builder::build_actions_system_prompt(avatar_has_sprite);
     format!(
-        r#"You are a personal gaming companion in The Roost — a PC game launcher app that manages games from Steam, Epic, GOG, EA, Ubisoft, and Battle.net.
+        r#"You are {role} in The Roost — a PC game launcher app that manages games from Steam, Epic, GOG, EA, Ubisoft, and Battle.net.
 
 You have deep knowledge of the user's gaming library, playtime, and preferences through context provided with each message. Use this to give personalized, thoughtful responses.
 
 ## Your Personality
-{}
+{personality}
 
 ## Important Guidelines
 - If you don't have enough information to answer a question, say so honestly. It's better to say "I don't have that information" than to guess or make something up. You only know what's in the library context and memory vault provided to you.
 - The library context you receive is a snapshot taken when the conversation started. If the user makes changes to their library mid-conversation (installing games, adding favorites, etc.), your context will not reflect those changes until the next conversation.
 - When executing filter or sort actions across multiple turns, always include action:reset-filters before new filter/sort actions — even if the previous turn already set filters. Each turn's filters should be a fresh set, not additive on top of whatever the previous turn applied.
 
-{}
+{actions}
 
 Keep your responses conversational and engaging. You can reference specific games, stats, and patterns from the user's library to make the conversation feel personal."#,
-        personality_prompt, actions_prompt
+        role = role_prompt,
+        personality = personality_prompt,
+        actions = actions_prompt,
     )
 }
 
@@ -161,12 +185,18 @@ pub fn assemble_context(
     key: &[u8; 32],
     settings: &AppSettings,
 ) -> Result<(String, Vec<ChatMessage>), AppError> {
-    // Layer 1: System prompt with personality
+    // Layer 1: System prompt with personality + companion role
     let avatar = db
         .get_active_ai_avatar()?
         .ok_or_else(|| AppError::NotFound("No active avatar".into()))?;
     let personality_prompt = db.get_personality_prompt(&avatar.personality_id)?;
-    let mut system_prompt = build_conversation_system_prompt(&personality_prompt);
+    let role_prompt = db.resolve_companion_role_prompt(
+        avatar.companion_role_id.as_deref(),
+        avatar.companion_role_custom.as_deref(),
+    );
+    let avatar_has_sprite = avatar.image_path.is_some();
+    let mut system_prompt =
+        build_conversation_system_prompt(&personality_prompt, &role_prompt, avatar_has_sprite);
 
     // Layer 2: Library context
     let library_ctx = context_builder::build_filtered_library_summary(
@@ -283,9 +313,16 @@ pub fn assemble_context(
     Ok((system_prompt, messages))
 }
 
-/// The core send + stream function.
+/// Send a message and collect the full AI response.
+///
+/// Internally still streams from the cloud provider (Gemini) via a channel,
+/// but collects the complete response into a string and returns it. No events
+/// are emitted for stream chunks — the frontend shows a "thinking" state and
+/// then displays the full response when the invoke resolves.
+///
+/// Returns the full response text (including any ---ACTIONS--- block).
 #[allow(clippy::too_many_arguments)]
-pub async fn send_message_and_stream(
+pub async fn send_message_and_collect(
     db: &CacheDbHandle,
     conv_id: &str,
     avatar_id: &str,
@@ -297,10 +334,28 @@ pub async fn send_message_and_stream(
     action_feedback: Option<&str>,
     max_output_tokens: Option<u32>,
     page_context: Option<&str>,
-) -> Result<(), AppError> {
-    // Serialize concurrent calls to the same conversation
+) -> Result<String, AppError> {
+    tracing::debug!(
+        conv_id,
+        skip_user_persist,
+        "send_message_and_collect: START"
+    );
+
+    // Serialize concurrent calls to the same conversation.
     let conv_lock = acquire_conversation_lock(conv_id);
-    let _guard = conv_lock.lock().await;
+    let _guard =
+        match tokio::time::timeout(std::time::Duration::from_secs(5), conv_lock.lock()).await {
+            Ok(guard) => guard,
+            Err(_) => {
+                tracing::error!(
+                    conv_id,
+                    "send_message_and_collect: TIMEOUT acquiring conversation lock after 5s"
+                );
+                return Err(AppError::Validation(
+                    "Conversation is busy — please try again in a moment.".into(),
+                ));
+            }
+        };
 
     // Step 0: Check message count cap + prevent duplicate auto-greetings
     {
@@ -311,33 +366,23 @@ pub async fn send_message_and_stream(
                 "Conversation has reached the message limit. Please end this conversation and start a new one.".into(),
             ));
         }
-        // When both windows start a conversation simultaneously, both may try
-        // to send the initial hidden auto-greeting. The per-conversation lock
-        // serializes these calls, so the second one sees the first's stored
-        // messages and returns early — preventing duplicate greetings.
         if skip_user_persist && msg_count > 0 {
             tracing::debug!(
                 conv_id,
                 "Skipping duplicate auto-greeting (conversation already has messages)"
             );
-            return Ok(());
+            return Ok(String::new());
         }
-    }
+    } // DB lock dropped
 
-    // Broadcast user message to all windows for cross-window sync EARLY,
-    // before streaming begins. The frontend deduplicates by timestamp, so
-    // this must fire within 2s of the frontend setting lastSentTimestampRef.
-    // Only for visible (non-hidden) messages — hidden messages (auto-greetings,
-    // system prompts) are not displayed in chat and don't need syncing.
+    // Broadcast user message for cross-window sync (main window only).
     if !skip_user_persist {
         let payload = UserMessagePayload {
             conversation_id: conv_id.to_string(),
             content: user_message.to_string(),
             timestamp: chrono::Utc::now().timestamp(),
         };
-        if let Err(e) = app_handle.emit("ai-user-message", &payload) {
-            tracing::warn!(error = %e, "Failed to emit ai-user-message");
-        }
+        emit_safe(app_handle, "ai-user-message", &payload);
     }
 
     // Step 1: Build context (under lock)
@@ -346,7 +391,7 @@ pub async fn send_message_and_stream(
         assemble_context(&db_guard, conv_id, avatar_id, key, settings)?
     }; // lock dropped
 
-    // Append page context (lightweight ~20-30 tokens describing current UI state)
+    // Append page context
     if let Some(ctx) = page_context {
         let sanitized = context_builder::sanitize_for_prompt_context(ctx);
         if !sanitized.is_empty() {
@@ -364,7 +409,7 @@ pub async fn send_message_and_stream(
         });
     }
 
-    // Add the new user message to the messages list
+    // Add the new user message
     messages.push(ChatMessage {
         role: ChatRole::User,
         content: user_message.to_string(),
@@ -375,7 +420,7 @@ pub async fn send_message_and_stream(
     let api_key = credential_store::load_cloud_key(&settings.cloud_ai_provider)?
         .ok_or_else(|| AppError::Credential("No cloud API key configured".into()))?;
 
-    // Step 2: Stream response (no lock held)
+    // Step 2: Stream from provider, collect into string (no lock held, no events)
     let provider = providers::get_provider(&settings.cloud_ai_provider);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<StreamChunk>(32);
     let conv_id_owned = conv_id.to_string();
@@ -395,28 +440,32 @@ pub async fn send_message_and_stream(
 
     let mut full_response = String::new();
     while let Some(chunk) = rx.recv().await {
-        full_response.push_str(&chunk.text);
-        if let Err(e) = app_handle.emit("ai-stream-chunk", &chunk) {
-            tracing::warn!(error = %e, "Failed to emit ai-stream-chunk");
+        // Emit chunk for progressive rendering (skip hidden/auto-greeting messages)
+        if !skip_user_persist {
+            emit_safe(
+                app_handle,
+                "ai-stream-chunk",
+                &StreamChunkPayload {
+                    conversation_id: conv_id.to_string(),
+                    text: chunk.text.clone(),
+                },
+            );
         }
+        full_response.push_str(&chunk.text);
     }
 
     // Check if the streaming task failed
     match handle.await {
-        Ok(Ok(_)) => {} // Stream completed successfully
+        Ok(Ok(_)) => {}
         Ok(Err(e)) => {
             if full_response.is_empty() {
                 return Err(e);
             }
-            // If we got partial response, log the error but continue with what we have
             tracing::warn!(error = %e, "Streaming completed with error but partial response received");
         }
         Err(e) => {
             if full_response.is_empty() {
-                return Err(AppError::StoreApi(format!(
-                    "Streaming task panicked: {}",
-                    e
-                )));
+                return Err(AppError::StoreApi(format!("Streaming task panicked: {e}")));
             }
             tracing::warn!(error = %e, "Streaming task panicked but partial response received");
         }
@@ -444,7 +493,13 @@ pub async fn send_message_and_stream(
         )?;
     } // DB lock dropped
 
-    Ok(())
+    tracing::debug!(
+        conv_id,
+        response_len = full_response.len(),
+        "send_message_and_collect: complete"
+    );
+
+    Ok(full_response)
 }
 
 /// End conversation + compaction.
@@ -745,7 +800,7 @@ mod tests {
     fn setup_avatar(db: &CacheDb) -> String {
         let personalities = db.list_ai_personalities().unwrap();
         let avatar = db
-            .create_ai_avatar("TestBot", &personalities[0].id)
+            .create_ai_avatar("TestBot", &personalities[0].id, None, None, None)
             .unwrap();
         db.switch_ai_avatar(&avatar.id).unwrap();
         avatar.id
@@ -798,7 +853,7 @@ mod tests {
     fn test_assemble_context_includes_personality() {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
-        memory::seed_system_memories(&db, &avatar_id, "TestBot", &TEST_KEY).unwrap();
+        memory::seed_system_memories(&db, &avatar_id, "TestBot", None, None, &TEST_KEY).unwrap();
         let conv = db.create_ai_conversation(&avatar_id).unwrap();
 
         // Insert a user message
@@ -874,7 +929,7 @@ mod tests {
     fn test_assemble_context_includes_active_game_session() {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
-        memory::seed_system_memories(&db, &avatar_id, "TestBot", &TEST_KEY).unwrap();
+        memory::seed_system_memories(&db, &avatar_id, "TestBot", None, None, &TEST_KEY).unwrap();
         let conv = db.create_ai_conversation(&avatar_id).unwrap();
 
         // Register a game and start an active session
@@ -898,7 +953,7 @@ mod tests {
     fn test_assemble_context_no_game_session_no_activity() {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
-        memory::seed_system_memories(&db, &avatar_id, "TestBot", &TEST_KEY).unwrap();
+        memory::seed_system_memories(&db, &avatar_id, "TestBot", None, None, &TEST_KEY).unwrap();
         let conv = db.create_ai_conversation(&avatar_id).unwrap();
 
         let enc = encrypt_field("hello", &TEST_KEY).unwrap();
@@ -1072,9 +1127,15 @@ mod tests {
 
     #[test]
     fn test_build_conversation_system_prompt() {
-        let prompt = build_conversation_system_prompt("You are a friendly guide.");
+        let prompt = build_conversation_system_prompt(
+            "You are a friendly guide.",
+            "a gaming companion who helps with all aspects of the user's library",
+            false,
+        );
         assert!(prompt.contains("You are a friendly guide."));
         assert!(prompt.contains("Your Personality"));
+        // Companion role injected into opening sentence
+        assert!(prompt.contains("a gaming companion who helps"));
         // Phase 13: action instructions
         assert!(prompt.contains("---ACTIONS---"));
         assert!(prompt.contains("CRITICAL RULES"));
@@ -1087,6 +1148,32 @@ mod tests {
         assert!(prompt.contains("snapshot"));
         // 02-P2: Multi-turn filter reset
         assert!(prompt.contains("Each turn's filters should be a fresh set"));
+        // No sprite → no expression instructions
+        assert!(!prompt.contains("## Expressions"));
+    }
+
+    #[test]
+    fn test_system_prompt_includes_expression_instructions_when_sprite_assigned() {
+        let prompt = build_conversation_system_prompt(
+            "You are a friendly guide.",
+            "a gaming companion",
+            true,
+        );
+        assert!(prompt.contains("## Expressions"));
+        assert!(prompt.contains("expression:<name>"));
+        assert!(prompt.contains("happy, sad, interested, bored"));
+        assert!(prompt.contains("tier\": 0"));
+    }
+
+    #[test]
+    fn test_system_prompt_omits_expression_instructions_when_no_sprite() {
+        let prompt = build_conversation_system_prompt(
+            "You are a friendly guide.",
+            "a gaming companion",
+            false,
+        );
+        assert!(!prompt.contains("## Expressions"));
+        assert!(!prompt.contains("expression:<name>"));
     }
 
     #[test]
@@ -1120,7 +1207,7 @@ mod tests {
         let db = test_db();
         let avatar_id = setup_avatar(&db);
         let conv = db.create_ai_conversation(&avatar_id).unwrap();
-        memory::seed_system_memories(&db, &avatar_id, "Bot", &TEST_KEY).unwrap();
+        memory::seed_system_memories(&db, &avatar_id, "Bot", None, None, &TEST_KEY).unwrap();
 
         // Insert a system summary message
         let sys_enc = encrypt_field(

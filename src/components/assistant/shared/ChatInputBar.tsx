@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useSpeechRecognition } from "../../../hooks/useSpeechRecognition";
 import { AppIcon } from "../../common/AppIcon";
 import "./ChatInputBar.css";
@@ -9,10 +9,19 @@ export const ChatInputBar = memo(function ChatInputBar({
   onSend,
   isStreaming,
   cloudAiEnabled,
+  onInput,
+  onEndConversation,
+  showEndButton,
 }: {
   onSend: (text: string) => void;
   isStreaming: boolean;
   cloudAiEnabled: boolean;
+  /** Called on each keystroke — used for expression engine typing detection. */
+  onInput?: () => void;
+  /** Called when user confirms ending the conversation. */
+  onEndConversation?: () => void;
+  /** Whether to show the end conversation button. */
+  showEndButton?: boolean;
 }) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -24,16 +33,22 @@ export const ChatInputBar = memo(function ChatInputBar({
     stop: stopListening,
   } = useSpeechRecognition();
 
+  // Ref-sync onInput to avoid re-attaching DOM listener when callback identity changes
+  const onInputRef = useRef(onInput);
+  onInputRef.current = onInput;
+
   // Auto-resize textarea on input (pure DOM manipulation, no React state)
+  // Also fires onInput callback for expression engine typing detection.
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
-    const adjustHeight = () => {
+    const handleInput = () => {
       el.style.height = "auto";
       el.style.height = el.scrollHeight + "px";
+      onInputRef.current?.();
     };
-    el.addEventListener("input", adjustHeight);
-    return () => el.removeEventListener("input", adjustHeight);
+    el.addEventListener("input", handleInput);
+    return () => el.removeEventListener("input", handleInput);
   }, []);
 
   // Inject speech recognition transcript directly into the DOM element
@@ -71,10 +86,36 @@ export const ChatInputBar = memo(function ChatInputBar({
     else startListening();
   }, [isListening, startListening, stopListening]);
 
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
+
+  const handleEndClick = useCallback(() => {
+    setShowEndConfirm(true);
+  }, []);
+
+  const handleEndConfirm = useCallback(() => {
+    setShowEndConfirm(false);
+    onEndConversation?.();
+  }, [onEndConversation]);
+
+  const handleEndCancel = useCallback(() => {
+    setShowEndConfirm(false);
+  }, []);
+
   return (
     <div
       className={`assistant-chat__input-bar ${!cloudAiEnabled ? "assistant-chat__input-bar--disabled" : ""}`}
     >
+      {showEndButton && onEndConversation && (
+        <button
+          className="assistant-chat__end-conv-btn"
+          onClick={handleEndClick}
+          disabled={isStreaming}
+          title="End conversation"
+          aria-label="End conversation"
+        >
+          <AppIcon name="close" size={14} />
+        </button>
+      )}
       <textarea
         ref={inputRef}
         className="assistant-chat__input"
@@ -105,6 +146,35 @@ export const ChatInputBar = memo(function ChatInputBar({
       >
         <AppIcon name="chevron-right" size={16} />
       </button>
+
+      {/* End conversation confirmation popup */}
+      {showEndConfirm && (
+        <div className="assistant-chat__end-confirm-backdrop" onClick={handleEndCancel}>
+          <div
+            className="assistant-chat__end-confirm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="assistant-chat__end-confirm-text">End this conversation?</p>
+            <p className="assistant-chat__end-confirm-sub">
+              Your assistant will save any memories before saying goodbye.
+            </p>
+            <div className="assistant-chat__end-confirm-actions">
+              <button
+                className="assistant-chat__end-confirm-btn assistant-chat__end-confirm-btn--yes"
+                onClick={handleEndConfirm}
+              >
+                End Conversation
+              </button>
+              <button
+                className="assistant-chat__end-confirm-btn"
+                onClick={handleEndCancel}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });

@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useConversation } from "./useConversation";
-import type { AiMessage, StreamChunk } from "../types";
+import type { AiMessage } from "../types";
 
 type EventCallback = (event: { payload: unknown }) => void;
-let streamCallback: ((event: { payload: StreamChunk }) => void) | null = null;
 let conversationEndedCallback:
   | ((event: { payload: { conversationId: string; reason: string } }) => void)
   | null = null;
@@ -12,15 +11,14 @@ const mockUnlisten = vi.fn();
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn((eventName: string, callback: EventCallback) => {
-    if (eventName === "ai-stream-chunk") {
-      streamCallback = callback as (event: { payload: StreamChunk }) => void;
-    } else if (eventName === "ai-conversation-ended") {
+    if (eventName === "ai-conversation-ended") {
       conversationEndedCallback = callback as (event: {
         payload: { conversationId: string; reason: string };
       }) => void;
     }
     return Promise.resolve(mockUnlisten);
   }),
+  emitTo: vi.fn(() => Promise.resolve()),
 }));
 
 const mockSendMessage = vi.fn();
@@ -41,9 +39,9 @@ vi.mock("../services/tauri", () => ({
 describe("useConversation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    streamCallback = null;
     conversationEndedCallback = null;
-    mockSendMessage.mockResolvedValue(undefined);
+    // Default: sendMessage returns an empty response (like a greeting noop)
+    mockSendMessage.mockResolvedValue("");
     mockEndConversation.mockResolvedValue(undefined);
     mockGetConversationHistory.mockResolvedValue([]);
     mockValidateAndResolveAiActions.mockResolvedValue({
@@ -64,7 +62,9 @@ describe("useConversation", () => {
     expect(result.current.pendingActions).toEqual([]);
   });
 
-  it("sendMessage calls API with correct params and adds user message", async () => {
+  it("sendMessage calls API with correct params and adds user + assistant messages", async () => {
+    mockSendMessage.mockResolvedValue("Hello! How can I help?");
+
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
@@ -82,13 +82,20 @@ describe("useConversation", () => {
       undefined,
       "Page: Unknown",
     );
-    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages).toHaveLength(2);
     expect(result.current.messages[0].role).toBe("user");
     expect(result.current.messages[0].content).toBe("Hello there");
+    expect(result.current.messages[1].role).toBe("assistant");
+    expect(result.current.messages[1].content).toBe("Hello! How can I help?");
   });
 
-  it("sets isStreaming to true after sendMessage", async () => {
-    mockSendMessage.mockReturnValue(new Promise(() => {}));
+  it("sets isStreaming during sendMessage and clears after", async () => {
+    let resolveMsg: (v: string) => void;
+    mockSendMessage.mockReturnValue(
+      new Promise<string>((r) => {
+        resolveMsg = r;
+      }),
+    );
 
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
@@ -99,6 +106,12 @@ describe("useConversation", () => {
     });
 
     expect(result.current.isStreaming).toBe(true);
+
+    await act(async () => {
+      resolveMsg!("Response");
+    });
+
+    expect(result.current.isStreaming).toBe(false);
   });
 
   it("sets error on API failure", async () => {
@@ -163,26 +176,18 @@ describe("useConversation", () => {
   });
 
   it("retry re-sends the last user message", async () => {
+    mockSendMessage.mockResolvedValue("First response");
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
-
-    // Wait for listen to register
-    await act(async () => {});
 
     await act(async () => {
       await result.current.sendMessage("Hello");
     });
 
-    // Complete the streaming cycle with a final chunk so isStreaming resets
-    act(() => {
-      streamCallback!({
-        payload: { conversationId: "c1", text: "Response", isFinal: true },
-      });
-    });
-
     expect(result.current.isStreaming).toBe(false);
     mockSendMessage.mockClear();
+    mockSendMessage.mockResolvedValue("Retry response");
 
     await act(async () => {
       await result.current.retry();
@@ -206,15 +211,15 @@ describe("useConversation", () => {
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
 
-    // Start first message (streaming starts)
-    act(() => {
+    // Fire first message — await lets listen() Promise resolve so the IPC
+    // call starts and isStreamingRef is held true (never-resolving mock).
+    await act(async () => {
       result.current.sendMessage("First");
     });
 
     expect(result.current.isStreaming).toBe(true);
     mockSendMessage.mockClear();
 
-    // Second call should be guarded
     await act(async () => {
       await result.current.sendMessage("Second");
     });
@@ -223,26 +228,24 @@ describe("useConversation", () => {
   });
 
   it("guards retry while streaming", async () => {
-    mockSendMessage.mockReturnValueOnce(Promise.resolve());
+    mockSendMessage.mockResolvedValueOnce("Response");
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
 
-    // Send initial message
     await act(async () => {
       await result.current.sendMessage("Hello");
     });
 
     // Start a second message to enter streaming state
     mockSendMessage.mockReturnValue(new Promise(() => {}));
-    act(() => {
+    await act(async () => {
       result.current.sendMessage("Second");
     });
 
     expect(result.current.isStreaming).toBe(true);
     mockSendMessage.mockClear();
 
-    // Retry should be guarded
     await act(async () => {
       await result.current.retry();
     });
@@ -250,120 +253,39 @@ describe("useConversation", () => {
     expect(mockSendMessage).not.toHaveBeenCalled();
   });
 
-  it("accumulates streaming text from non-final chunks", async () => {
-    vi.useFakeTimers();
+  it("adds assistant message from response and strips actions delimiter", async () => {
+    mockSendMessage.mockResolvedValue(
+      'Here are your RPGs sorted by most played!\n---ACTIONS---\n[{"actionId": "sort:playtime", "tier": 1}]',
+    );
+
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
 
-    // Wait for effect to register listen callback
-    await act(async () => {});
-
-    expect(streamCallback).not.toBeNull();
-
-    // Send a message to start streaming
     await act(async () => {
-      await result.current.sendMessage("Hello");
+      await result.current.sendMessage("Show my RPGs");
     });
 
-    // Fire non-final chunks (must be > 15 chars total to see emitted text due to parser buffering)
-    act(() => {
-      streamCallback!({
-        payload: {
-          conversationId: "c1",
-          text: "Hello world, this is a streaming response. ",
-          isFinal: false,
-        },
-      });
-    });
-
-    // Flush the 50ms debounce timer so buffered text is flushed to state
-    act(() => {
-      vi.advanceTimersByTime(50);
-    });
-
-    // Parser buffers last 15 chars, emits the rest
-    expect(result.current.currentStreamText.length).toBeGreaterThan(0);
-    expect(result.current.currentStreamText).toContain("Hello world");
-
-    act(() => {
-      streamCallback!({
-        payload: {
-          conversationId: "c1",
-          text: "It continues with more text here.",
-          isFinal: false,
-        },
-      });
-    });
-
-    // Flush debounce timer again
-    act(() => {
-      vi.advanceTimersByTime(50);
-    });
-
-    // More text accumulated
-    expect(result.current.currentStreamText.length).toBeGreaterThan(
-      "Hello world, this is a streaming response. ".length - 15,
-    );
-
-    vi.useRealTimers();
-  });
-
-  it("adds assistant message on final chunk and resets streaming", async () => {
-    const { result } = renderHook(() =>
-      useConversation({ avatarId: "a1", conversationId: "c1" }),
-    );
-
-    await act(async () => {});
-
-    // Send a message to start streaming
-    await act(async () => {
-      await result.current.sendMessage("Hello");
-    });
-
-    expect(result.current.isStreaming).toBe(true);
-
-    // Fire a non-final chunk
-    act(() => {
-      streamCallback!({ payload: { conversationId: "c1", text: "Hi ", isFinal: false } });
-    });
-
-    // Fire the final chunk
-    act(() => {
-      streamCallback!({
-        payload: { conversationId: "c1", text: "there!", isFinal: true },
-      });
-    });
-
-    expect(result.current.isStreaming).toBe(false);
-    expect(result.current.currentStreamText).toBe("");
-    // Messages should have: user message + assistant message
     expect(result.current.messages).toHaveLength(2);
-    expect(result.current.messages[1].role).toBe("assistant");
-    // Parser buffers short text but flushes on finalize — full content preserved
-    expect(result.current.messages[1].content).toBe("Hi there!");
+    const assistantMsg = result.current.messages[1];
+    expect(assistantMsg.content).toBe("Here are your RPGs sorted by most played!");
+    expect(assistantMsg.content).not.toContain("ACTIONS");
+    expect(assistantMsg.content).not.toContain("sort:playtime");
   });
 
-  it("ignores chunks with wrong conversationId", async () => {
+  it("does not add assistant message for empty response (noop)", async () => {
+    mockSendMessage.mockResolvedValue("");
+
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
 
-    await act(async () => {});
-
-    // Send a message to start streaming
     await act(async () => {
-      await result.current.sendMessage("Hello");
+      await result.current.sendMessage("Hello", { hidden: true });
     });
 
-    // Fire a chunk with wrong conversationId
-    act(() => {
-      streamCallback!({
-        payload: { conversationId: "c-other", text: "Wrong!", isFinal: false },
-      });
-    });
-
-    expect(result.current.currentStreamText).toBe("");
+    // Hidden message + empty response = no messages added
+    expect(result.current.messages).toHaveLength(0);
   });
 
   it("calls unlisten on unmount", async () => {
@@ -375,7 +297,6 @@ describe("useConversation", () => {
 
     unmount();
 
-    // The unlisten promise resolves to the mock fn, which then gets called
     await act(async () => {});
     expect(mockUnlisten).toHaveBeenCalled();
   });
@@ -386,10 +307,8 @@ describe("useConversation", () => {
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
 
-    // Wait for effects to register listen callbacks
     await act(async () => {});
 
-    // Load some messages
     const historyMessages = [
       {
         id: "m1",
@@ -408,7 +327,6 @@ describe("useConversation", () => {
     expect(result.current.messages).toHaveLength(1);
     expect(result.current.isEnded).toBe(false);
 
-    // Fire the conversation-ended event matching our conversationId
     expect(conversationEndedCallback).not.toBeNull();
     act(() => {
       conversationEndedCallback!({ payload: { conversationId: "c1", reason: "manual" } });
@@ -425,10 +343,8 @@ describe("useConversation", () => {
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
 
-    // Wait for effects to register listen callbacks
     await act(async () => {});
 
-    // Load some messages
     const historyMessages = [
       {
         id: "m1",
@@ -446,14 +362,12 @@ describe("useConversation", () => {
 
     expect(result.current.messages).toHaveLength(1);
 
-    // Fire event with wrong conversationId
     act(() => {
       conversationEndedCallback!({
         payload: { conversationId: "c-other", reason: "manual" },
       });
     });
 
-    // Messages should remain unchanged
     expect(result.current.messages).toHaveLength(1);
     expect(result.current.isEnded).toBe(false);
   });
@@ -463,15 +377,12 @@ describe("useConversation", () => {
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
 
-    // Wait for effects to register listen callbacks
     await act(async () => {});
 
-    // Call endConversation locally
     await act(async () => {
       await result.current.endConversation();
     });
 
-    // isEnded should be true after successful compaction
     expect(result.current.isEnded).toBe(true);
     expect(result.current.isCompacting).toBe(false);
   });
@@ -486,7 +397,6 @@ describe("useConversation", () => {
   });
 
   it("isCompacting is true during endConversation and false after", async () => {
-    // Make endConversation hang so we can observe isCompacting=true
     let resolveEnd: () => void;
     mockEndConversation.mockReturnValue(
       new Promise<void>((r) => {
@@ -498,14 +408,12 @@ describe("useConversation", () => {
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
 
-    // Start end (don't await)
     act(() => {
       result.current.endConversation();
     });
 
     expect(result.current.isCompacting).toBe(true);
 
-    // Resolve the backend call
     await act(async () => {
       resolveEnd!();
     });
@@ -520,7 +428,6 @@ describe("useConversation", () => {
       { initialProps: { convId: "c1" as string | null } },
     );
 
-    // Changing conversationId resets isCompacting (even if it was set)
     rerender({ convId: "c2" });
     expect(result.current.isCompacting).toBe(false);
   });
@@ -547,7 +454,6 @@ describe("useConversation", () => {
   });
 
   it("skips cross-window event during local endConversation, resets ref after", async () => {
-    // Make endConversation hang so we can test mid-flight behavior
     let resolveEnd: () => void;
     mockEndConversation.mockReturnValue(
       new Promise<void>((r) => {
@@ -560,24 +466,19 @@ describe("useConversation", () => {
     );
     await act(async () => {});
 
-    // Start local end (don't await)
     act(() => {
       result.current.endConversation();
     });
 
-    // Event arrives while compaction is in flight: should be skipped
     act(() => {
       conversationEndedCallback!({ payload: { conversationId: "c1", reason: "manual" } });
     });
-    // isEnded is still false because event was skipped and endConversation hasn't resolved
     expect(result.current.isEnded).toBe(false);
 
-    // Resolve the backend call
     await act(async () => {
       resolveEnd!();
     });
 
-    // Now isEnded is true from the success path
     expect(result.current.isEnded).toBe(true);
   });
 
@@ -604,6 +505,8 @@ describe("useConversation", () => {
   });
 
   it("sendMessage passes actionFeedback to API when provided", async () => {
+    mockSendMessage.mockResolvedValue("Got it, sorting by name.");
+
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
@@ -624,8 +527,7 @@ describe("useConversation", () => {
       undefined,
       "Page: Unknown",
     );
-    // User message should show clean text, not the feedback
-    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages).toHaveLength(2);
     expect(result.current.messages[0].content).toBe("Sort by name instead");
     expect(result.current.messages[0].content).not.toContain("[System]");
   });
@@ -653,17 +555,16 @@ describe("useConversation", () => {
   // ── injectMessage tests ──────────────────────────────────────────
 
   it("injectMessage appends message to existing messages", async () => {
+    mockSendMessage.mockResolvedValue("Hi there!");
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
 
-    // Add a user message first
     await act(async () => {
       await result.current.sendMessage("Hello");
     });
-    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages).toHaveLength(2);
 
-    // Inject an assistant message
     act(() => {
       result.current.injectMessage({
         id: "injected-1",
@@ -675,9 +576,9 @@ describe("useConversation", () => {
       });
     });
 
-    expect(result.current.messages).toHaveLength(2);
-    expect(result.current.messages[1].content).toBe("Injected greeting");
-    expect(result.current.messages[1].role).toBe("assistant");
+    expect(result.current.messages).toHaveLength(3);
+    expect(result.current.messages[2].content).toBe("Injected greeting");
+    expect(result.current.messages[2].role).toBe("assistant");
   });
 
   it("injectMessage does not affect streaming state", async () => {
@@ -701,64 +602,12 @@ describe("useConversation", () => {
     expect(result.current.messages).toHaveLength(1);
   });
 
-  // ── Delimiter safety strip ───────────────────────────────────────
+  // ── Actions from response ──────────────────────────────────────
 
-  it("safety-strips ---ACTIONS--- delimiter from stored message content", async () => {
-    const { result } = renderHook(() =>
-      useConversation({ avatarId: "a1", conversationId: "c1" }),
+  it("extracts and validates actions from response", async () => {
+    mockSendMessage.mockResolvedValue(
+      'Sorting by playtime!\n---ACTIONS---\n[{"actionId": "sort:playtime", "tier": 1}]',
     );
-    await act(async () => {});
-    await act(async () => {
-      await result.current.sendMessage("Test");
-    });
-
-    // Simulate a final chunk where delimiter leaked through parser
-    act(() => {
-      streamCallback!({
-        payload: {
-          conversationId: "c1",
-          text: "Some text---ACTIONS---leftover",
-          isFinal: true,
-        },
-      });
-    });
-
-    const assistantMsg = result.current.messages[1];
-    expect(assistantMsg.content).toBe("Some text");
-    expect(assistantMsg.content).not.toContain("ACTIONS");
-  });
-
-  // ── Streaming with action parser (Phase 13a) ──────────────────────
-
-  it("displays only text before delimiter during streaming", async () => {
-    const { result } = renderHook(() =>
-      useConversation({ avatarId: "a1", conversationId: "c1" }),
-    );
-    await act(async () => {});
-    await act(async () => {
-      await result.current.sendMessage("Show my RPGs");
-    });
-
-    // Stream text + delimiter + actions in final chunk
-    act(() => {
-      streamCallback!({
-        payload: {
-          conversationId: "c1",
-          text: 'Here are your RPGs sorted by most played!\n---ACTIONS---\n[{"actionId": "sort:playtime", "tier": 1}]',
-          isFinal: true,
-        },
-      });
-    });
-
-    // Assistant message should only contain display text
-    expect(result.current.messages).toHaveLength(2);
-    const assistantMsg = result.current.messages[1];
-    expect(assistantMsg.content).toBe("Here are your RPGs sorted by most played!");
-    expect(assistantMsg.content).not.toContain("ACTIONS");
-    expect(assistantMsg.content).not.toContain("sort:playtime");
-  });
-
-  it("extracts actions on stream completion", async () => {
     mockValidateAndResolveAiActions.mockResolvedValue({
       actions: [
         { actionId: "sort:playtime", originalActionId: "sort:playtime", tier: 1 },
@@ -769,19 +618,9 @@ describe("useConversation", () => {
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
-    await act(async () => {});
-    await act(async () => {
-      await result.current.sendMessage("Sort by playtime");
-    });
 
     await act(async () => {
-      streamCallback!({
-        payload: {
-          conversationId: "c1",
-          text: 'Sorting by playtime!\n---ACTIONS---\n[{"actionId": "sort:playtime", "tier": 1}]',
-          isFinal: true,
-        },
-      });
+      await result.current.sendMessage("Sort by playtime");
     });
 
     // Wait for the IPC promise to resolve
@@ -792,7 +631,7 @@ describe("useConversation", () => {
     ]);
   });
 
-  it("sets pendingActions state after stream finishes", async () => {
+  it("sets pendingActions state after response with actions", async () => {
     const resolvedActions = [
       {
         actionId: "sort:playtime",
@@ -800,6 +639,9 @@ describe("useConversation", () => {
         tier: 1,
       },
     ];
+    mockSendMessage.mockResolvedValue(
+      'Sorting!\n---ACTIONS---\n[{"actionId": "sort:playtime", "tier": 1}]',
+    );
     mockValidateAndResolveAiActions.mockResolvedValue({
       actions: resolvedActions,
       rejectedCount: 0,
@@ -808,19 +650,9 @@ describe("useConversation", () => {
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
-    await act(async () => {});
-    await act(async () => {
-      await result.current.sendMessage("Sort");
-    });
 
     await act(async () => {
-      streamCallback!({
-        payload: {
-          conversationId: "c1",
-          text: 'Sorting!\n---ACTIONS---\n[{"actionId": "sort:playtime", "tier": 1}]',
-          isFinal: true,
-        },
-      });
+      await result.current.sendMessage("Sort");
     });
 
     // Wait for IPC resolution
@@ -829,30 +661,23 @@ describe("useConversation", () => {
     expect(result.current.pendingActions).toEqual(resolvedActions);
   });
 
-  it("handles stream with no delimiter (normal text-only behavior)", async () => {
+  it("handles response with no delimiter (normal text-only behavior)", async () => {
+    mockSendMessage.mockResolvedValue(
+      "Based on your playtime, I'd recommend trying Elden Ring!",
+    );
+
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
-    await act(async () => {});
+
     await act(async () => {
       await result.current.sendMessage("What should I play?");
-    });
-
-    act(() => {
-      streamCallback!({
-        payload: {
-          conversationId: "c1",
-          text: "Based on your playtime, I'd recommend trying Elden Ring!",
-          isFinal: true,
-        },
-      });
     });
 
     expect(result.current.messages).toHaveLength(2);
     expect(result.current.messages[1].content).toBe(
       "Based on your playtime, I'd recommend trying Elden Ring!",
     );
-    // No IPC call should have been made
     expect(mockValidateAndResolveAiActions).not.toHaveBeenCalled();
     expect(result.current.pendingActions).toEqual([]);
   });
@@ -865,6 +690,9 @@ describe("useConversation", () => {
         tier: 1,
       },
     ];
+    mockSendMessage.mockResolvedValue(
+      'Here you go!\n---ACTIONS---\n[{"actionId": "nav:library", "tier": 1}]',
+    );
     mockValidateAndResolveAiActions.mockResolvedValue({
       actions: resolvedActions,
       rejectedCount: 0,
@@ -873,19 +701,9 @@ describe("useConversation", () => {
     const { result } = renderHook(() =>
       useConversation({ avatarId: "a1", conversationId: "c1" }),
     );
-    await act(async () => {});
-    await act(async () => {
-      await result.current.sendMessage("Go to library");
-    });
 
     await act(async () => {
-      streamCallback!({
-        payload: {
-          conversationId: "c1",
-          text: 'Here you go!\n---ACTIONS---\n[{"actionId": "nav:library", "tier": 1}]',
-          isFinal: true,
-        },
-      });
+      await result.current.sendMessage("Go to library");
     });
     await act(async () => {});
 
@@ -896,50 +714,6 @@ describe("useConversation", () => {
     });
 
     expect(result.current.pendingActions).toEqual([]);
-  });
-
-  it("initializes parser state on stream start", async () => {
-    vi.useFakeTimers();
-    const { result } = renderHook(() =>
-      useConversation({ avatarId: "a1", conversationId: "c1" }),
-    );
-    await act(async () => {});
-    await act(async () => {
-      await result.current.sendMessage("Test");
-    });
-
-    // Stream some text — parser should be initialized
-    act(() => {
-      streamCallback!({
-        payload: {
-          conversationId: "c1",
-          text: "This is a longer response that should partially display during streaming.",
-          isFinal: false,
-        },
-      });
-    });
-
-    // Flush the 50ms debounce timer so buffered text is flushed to state
-    act(() => {
-      vi.advanceTimersByTime(50);
-    });
-
-    // Parser buffers last 15 chars, rest is displayed
-    expect(result.current.currentStreamText.length).toBeGreaterThan(0);
-
-    // Finalize the stream
-    act(() => {
-      streamCallback!({
-        payload: { conversationId: "c1", text: "", isFinal: true },
-      });
-    });
-
-    expect(result.current.isStreaming).toBe(false);
-    expect(result.current.messages[1].content).toContain(
-      "This is a longer response that should partially display during streaming.",
-    );
-
-    vi.useRealTimers();
   });
 
   // ── History load: action re-parsing ─────────────────────────────
@@ -967,10 +741,8 @@ describe("useConversation", () => {
       loaded = await result.current.loadHistory("c1");
     });
 
-    // Displayed message should have actions stripped
     expect(result.current.messages[0].content).toBe("Here are your RPGs!");
     expect(result.current.messages[0].content).not.toContain("ACTIONS");
-    // Return value should also be stripped
     expect(loaded[0].content).toBe("Here are your RPGs!");
   });
 
@@ -998,11 +770,8 @@ describe("useConversation", () => {
 
     await act(async () => {});
 
-    // v1.12.1: Actions are NOT re-resolved from history to prevent auto-execution
-    // of stale actions (e.g., nav actions bouncing user away on component remount)
     expect(mockValidateAndResolveAiActions).not.toHaveBeenCalled();
     expect(result.current.pendingActions).toEqual([]);
-    // But the action content should still be stripped for display
     expect(result.current.messages[0].content).toBe("Here are your RPGs!");
   });
 
@@ -1037,10 +806,8 @@ describe("useConversation", () => {
 
     await act(async () => {});
 
-    // Should NOT re-resolve actions since user already replied
     expect(mockValidateAndResolveAiActions).not.toHaveBeenCalled();
     expect(result.current.pendingActions).toEqual([]);
-    // But the message content should still be stripped for display
     expect(result.current.messages[0].content).toBe("Actions here");
   });
 });

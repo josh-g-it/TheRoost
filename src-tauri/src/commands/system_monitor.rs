@@ -6,8 +6,11 @@ use crate::services::process_monitor::SystemMetricsHandle;
 use crate::utils::error::{AppError, MutexExt};
 
 /// Return fresh system metrics (active refresh — lightweight targeted sysinfo call).
+///
+/// Async to avoid blocking the main thread — sysinfo refresh can take tens of
+/// milliseconds, and running on the main thread blocks the WebView2 message pump.
 #[tauri::command]
-pub fn get_system_metrics(
+pub async fn get_system_metrics(
     metrics: State<'_, SystemMetricsHandle>,
 ) -> Result<SystemMetricsSnapshot, AppError> {
     let mut m = metrics.lock_or_err("Metrics")?;
@@ -17,7 +20,7 @@ pub fn get_system_metrics(
 /// Kill a tracked game process by PID.
 /// Only kills processes currently in the tracked process list and not The Roost itself.
 #[tauri::command]
-pub fn kill_game_process(
+pub async fn kill_game_process(
     pid: u32,
     metrics: State<'_, SystemMetricsHandle>,
 ) -> Result<(), AppError> {

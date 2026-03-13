@@ -24,7 +24,6 @@ fn client() -> &'static reqwest::Client {
 }
 
 /// Streaming HTTP client — connect timeout only, no total-request timeout.
-#[allow(dead_code)]
 fn streaming_client() -> &'static reqwest::Client {
     static STREAM_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     STREAM_CLIENT.get_or_init(|| {
@@ -90,7 +89,6 @@ fn generate_content_url() -> String {
 }
 
 /// Build the streaming streamGenerateContent URL.
-#[allow(dead_code)]
 fn stream_generate_content_url() -> String {
     format!(
         "{}/models/{}:streamGenerateContent",
@@ -192,7 +190,6 @@ fn build_contents(messages: &[ChatMessage]) -> Vec<serde_json::Value> {
 }
 
 /// Streaming conversation implementation.
-#[allow(dead_code)]
 async fn send_conversation_stream_impl(
     system_prompt: &str,
     messages: &[ChatMessage],
@@ -397,6 +394,282 @@ fn parse_sse_line(line: &str) -> Option<SseParsed> {
     }
 
     Some(SseParsed { text, is_final })
+}
+
+// ── Image Generation ──────────────────────────────────────────────
+
+/// HTTP client for image generation — 90s timeout (generation can be slow).
+fn image_client() -> &'static reqwest::Client {
+    static IMG_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    IMG_CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(90))
+            .build()
+            .expect("Failed to build Gemini image HTTP client")
+    })
+}
+
+/// Build the generateContent URL for the image model.
+fn image_generate_url() -> String {
+    format!(
+        "{}/models/{}:generateContent",
+        GEMINI_CONFIG.endpoint, GEMINI_CONFIG.image_model
+    )
+}
+
+/// Error classification for retry logic.
+#[derive(Debug)]
+pub enum ImageGenError {
+    /// Retryable errors (rate limit, server error, unexpected response).
+    Retryable(AppError),
+    /// Non-retryable errors (safety filter, bad request, permission denied).
+    Fatal(AppError),
+}
+
+impl ImageGenError {
+    #[allow(dead_code)] // Used in tests; will be called from sprite generation retry logic
+    fn into_app_error(self) -> AppError {
+        match self {
+            ImageGenError::Retryable(e) | ImageGenError::Fatal(e) => e,
+        }
+    }
+}
+
+/// Sprite generation prompt template.
+const SPRITE_PROMPT_TEMPLATE: &str = r#"Create a character sprite sheet for a gaming assistant avatar.
+
+Art style: {style}
+
+Character description: {description}
+
+The image must be a precise 4-column × 2-row grid of 8 square cells. Each cell is a portrait of the same character from the shoulders up showing a different facial expression.
+
+GRID LAYOUT — cells fill the entire image edge-to-edge with NO gaps, margins, borders, or padding between them:
+Row 1 (top half): Neutral (calm, default) | Speaking (mouth open, animated) | Listening (attentive, curious) | Sleepy (eyes drooping, drowsy)
+Row 2 (bottom half): Happy (smiling, joyful) | Sad (frowning, melancholy) | Interested (eyes wide, engaged) | Bored (unamused, looking away)
+
+Each cell occupies EXACTLY 1/4 of the total width and 1/2 of the total height. The cells must tile perfectly with no visible seams, dividers, or grid lines between them.
+
+CRITICAL requirements:
+- The character must look identical across all 8 cells (same outfit, hair, features, colors) — ONLY the facial expression changes
+- The character must be drawn at the SAME size and position within every cell, centered both horizontally and vertically
+- Fill EVERY cell's background completely with solid {background} — no gradients, patterns, textures, scenery, or secondary colors
+- Do NOT include any text, words, letters, numbers, labels, or captions anywhere in the image
+- There must be NO borders, outlines, or dividing lines between cells — the cells share edges seamlessly"#;
+
+/// Build the full generation prompt from style, description, and background color.
+pub fn build_sprite_prompt(
+    style: &str,
+    character_description: &str,
+    background_color: &str,
+) -> String {
+    let desc = if character_description.trim().is_empty() {
+        "A friendly, approachable character suitable as a gaming companion"
+    } else {
+        character_description
+    };
+    SPRITE_PROMPT_TEMPLATE
+        .replace("{style}", style)
+        .replace("{description}", desc)
+        .replace("{background}", background_color)
+}
+
+/// Generate a sprite sheet image using Gemini's image generation API.
+/// Returns the raw PNG bytes on success.
+///
+/// Implements retry with exponential backoff for retryable errors.
+pub async fn generate_sprite_image(
+    api_key: &str,
+    style: &str,
+    character_description: &str,
+    background_color: &str,
+) -> Result<Vec<u8>, AppError> {
+    let prompt = build_sprite_prompt(style, character_description, background_color);
+    let max_attempts: u32 = 3;
+    let initial_backoff_ms: u64 = 2000;
+    let max_backoff_ms: u64 = 15000;
+
+    let mut last_error = None;
+
+    for attempt in 0..max_attempts {
+        if attempt > 0 {
+            let backoff =
+                std::cmp::min(initial_backoff_ms * (1u64 << (attempt - 1)), max_backoff_ms);
+            tracing::info!(attempt, backoff_ms = backoff, "Retrying sprite generation");
+            tokio::time::sleep(Duration::from_millis(backoff)).await;
+        }
+
+        match make_image_request(api_key, &prompt).await {
+            Ok(bytes) => return Ok(bytes),
+            Err(ImageGenError::Fatal(e)) => return Err(e),
+            Err(ImageGenError::Retryable(e)) => {
+                tracing::warn!(
+                    attempt,
+                    error = %e,
+                    "Sprite generation attempt failed (retryable)"
+                );
+                last_error = Some(e);
+            }
+        }
+    }
+
+    Err(last_error
+        .unwrap_or_else(|| AppError::StoreApi("Sprite generation failed after all retries".into())))
+}
+
+/// Make a single image generation request to Gemini.
+async fn make_image_request(api_key: &str, prompt: &str) -> Result<Vec<u8>, ImageGenError> {
+    let body = serde_json::json!({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "responseModalities": ["TEXT", "IMAGE"],
+            "imageConfig": {
+                "aspectRatio": "16:9",
+                "imageSize": "2K"
+            }
+        }
+    });
+
+    let resp = image_client()
+        .post(image_generate_url())
+        .query(&[("key", api_key)])
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_timeout() {
+                ImageGenError::Retryable(AppError::StoreApi(
+                    "Sprite generation timed out. Please try again.".into(),
+                ))
+            } else {
+                ImageGenError::Retryable(sanitize_cloud_error(e, "imageGenerate"))
+            }
+        })?;
+
+    let status = resp.status();
+
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(ImageGenError::Retryable(AppError::StoreApi(
+            "Rate limited. Waiting before retrying...".into(),
+        )));
+    }
+    if status == reqwest::StatusCode::FORBIDDEN {
+        return Err(ImageGenError::Fatal(AppError::Credential(
+            "Your API key may not have image generation enabled. Check your Gemini API settings."
+                .into(),
+        )));
+    }
+    if status == reqwest::StatusCode::BAD_REQUEST {
+        // Read the response body to get the actual error detail from Gemini
+        let body_text = resp.text().await.unwrap_or_default();
+        tracing::error!(
+            status = 400,
+            body = body_text.as_str(),
+            "Gemini image generation 400 error"
+        );
+        let detail = serde_json::from_str::<serde_json::Value>(&body_text)
+            .ok()
+            .and_then(|j| {
+                j.get("error")
+                    .and_then(|e| e.get("message"))
+                    .and_then(|m| m.as_str())
+                    .map(String::from)
+            })
+            .unwrap_or_else(|| "Invalid request".to_string());
+        return Err(ImageGenError::Fatal(AppError::StoreApi(format!(
+            "Sprite generation failed: {}",
+            detail
+        ))));
+    }
+    if status.is_server_error() {
+        return Err(ImageGenError::Retryable(AppError::StoreApi(
+            "Gemini servers are temporarily unavailable. Please try again later.".into(),
+        )));
+    }
+    if !status.is_success() {
+        return Err(ImageGenError::Fatal(AppError::StoreApi(format!(
+            "Sprite generation failed (HTTP {})",
+            status
+        ))));
+    }
+
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| ImageGenError::Retryable(sanitize_cloud_error(e, "imageGenerate")))?;
+
+    // Check finish reason for safety/content blocks
+    let finish_reason = json
+        .get("candidates")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("finishReason"))
+        .and_then(|r| r.as_str())
+        .unwrap_or("");
+
+    match finish_reason {
+        "IMAGE_SAFETY" => {
+            return Err(ImageGenError::Fatal(AppError::Validation(
+                "The generated image was blocked by safety filters. Try adjusting your character description.".into(),
+            )));
+        }
+        "PROHIBITED_CONTENT" => {
+            return Err(ImageGenError::Fatal(AppError::Validation(
+                "This description may reference copyrighted content. Please use original character descriptions.".into(),
+            )));
+        }
+        "SAFETY" => {
+            return Err(ImageGenError::Fatal(AppError::Validation(
+                "Your description triggered a safety filter. Please rephrase and try again.".into(),
+            )));
+        }
+        "OTHER" => {
+            return Err(ImageGenError::Retryable(AppError::StoreApi(
+                "Generation failed unexpectedly. Trying again...".into(),
+            )));
+        }
+        _ => {} // "STOP" or unknown — continue to extract image
+    }
+
+    // Extract base64 image data from response — scan all parts for inlineData
+    // (the image may not be the first part when TEXT+IMAGE modalities are used)
+    let parts = json
+        .get("candidates")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("content"))
+        .and_then(|c| c.get("parts"))
+        .and_then(|p| p.as_array());
+
+    let inline_data = parts.and_then(|parts| parts.iter().find_map(|p| p.get("inlineData")));
+
+    let inline_data = match inline_data {
+        Some(d) => d,
+        None => {
+            // Model returned text instead of image — retryable
+            tracing::warn!("No inlineData found in response parts");
+            return Err(ImageGenError::Retryable(AppError::StoreApi(
+                "Generation produced text instead of an image. Trying again...".into(),
+            )));
+        }
+    };
+
+    let b64_data = inline_data
+        .get("data")
+        .and_then(|d| d.as_str())
+        .ok_or_else(|| {
+            ImageGenError::Retryable(AppError::Parse(
+                "Missing image data in Gemini response".into(),
+            ))
+        })?;
+
+    let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, b64_data)
+        .map_err(|e| {
+            ImageGenError::Fatal(AppError::Parse(format!(
+                "Failed to decode image data: {}",
+                e
+            )))
+        })?;
+
+    Ok(bytes)
 }
 
 /// Sanitize reqwest errors to prevent API key leakage in error messages.
@@ -720,5 +993,57 @@ mod tests {
         let mut accumulated = "existing".to_string();
         flush_line_buffer("", &mut accumulated);
         assert_eq!(accumulated, "existing");
+    }
+
+    // ── Image generation tests ──────
+
+    #[test]
+    fn test_image_generate_url() {
+        let url = image_generate_url();
+        assert!(url.contains(GEMINI_CONFIG.image_model));
+        assert!(url.ends_with(":generateContent"));
+    }
+
+    #[test]
+    fn test_build_sprite_prompt_with_description() {
+        let prompt = build_sprite_prompt("Anime style", "A wise owl", "dark navy blue");
+        assert!(prompt.contains("Anime style"));
+        assert!(prompt.contains("A wise owl"));
+        assert!(prompt.contains("4-column × 2-row grid"));
+        assert!(prompt.contains("CRITICAL requirements"));
+        assert!(prompt.contains("dark navy blue"));
+    }
+
+    #[test]
+    fn test_build_sprite_prompt_empty_description_uses_default() {
+        let prompt = build_sprite_prompt("Pixel art", "", "black");
+        assert!(prompt.contains("Pixel art"));
+        assert!(prompt.contains("friendly, approachable character"));
+        assert!(prompt.contains("black"));
+    }
+
+    #[test]
+    fn test_build_sprite_prompt_whitespace_description_uses_default() {
+        let prompt = build_sprite_prompt("Cartoon", "   ", "white");
+        assert!(prompt.contains("friendly, approachable character"));
+        assert!(prompt.contains("white"));
+    }
+
+    #[test]
+    fn test_image_gen_error_into_app_error_retryable() {
+        let err = ImageGenError::Retryable(AppError::StoreApi("test".into()));
+        match err.into_app_error() {
+            AppError::StoreApi(msg) => assert_eq!(msg, "test"),
+            _ => panic!("Expected StoreApi"),
+        }
+    }
+
+    #[test]
+    fn test_image_gen_error_into_app_error_fatal() {
+        let err = ImageGenError::Fatal(AppError::Validation("blocked".into()));
+        match err.into_app_error() {
+            AppError::Validation(msg) => assert_eq!(msg, "blocked"),
+            _ => panic!("Expected Validation"),
+        }
     }
 }

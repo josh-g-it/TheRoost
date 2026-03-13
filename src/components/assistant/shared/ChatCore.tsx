@@ -1,24 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
-import { useConversation } from "../../../hooks/useConversation";
 import {
   useActionPipeline,
   serializeActionFeedback,
 } from "../../../hooks/useActionPipeline";
 import {
-  assistantApi,
   ratingsApi,
   notesApi,
   favoritesApi,
   hiddenGamesApi,
 } from "../../../services/tauri";
-import { useSettingsStore } from "../../../store/settingsSlice";
 import { resolveExecutor } from "../../../utils/commandPalette";
 import { parseReviewFromResponse } from "../../../utils/reviewParser";
 import { stripActions } from "../../../utils/actionParser";
 import { logger } from "../../../utils/logger";
-import type { ResolvedAction, ActionResult, PaletteContext } from "../../../types";
-import { AppIcon } from "../../common/AppIcon";
+import type {
+  AiMessage,
+  ResolvedAction,
+  ActionResult,
+  Expression,
+  PaletteContext,
+} from "../../../types";
 import { ReviewConfirmation } from "../ReviewConfirmation";
 import { ActionConfirmationCard } from "../ActionConfirmationCard";
 import { ReviewConfirmationCard } from "../ReviewConfirmationCard";
@@ -69,82 +71,99 @@ export interface PendingReview {
 }
 
 export interface ChatCoreProps {
-  avatarId: string;
   conversationId: string | null;
-  onConversationStart?: () => void;
-  /** Called synchronously BEFORE the end-conversation IPC call starts.
-   *  Used to set dedup flags before Rust emits ai-conversation-ended. */
-  onConversationEnding?: () => void;
-  /** Called when a locally-triggered conversation end completes (compaction done). */
-  onConversationEnd?: () => void;
   compact?: boolean;
-  isFirstConversation?: boolean;
+
+  // ── Conversation state (from ConversationProvider hub) ──
+  messages: AiMessage[];
+  isStreaming: boolean;
+  error: string | null;
+  currentStreamText: string;
+  isCompacting: boolean;
+  pendingActions: ResolvedAction[];
+  t0Expression: Expression | null;
+  cloudAiEnabled: boolean;
+  /** Whether conversation history has been loaded (gates review injection). */
+  historyLoaded: boolean;
+
+  // ── Conversation actions (from ConversationProvider hub) ──
+  sendMessage: (
+    text: string,
+    options?: { hidden?: boolean; actionFeedback?: string },
+  ) => Promise<void>;
+  retry: () => Promise<void>;
+  endConversation: () => Promise<void>;
+  injectMessage: (msg: AiMessage) => void;
+  clearPendingActions: () => void;
+  clearT0Expression: () => void;
+
+  // ── Lifecycle callbacks ──
+  onConversationStart?: () => void;
+  /** Called synchronously BEFORE the end-conversation IPC call starts. */
+  onConversationEnding?: () => void;
   hideEndButton?: boolean;
-  onStaleReset?: () => void;
   pendingReview?: PendingReview | null;
   onPendingReviewConsumed?: () => void;
   /** Navigate function for action execution — provided by router-based parents. */
   navigate?: (path: string) => void;
   /** Override Tier 1 action execution (overlay relays to main window via IPC). */
   executeTier1?: (action: ResolvedAction) => ActionResult;
+  /** Avatar name shown as label next to assistant messages. */
+  avatarName?: string;
+  /** Expression engine callbacks — driven by stream/typing events. */
+  onExpressionStreamStart?: () => void;
+  onExpressionStreamEnd?: (t0Expression?: Expression) => void;
+  onExpressionUserTyping?: () => void;
+  onExpressionUserSentMessage?: () => void;
 }
 
 export function ChatCore({
-  avatarId,
   conversationId,
+  compact,
+  messages,
+  isStreaming,
+  error,
+  currentStreamText,
+  isCompacting,
+  pendingActions,
+  t0Expression,
+  cloudAiEnabled,
+  historyLoaded,
+  sendMessage,
+  retry,
+  endConversation,
+  injectMessage,
+  clearPendingActions,
+  clearT0Expression,
   onConversationStart,
   onConversationEnding,
-  onConversationEnd,
-  compact,
-  isFirstConversation,
   hideEndButton,
-  onStaleReset,
   pendingReview,
   onPendingReviewConsumed,
   navigate,
   executeTier1,
+  avatarName,
+  onExpressionStreamStart,
+  onExpressionStreamEnd,
+  onExpressionUserTyping,
+  onExpressionUserSentMessage,
 }: ChatCoreProps) {
-  const cloudAiEnabled = useSettingsStore((s) => s.settings?.cloudAiEnabled === true);
-  const maxOutputTokens = useSettingsStore((s) =>
-    compact ? s.settings?.aiMaxTokensOverlay : s.settings?.aiMaxTokensMain,
-  );
-
-  const {
-    messages,
-    isStreaming,
-    error,
-    currentStreamText,
-    isEnded,
-    isCompacting,
-    pendingActions,
-    sendMessage,
-    retry,
-    endConversation,
-    loadHistory,
-    injectMessage,
-    clearPendingActions,
-  } = useConversation({ avatarId, conversationId, maxOutputTokens, cloudAiEnabled });
-
   const noop = useCallback(() => {}, []);
   const pipeline = useActionPipeline({ navigate: navigate ?? noop, executeTier1 });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Track which conversationId has been greeted — prevents duplicate greetings
-  // from StrictMode double-mount, sendMessage dep changes, etc. (KI #8)
-  const introSentForRef = useRef<string | null>(null);
+  // Stable end-conversation callback for ChatInputBar memo
+  const stableEndConversation = useCallback(() => {
+    onConversationEnding?.();
+    endConversation();
+  }, [onConversationEnding, endConversation]);
 
   // Ref-sync for props/callbacks read inside async effects (avoids stale closures)
   const callbacksRef = useRef({
-    isFirstConversation,
-    onStaleReset,
-    onConversationEnd,
     onPendingReviewConsumed,
   });
   callbacksRef.current = {
-    isFirstConversation,
-    onStaleReset,
-    onConversationEnd,
     onPendingReviewConsumed,
   };
 
@@ -154,7 +173,6 @@ export function ChatCore({
   const [reviewSaved, setReviewSaved] = useState(false);
   const [reviewDismissed, setReviewDismissed] = useState(false);
   const [showReviewConfirm, setShowReviewConfirm] = useState(false);
-  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   useEffect(() => {
     reviewInjectedRef.current = false;
@@ -162,49 +180,7 @@ export function ChatCore({
     setReviewSaved(false);
     setReviewDismissed(false);
     setShowReviewConfirm(false);
-    setHistoryLoaded(false);
   }, [conversationId]);
-
-  // Notify parent when a locally-triggered conversation end completes
-  useEffect(() => {
-    if (isEnded) {
-      callbacksRef.current.onConversationEnd?.();
-    }
-  }, [isEnded]);
-
-  useEffect(() => {
-    if (!conversationId) return;
-    // Synchronous claim: if we've already handled this conversation, bail out
-    // immediately. Prevents duplicate greetings from StrictMode double-mount,
-    // sendMessage dep recreation, or other re-fires. (KI #8)
-    if (introSentForRef.current === conversationId) return;
-    introSentForRef.current = conversationId;
-
-    async function loadAndGreet() {
-      // Step 1: Check staleness (with error recovery)
-      try {
-        const isStale = await assistantApi.checkConversationStale(conversationId!);
-        if (isStale) {
-          await assistantApi.abandonConversation(conversationId!);
-          callbacksRef.current.onStaleReset?.();
-          return;
-        }
-      } catch {
-        // Stale check failed — fall through to normal flow
-      }
-
-      // Step 2: Normal flow — load history and optionally send greeting
-      const history = await loadHistory(conversationId!);
-      setHistoryLoaded(true);
-      if (history.length === 0) {
-        const prompt = callbacksRef.current.isFirstConversation
-          ? "This is your very first conversation with the user. They just created you. Introduce yourself warmly — tell them your name, ask what they'd like to be called, and ask how they prefer conversations (casual, detailed, brief). Be yourself and be curious."
-          : "A new conversation has started. This message is sent automatically by the system, not by the user. Greet the user warmly as someone you already know. Keep it brief and natural — maybe reference something from your memories or just say hello and ask what's on their mind.";
-        sendMessage(prompt, { hidden: true });
-      }
-    }
-    loadAndGreet();
-  }, [conversationId, loadHistory, sendMessage]);
 
   // Phase 12: Handle pending review after conversation is ready
   useEffect(() => {
@@ -264,6 +240,26 @@ export function ChatCore({
     }
   }, [pendingActions, clearPendingActions, pipelineSetActions]);
 
+  // Expression engine: detect stream start/end transitions
+  const wasStreamingRef = useRef(false);
+  useEffect(() => {
+    if (isStreaming && !wasStreamingRef.current) {
+      // Stream just started
+      onExpressionStreamStart?.();
+    } else if (!isStreaming && wasStreamingRef.current) {
+      // Stream just ended — apply T0 expression if present
+      onExpressionStreamEnd?.(t0Expression ?? undefined);
+      if (t0Expression) clearT0Expression();
+    }
+    wasStreamingRef.current = isStreaming;
+  }, [
+    isStreaming,
+    t0Expression,
+    clearT0Expression,
+    onExpressionStreamStart,
+    onExpressionStreamEnd,
+  ]);
+
   // Scroll when messages change (new message added) or pipeline status changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView?.({ behavior: "smooth" });
@@ -283,6 +279,7 @@ export function ChatCore({
   const onSendRef = useRef<(text: string) => void>(() => {});
   onSendRef.current = (text: string) => {
     if (isStreaming) return;
+    onExpressionUserSentMessage?.();
     pipeline.cancelAll();
     const pipelineResults = pipeline.consumeResults();
     const feedback = serializeActionFeedback(pipelineResults);
@@ -438,22 +435,6 @@ export function ChatCore({
 
   return (
     <div className={`assistant-chat ${compact ? "assistant-chat--compact" : ""}`}>
-      {conversationId && !hideEndButton && !isCompacting && (
-        <div className="assistant-chat__top-bar">
-          <button
-            className="assistant-chat__end-btn"
-            onClick={() => {
-              onConversationEnding?.();
-              endConversation();
-            }}
-            disabled={isStreaming}
-          >
-            <AppIcon name="close" size={14} />
-            <span>End Conversation</span>
-          </button>
-        </div>
-      )}
-
       <MessageList
         isCompacting={isCompacting}
         isStreaming={isStreaming}
@@ -467,19 +448,28 @@ export function ChatCore({
           return (
             <div
               key={msg.id}
-              className={`assistant-chat__message assistant-chat__message--${msg.role}`}
+              className={`assistant-chat__message-row assistant-chat__message-row--${msg.role}`}
             >
-              <MessageBubble id={msg.id} role={msg.role} content={msg.content} />
-              {parsed && (
-                <ReviewConfirmation
-                  gameId={reviewContext!.gameId}
-                  gameName={reviewContext!.gameName}
-                  stars={parsed.stars}
-                  reviewText={parsed.reviewText}
-                  onSave={handleReviewSave}
-                  onSkip={handleReviewSkip}
-                />
+              {msg.role === "assistant" && !compact && (
+                <span className="assistant-chat__msg-label">
+                  {avatarName ?? "Assistant"}
+                </span>
               )}
+              <div
+                className={`assistant-chat__message assistant-chat__message--${msg.role}`}
+              >
+                <MessageBubble id={msg.id} role={msg.role} content={msg.content} />
+                {parsed && (
+                  <ReviewConfirmation
+                    gameId={reviewContext!.gameId}
+                    gameName={reviewContext!.gameName}
+                    stars={parsed.stars}
+                    reviewText={parsed.reviewText}
+                    onSave={handleReviewSave}
+                    onSkip={handleReviewSkip}
+                  />
+                )}
+              </div>
             </div>
           );
         })}
@@ -509,13 +499,20 @@ export function ChatCore({
         )}
 
         {isStreaming && (
-          <div className="assistant-chat__streaming">
-            {currentStreamText ? (
-              <Markdown remarkPlugins={REMARK_PLUGINS} components={MARKDOWN_COMPONENTS}>
-                {stripActions(currentStreamText)}
-              </Markdown>
-            ) : null}
-            <span className="assistant-chat__streaming-cursor" />
+          <div className="assistant-chat__message-row assistant-chat__message-row--assistant">
+            {!compact && (
+              <span className="assistant-chat__msg-label">
+                {avatarName ?? "Assistant"}
+              </span>
+            )}
+            <div className="assistant-chat__streaming">
+              {currentStreamText ? (
+                <Markdown remarkPlugins={REMARK_PLUGINS} components={MARKDOWN_COMPONENTS}>
+                  {stripActions(currentStreamText)}
+                </Markdown>
+              ) : null}
+              <span className="assistant-chat__streaming-cursor" />
+            </div>
           </div>
         )}
 
@@ -593,6 +590,9 @@ export function ChatCore({
             onSend={stableOnSend}
             isStreaming={isStreaming}
             cloudAiEnabled={cloudAiEnabled}
+            onInput={onExpressionUserTyping}
+            showEndButton={!!conversationId && !hideEndButton && !isCompacting}
+            onEndConversation={conversationId ? stableEndConversation : undefined}
           />
         </>
       )}

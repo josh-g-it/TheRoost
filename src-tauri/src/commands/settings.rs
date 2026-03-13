@@ -2,8 +2,12 @@ use crate::models::settings::AppSettings;
 use crate::services::settings_store;
 use crate::utils::error::AppError;
 
+/// Must be `async` so Tauri runs it on the tokio thread pool, NOT the main thread.
+/// `load_settings` performs file I/O (`read_to_string`) and credential store access
+/// (`keyring::Entry::get_password`). Running synchronously on the main thread blocks
+/// the WebView2 message pump, which freezes ALL IPC for both the main and overlay windows.
 #[tauri::command]
-pub fn load_settings(app_handle: tauri::AppHandle) -> Result<AppSettings, AppError> {
+pub async fn load_settings(app_handle: tauri::AppHandle) -> Result<AppSettings, AppError> {
     tracing::info!("Loading settings");
     let result = settings_store::load_settings(&app_handle);
     match &result {
@@ -19,8 +23,9 @@ pub fn load_settings(app_handle: tauri::AppHandle) -> Result<AppSettings, AppErr
     result
 }
 
+/// Must be `async` — performs file I/O (atomic rename write) on disk.
 #[tauri::command]
-pub fn save_settings(
+pub async fn save_settings(
     app_handle: tauri::AppHandle,
     settings: serde_json::Value,
 ) -> Result<(), AppError> {

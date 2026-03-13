@@ -11,8 +11,24 @@ export interface AiAvatar {
   name: string;
   personalityId: string;
   imagePath: string | null;
+  companionRoleId: string | null;
+  companionRoleCustom: string | null;
   isActive: boolean;
   createdAt: string;
+}
+
+export interface AvatarStats {
+  memoryCount: number;
+  journalCount: number;
+  createdAt: string;
+}
+
+export interface CompanionRolePreset {
+  id: string;
+  name: string;
+  description: string;
+  systemPromptText: string;
+  isBuiltin: boolean;
 }
 
 export interface AiConversation {
@@ -56,12 +72,6 @@ export interface AiDailyLog {
   logDate: string;
   summary: string;
   createdAt: string;
-}
-
-export interface StreamChunk {
-  conversationId: string;
-  text: string;
-  isFinal: boolean;
 }
 
 export interface ConversationEndedPayload {
@@ -136,4 +146,59 @@ export interface ActionResult {
   executedAt: string;
   /** True when a Tier 2 action was explicitly confirmed by the user before execution. */
   confirmed?: boolean;
+}
+
+// ── Streaming Types ──────────────────────────────────────────────
+
+/** Payload emitted via `ai-stream-chunk` for progressive text rendering. */
+export interface StreamChunkPayload {
+  conversationId: string;
+  text: string;
+}
+
+// ── Sprite Types ─────────────────────────────────────────────────
+
+export interface SpriteInfo {
+  filename: string;
+  displayName: string;
+  source: "prebuilt" | "generated" | "uploaded";
+  fileSizeBytes: number;
+  createdAt: string;
+}
+
+export type Expression =
+  | "neutral"
+  | "speaking"
+  | "listening"
+  | "sleepy"
+  | "happy"
+  | "sad"
+  | "interested"
+  | "bored";
+
+export const EXPRESSION_GRID: Expression[] = [
+  "neutral",
+  "speaking",
+  "listening",
+  "sleepy", // Row 0
+  "happy",
+  "sad",
+  "interested",
+  "bored", // Row 1
+];
+
+export const EXPRESSION_LABELS: Record<Expression, string> = {
+  neutral: "Neutral",
+  speaking: "Speaking",
+  listening: "Listening",
+  sleepy: "Sleepy",
+  happy: "Happy",
+  sad: "Sad",
+  interested: "Interested",
+  bored: "Bored",
+};
+
+export interface SpriteCropOffsets {
+  version: number;
+  cells: Array<{ x: number; y: number }>;
 }

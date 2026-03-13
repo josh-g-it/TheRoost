@@ -1,97 +1,106 @@
-import { useCallback, useEffect, useState } from "react";
-import type { AiAvatar, AiPersonality } from "../../types";
-import { assistantApi } from "../../services/tauri";
-import { getAvatarColor } from "../../utils/avatarColors";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type {
+  AiAvatar,
+  AiPersonality,
+  CompanionRolePreset,
+  SpriteInfo,
+} from "../../types";
+import { assistantApi, spriteApi } from "../../services/tauri";
 import { getErrorMessage } from "../../utils/errors";
 import { logger } from "../../utils/logger";
-import { AppIcon } from "../common/AppIcon";
+import { AvatarListPanel } from "./AvatarListPanel";
+import { AvatarDetailPanel } from "./AvatarDetailPanel";
+import { AvatarSpriteLibrary } from "./AvatarSpriteLibrary";
+import { AvatarWizard } from "./AvatarWizard";
+import { SpriteGenerationWizard } from "./SpriteGenerationWizard";
 import "./AssistantAvatars.css";
 
 interface AssistantAvatarsProps {
   activeAvatarId: string;
+  isStreaming?: boolean;
   onAvatarSwitch: (avatarId: string) => void;
   onAvatarDeleted?: (deletedAvatarId: string) => void;
   onAvatarDataWiped?: (avatarId: string) => void;
+  /** Notify ConversationProvider to re-fetch active avatar (e.g. after sprite change). */
+  onSpriteChanged?: () => void;
 }
 
 export function AssistantAvatars({
   activeAvatarId,
+  isStreaming = false,
   onAvatarSwitch,
   onAvatarDeleted,
   onAvatarDataWiped,
+  onSpriteChanged,
 }: AssistantAvatarsProps) {
   const [avatars, setAvatars] = useState<AiAvatar[]>([]);
   const [personalities, setPersonalities] = useState<AiPersonality[]>([]);
+  const [companionRoles, setCompanionRoles] = useState<CompanionRolePreset[]>([]);
+  const [sprites, setSprites] = useState<SpriteInfo[]>([]);
+  const [spriteDataUrls, setSpriteDataUrls] = useState<Map<string, string | null>>(
+    new Map(),
+  );
+  const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(activeAvatarId);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showGenerateWizard, setShowGenerateWizard] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Create avatar form
-  const [newAvatarName, setNewAvatarName] = useState("");
-  const [newAvatarPersonalityId, setNewAvatarPersonalityId] = useState("");
-  const [isCreatingAvatar, setIsCreatingAvatar] = useState(false);
-  const [createAvatarError, setCreateAvatarError] = useState("");
+  const spriteLibRef = useRef<HTMLDivElement>(null);
 
-  // Create personality form
-  const [showCreatePersonality, setShowCreatePersonality] = useState(false);
-  const [newPersonalityName, setNewPersonalityName] = useState("");
-  const [newPersonalityPrompt, setNewPersonalityPrompt] = useState("");
-  const [isCreatingPersonality, setIsCreatingPersonality] = useState(false);
-  const [createPersonalityError, setCreatePersonalityError] = useState("");
-
-  // Delete / wipe state
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [confirmWipeId, setConfirmWipeId] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isWiping, setIsWiping] = useState(false);
-
+  // ── Data loading ────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [avatarList, personalityList] = await Promise.all([
+      const [avatarList, personalityList, roleList, spriteList] = await Promise.all([
         assistantApi.listAvatars(),
         assistantApi.listPersonalities(),
+        assistantApi.listCompanionRoles(),
+        spriteApi.listSprites(),
       ]);
       setAvatars(avatarList);
       setPersonalities(personalityList);
-      if (personalityList.length > 0 && !newAvatarPersonalityId) {
-        setNewAvatarPersonalityId(personalityList[0].id);
-      }
+      setCompanionRoles(roleList);
+      setSprites(spriteList);
+
+      // Pre-load sprite data URLs for avatars that have sprites
+      const urlMap = new Map<string, string | null>();
+      const uniquePaths = new Set(
+        avatarList.map((a) => a.imagePath).filter(Boolean) as string[],
+      );
+      await Promise.all(
+        [...uniquePaths].map(async (path) => {
+          try {
+            const dataUrl = await spriteApi.readSprite(path);
+            urlMap.set(path, dataUrl);
+          } catch {
+            logger.warn("AssistantAvatars", "api", "Failed to load sprite", { path });
+            urlMap.set(path, null);
+          }
+        }),
+      );
+      setSpriteDataUrls(urlMap);
     } catch (err) {
-      logger.error("AssistantAvatars", "api", "Failed to load avatars", {
+      logger.error("AssistantAvatars", "api", "Failed to load data", {
         error: getErrorMessage(err),
       });
     } finally {
       setIsLoading(false);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  const handleCreateAvatar = useCallback(async () => {
-    if (!newAvatarName.trim() || !newAvatarPersonalityId) return;
-    setIsCreatingAvatar(true);
-    setCreateAvatarError("");
-    try {
-      const avatar = await assistantApi.createAvatar(
-        newAvatarName.trim(),
-        newAvatarPersonalityId,
-      );
-      setAvatars((prev) => [...prev, avatar]);
-      setNewAvatarName("");
-      logger.info("AssistantAvatars", "api", "Avatar created", { avatarId: avatar.id });
-    } catch (err) {
-      const msg = getErrorMessage(err);
-      setCreateAvatarError(msg);
-      logger.error("AssistantAvatars", "api", "Failed to create avatar", {
-        error: msg,
-      });
-    } finally {
-      setIsCreatingAvatar(false);
+  // Ensure selection stays valid
+  useEffect(() => {
+    if (!selectedAvatarId || !avatars.find((a) => a.id === selectedAvatarId)) {
+      setSelectedAvatarId(activeAvatarId);
     }
-  }, [newAvatarName, newAvatarPersonalityId]);
+  }, [avatars, selectedAvatarId, activeAvatarId]);
 
-  const handleSwitchAvatar = useCallback(
+  // ── Callbacks ──────────────────────────────────────────────────
+  const handleAvatarSwitch = useCallback(
     async (avatarId: string) => {
       try {
         await assistantApi.switchAvatar(avatarId);
@@ -107,322 +116,234 @@ export function AssistantAvatars({
     [onAvatarSwitch],
   );
 
-  const handleDeleteAvatar = useCallback(
-    async (avatarId: string) => {
-      setIsDeleting(true);
-      try {
-        await assistantApi.deleteAvatar(avatarId);
-        setAvatars((prev) => prev.filter((a) => a.id !== avatarId));
-        onAvatarDeleted?.(avatarId);
-        logger.info("AssistantAvatars", "api", "Avatar deleted", { avatarId });
-      } catch (err) {
-        logger.error("AssistantAvatars", "api", "Failed to delete avatar", {
-          error: getErrorMessage(err),
-        });
-      } finally {
-        setIsDeleting(false);
-        setConfirmDeleteId(null);
-      }
+  const handleAvatarCreated = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    (avatar: AiAvatar, _conversationId: string) => {
+      setAvatars((prev) => [...prev, avatar]);
+      setSelectedAvatarId(avatar.id);
+      setShowCreateForm(false);
+      // Reload sprites in case one was generated during wizard
+      spriteApi
+        .listSprites()
+        .then(setSprites)
+        .catch(() => {});
+      loadData();
     },
-    [onAvatarDeleted],
+    [loadData],
   );
 
-  const handleWipeAvatarData = useCallback(
-    async (avatarId: string) => {
-      setIsWiping(true);
-      try {
-        await assistantApi.wipeAvatarData(avatarId);
-        onAvatarDataWiped?.(avatarId);
-        logger.info("AssistantAvatars", "api", "Avatar data wiped", { avatarId });
-      } catch (err) {
-        logger.error("AssistantAvatars", "api", "Failed to wipe avatar data", {
-          error: getErrorMessage(err),
-        });
-      } finally {
-        setIsWiping(false);
-        setConfirmWipeId(null);
+  const handleAvatarUpdated = useCallback((updated: AiAvatar) => {
+    setAvatars((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+  }, []);
+
+  const handleAvatarDeleted = useCallback(
+    (avatarId: string) => {
+      setAvatars((prev) => prev.filter((a) => a.id !== avatarId));
+      onAvatarDeleted?.(avatarId);
+      // Select another avatar if the deleted one was selected
+      if (selectedAvatarId === avatarId) {
+        setSelectedAvatarId(avatars.find((a) => a.id !== avatarId)?.id ?? null);
       }
+    },
+    [onAvatarDeleted, selectedAvatarId, avatars],
+  );
+
+  const handleAvatarDataWiped = useCallback(
+    (avatarId: string) => {
+      onAvatarDataWiped?.(avatarId);
     },
     [onAvatarDataWiped],
   );
 
-  const handleCreatePersonality = useCallback(async () => {
-    if (!newPersonalityName.trim() || !newPersonalityPrompt.trim()) return;
-    setIsCreatingPersonality(true);
-    setCreatePersonalityError("");
-    try {
-      const personality = await assistantApi.createPersonality(
-        newPersonalityName.trim(),
-        newPersonalityPrompt.trim(),
+  const handleSpriteAssigned = useCallback(
+    (filename: string) => {
+      // Update the avatar's imagePath locally
+      setAvatars((prev) =>
+        prev.map((a) => (a.id === selectedAvatarId ? { ...a, imagePath: filename } : a)),
       );
-      setPersonalities((prev) => [...prev, personality]);
-      setNewPersonalityName("");
-      setNewPersonalityPrompt("");
-      setShowCreatePersonality(false);
-      logger.info("AssistantAvatars", "api", "Personality created", {
-        personalityId: personality.id,
-      });
-    } catch (err) {
-      const msg = getErrorMessage(err);
-      setCreatePersonalityError(msg);
-      logger.error("AssistantAvatars", "api", "Failed to create personality", {
-        error: msg,
-      });
-    } finally {
-      setIsCreatingPersonality(false);
-    }
-  }, [newPersonalityName, newPersonalityPrompt]);
+      // Load the sprite data URL if not already cached
+      if (!spriteDataUrls.has(filename)) {
+        spriteApi
+          .readSprite(filename)
+          .then((base64) => {
+            setSpriteDataUrls((prev) => {
+              const next = new Map(prev);
+              next.set(filename, base64);
+              return next;
+            });
+          })
+          .catch(() => {
+            // Ignore
+          });
+      }
+      // Notify ConversationProvider so bubble/aicon update
+      if (selectedAvatarId === activeAvatarId) onSpriteChanged?.();
+    },
+    [selectedAvatarId, spriteDataUrls, activeAvatarId, onSpriteChanged],
+  );
 
-  const getPersonalityName = (personalityId: string) => {
-    return personalities.find((p) => p.id === personalityId)?.name ?? "Unknown";
-  };
+  const handleSpriteUploaded = useCallback((sprite: SpriteInfo) => {
+    setSprites((prev) => [...prev, sprite]);
+  }, []);
 
+  const handleSpriteDeleted = useCallback((filename: string) => {
+    setSprites((prev) => prev.filter((s) => s.filename !== filename));
+    // Clear imagePath on any avatars using this sprite
+    setAvatars((prev) =>
+      prev.map((a) => (a.imagePath === filename ? { ...a, imagePath: null } : a)),
+    );
+    setSpriteDataUrls((prev) => {
+      const next = new Map(prev);
+      next.delete(filename);
+      return next;
+    });
+  }, []);
+
+  const handleSpriteRenamed = useCallback(
+    (oldFilename: string, newInfo: SpriteInfo) => {
+      // Replace old SpriteInfo with new one
+      setSprites((prev) => prev.map((s) => (s.filename === oldFilename ? newInfo : s)));
+      // Move data URL from old key to new key
+      setSpriteDataUrls((prev) => {
+        const next = new Map(prev);
+        const url = next.get(oldFilename);
+        if (url) {
+          next.set(newInfo.filename, url);
+          next.delete(oldFilename);
+        }
+        return next;
+      });
+      // Update avatar imagePath references
+      setAvatars((prev) =>
+        prev.map((a) =>
+          a.imagePath === oldFilename ? { ...a, imagePath: newInfo.filename } : a,
+        ),
+      );
+      // Notify ConversationProvider if active avatar was affected
+      if (avatars.some((a) => a.id === activeAvatarId && a.imagePath === oldFilename)) {
+        onSpriteChanged?.();
+      }
+    },
+    [avatars, activeAvatarId, onSpriteChanged],
+  );
+
+  const handleChangeSpriteClick = useCallback(() => {
+    spriteLibRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  const handleSpriteGenerated = useCallback(
+    (sprite: SpriteInfo) => {
+      setSprites((prev) => [...prev, sprite]);
+      setShowGenerateWizard(false);
+      // Auto-assign generated sprite to selected avatar
+      if (selectedAvatarId) {
+        spriteApi
+          .setActiveSprite(selectedAvatarId, sprite.filename)
+          .then(() => {
+            setAvatars((prev) =>
+              prev.map((a) =>
+                a.id === selectedAvatarId ? { ...a, imagePath: sprite.filename } : a,
+              ),
+            );
+            // Load the data URL
+            spriteApi
+              .readSprite(sprite.filename)
+              .then((base64) => {
+                setSpriteDataUrls((prev) => {
+                  const next = new Map(prev);
+                  next.set(sprite.filename, base64);
+                  return next;
+                });
+              })
+              .catch(() => {});
+            // Notify ConversationProvider so bubble/aicon update
+            if (selectedAvatarId === activeAvatarId) onSpriteChanged?.();
+          })
+          .catch(() => {});
+      }
+    },
+    [selectedAvatarId, activeAvatarId, onSpriteChanged],
+  );
+
+  // ── Render ────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="assistant-avatars">
-        <div className="assistant-avatars__content">
-          <p>Loading...</p>
-        </div>
+        <div className="assistant-avatars__loading">Loading...</div>
       </div>
     );
   }
 
+  const selectedAvatar = avatars.find((a) => a.id === selectedAvatarId) ?? null;
+  const selectedSpriteUrl = selectedAvatar?.imagePath
+    ? (spriteDataUrls.get(selectedAvatar.imagePath) ?? null)
+    : null;
+
   return (
     <div className="assistant-avatars">
-      <div className="assistant-avatars__content">
-        <div>
-          <h4 className="assistant-avatars__section-title">Avatars</h4>
-          <div className="assistant-avatars__list">
-            {avatars.map((avatar) => (
-              <div
-                key={avatar.id}
-                className={`avatar-item ${avatar.id === activeAvatarId ? "avatar-item--active" : ""}`}
-              >
-                <div
-                  className="avatar-item__circle"
-                  style={{ background: getAvatarColor(avatar.name) }}
-                >
-                  {avatar.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="avatar-item__info">
-                  <div className="avatar-item__name">{avatar.name}</div>
-                  <div className="avatar-item__personality">
-                    {getPersonalityName(avatar.personalityId)}
-                  </div>
-                </div>
-                <div className="avatar-item__actions">
-                  {avatar.id === activeAvatarId ? (
-                    <span className="avatar-item__active-badge">Active</span>
-                  ) : (
-                    <button
-                      className="avatar-item__switch-btn"
-                      onClick={() => handleSwitchAvatar(avatar.id)}
-                    >
-                      Switch
-                    </button>
-                  )}
-                  <div className="avatar-item__action-row">
-                    <button
-                      className="avatar-item__action-btn avatar-item__action-btn--wipe"
-                      title="Clear all data for this avatar"
-                      onClick={() => setConfirmWipeId(avatar.id)}
-                    >
-                      <AppIcon name="close" size={12} /> Clear Data
-                    </button>
-                    {(avatar.id !== activeAvatarId || avatars.length === 1) && (
-                      <button
-                        className="avatar-item__action-btn avatar-item__action-btn--delete"
-                        title="Delete this avatar"
-                        onClick={() => setConfirmDeleteId(avatar.id)}
-                      >
-                        <AppIcon name="trash" size={12} /> Delete
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {confirmDeleteId === avatar.id && (
-                  <div className="avatar-item__confirm-overlay">
-                    <p className="avatar-item__confirm-text">
-                      Delete <strong>{avatar.name}</strong>? All conversations, memories,
-                      and journal entries for this avatar will be permanently deleted.
-                      This cannot be undone.
-                      {avatars.length === 1 && (
-                        <>
-                          {" "}
-                          You will be returned to the setup wizard to create a new
-                          assistant.
-                        </>
-                      )}
-                    </p>
-                    <div className="avatar-item__confirm-actions">
-                      <button
-                        className="avatar-item__confirm-btn avatar-item__confirm-btn--danger"
-                        disabled={isDeleting}
-                        onClick={() => handleDeleteAvatar(avatar.id)}
-                      >
-                        {isDeleting ? "Deleting..." : "Delete"}
-                      </button>
-                      <button
-                        className="avatar-item__confirm-btn"
-                        onClick={() => setConfirmDeleteId(null)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {confirmWipeId === avatar.id && (
-                  <div className="avatar-item__confirm-overlay">
-                    <p className="avatar-item__confirm-text">
-                      Clear all data for <strong>{avatar.name}</strong>? This will delete
-                      all memories, journal entries, and conversation history for this
-                      avatar. The avatar itself will be kept. This cannot be undone.
-                    </p>
-                    <div className="avatar-item__confirm-actions">
-                      <button
-                        className="avatar-item__confirm-btn avatar-item__confirm-btn--danger"
-                        disabled={isWiping}
-                        onClick={() => handleWipeAvatarData(avatar.id)}
-                      >
-                        {isWiping ? "Clearing..." : "Clear Data"}
-                      </button>
-                      <button
-                        className="avatar-item__confirm-btn"
-                        onClick={() => setConfirmWipeId(null)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <h4 className="assistant-avatars__section-title">Create Avatar</h4>
-          <div className="assistant-avatars__form">
-            <label className="assistant-avatars__form-label">Name</label>
-            <input
-              className="assistant-avatars__form-input"
-              type="text"
-              placeholder="Avatar name"
-              value={newAvatarName}
-              onChange={(e) => {
-                setNewAvatarName(e.target.value);
-                if (createAvatarError) setCreateAvatarError("");
-              }}
+      <div className="assistant-avatars__master-detail">
+        <div className="assistant-avatars__list-col">
+          <AvatarListPanel
+            avatars={avatars}
+            personalities={personalities}
+            selectedAvatarId={selectedAvatarId}
+            activeAvatarId={activeAvatarId}
+            spriteDataUrls={spriteDataUrls}
+            onSelect={setSelectedAvatarId}
+            onCreateClick={() => setShowCreateForm(true)}
+          />
+          {showCreateForm && (
+            <AvatarWizard
+              sprites={sprites}
+              spriteDataUrls={spriteDataUrls}
+              onComplete={handleAvatarCreated}
+              onCancel={() => setShowCreateForm(false)}
             />
-            <label className="assistant-avatars__form-label">Personality</label>
-            <select
-              className="assistant-avatars__form-select"
-              value={newAvatarPersonalityId}
-              onChange={(e) => setNewAvatarPersonalityId(e.target.value)}
-            >
-              {personalities.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                  {p.isBuiltin ? " (built-in)" : ""}
-                </option>
-              ))}
-            </select>
-            <button
-              className="assistant-avatars__form-btn"
-              disabled={
-                !newAvatarName.trim() || !newAvatarPersonalityId || isCreatingAvatar
-              }
-              onClick={handleCreateAvatar}
-            >
-              <AppIcon name="plus" size={14} /> Create Avatar
-            </button>
-            {createAvatarError && (
-              <p className="assistant-avatars__form-error">{createAvatarError}</p>
-            )}
-          </div>
+          )}
         </div>
 
-        <div>
-          <h4 className="assistant-avatars__section-title">Personalities</h4>
-          <div className="assistant-avatars__list">
-            {personalities.map((personality) => (
-              <div key={personality.id} className="personality-item">
-                <div className="personality-item__header">
-                  <span className="personality-item__name">{personality.name}</span>
-                  {personality.isBuiltin && (
-                    <span className="personality-item__badge">Built-in</span>
-                  )}
-                </div>
-                <p className="personality-item__prompt">{personality.promptText}</p>
-              </div>
-            ))}
-          </div>
-
-          {!showCreatePersonality ? (
-            <button
-              className="assistant-avatars__form-btn"
-              style={{ marginTop: "0.5rem" }}
-              onClick={() => setShowCreatePersonality(true)}
-            >
-              <AppIcon name="plus" size={14} /> Custom Personality
-            </button>
+        <div className="assistant-avatars__detail-col">
+          {selectedAvatar ? (
+            <AvatarDetailPanel
+              avatar={selectedAvatar}
+              isActive={selectedAvatar.id === activeAvatarId}
+              isStreaming={isStreaming}
+              personalities={personalities}
+              companionRoles={companionRoles}
+              spriteDataUrl={selectedSpriteUrl}
+              avatarCount={avatars.length}
+              onAvatarUpdated={handleAvatarUpdated}
+              onAvatarDeleted={handleAvatarDeleted}
+              onAvatarDataWiped={handleAvatarDataWiped}
+              onAvatarSwitch={handleAvatarSwitch}
+              onChangeSpriteClick={handleChangeSpriteClick}
+            />
           ) : (
-            <div className="assistant-avatars__form" style={{ marginTop: "0.5rem" }}>
-              <label className="assistant-avatars__form-label">Personality Name</label>
-              <input
-                className="assistant-avatars__form-input"
-                type="text"
-                placeholder="My Custom Personality"
-                value={newPersonalityName}
-                onChange={(e) => {
-                  setNewPersonalityName(e.target.value);
-                  if (createPersonalityError) setCreatePersonalityError("");
-                }}
-              />
-              <label className="assistant-avatars__form-label">System Prompt</label>
-              <textarea
-                className="assistant-avatars__form-textarea"
-                placeholder="Describe how this personality should behave..."
-                value={newPersonalityPrompt}
-                onChange={(e) => setNewPersonalityPrompt(e.target.value)}
-              />
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <button
-                  className="assistant-avatars__form-btn"
-                  disabled={
-                    !newPersonalityName.trim() ||
-                    !newPersonalityPrompt.trim() ||
-                    isCreatingPersonality
-                  }
-                  onClick={handleCreatePersonality}
-                >
-                  Create
-                </button>
-                <button
-                  className="assistant-avatars__form-btn"
-                  style={{
-                    background: "var(--color-bg-hover)",
-                    color: "var(--color-text-secondary)",
-                  }}
-                  onClick={() => {
-                    setShowCreatePersonality(false);
-                    setNewPersonalityName("");
-                    setNewPersonalityPrompt("");
-                    setCreatePersonalityError("");
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-              {createPersonalityError && (
-                <p className="assistant-avatars__form-error">{createPersonalityError}</p>
-              )}
+            <div className="assistant-avatars__empty-detail">
+              <p>Select an avatar to view details</p>
             </div>
           )}
         </div>
       </div>
+
+      {showGenerateWizard ? (
+        <SpriteGenerationWizard
+          onComplete={handleSpriteGenerated}
+          onCancel={() => setShowGenerateWizard(false)}
+        />
+      ) : (
+        <AvatarSpriteLibrary
+          ref={spriteLibRef}
+          sprites={sprites}
+          currentSpriteFilename={selectedAvatar?.imagePath ?? null}
+          avatarId={selectedAvatarId ?? ""}
+          onSpriteAssigned={handleSpriteAssigned}
+          onSpriteUploaded={handleSpriteUploaded}
+          onSpriteDeleted={handleSpriteDeleted}
+          onSpriteRenamed={handleSpriteRenamed}
+          onGenerateClick={() => setShowGenerateWizard(true)}
+        />
+      )}
     </div>
   );
 }

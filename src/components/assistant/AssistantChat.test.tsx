@@ -2,17 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AssistantChat } from "./AssistantChat";
+import type { AssistantChatProps } from "./AssistantChat";
 import type { ActionPipelineState } from "../../hooks/useActionPipeline";
+import type { AiMessage } from "../../types";
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(vi.fn()),
 }));
-
-const mockSendMessage = vi.fn();
-const mockEndConversation = vi.fn();
-const mockGetConversationHistory = vi.fn();
-const mockCheckConversationStale = vi.fn();
-const mockAbandonConversation = vi.fn();
 
 const mockSaveGameRating = vi.fn();
 const mockSaveGameNote = vi.fn();
@@ -23,13 +19,7 @@ const mockGetAllHidden = vi.fn();
 const mockToggleHidden = vi.fn();
 
 vi.mock("../../services/tauri", () => ({
-  assistantApi: {
-    sendMessage: (...args: unknown[]) => mockSendMessage(...args),
-    endConversation: (...args: unknown[]) => mockEndConversation(...args),
-    getConversationHistory: (...args: unknown[]) => mockGetConversationHistory(...args),
-    checkConversationStale: (...args: unknown[]) => mockCheckConversationStale(...args),
-    abandonConversation: (...args: unknown[]) => mockAbandonConversation(...args),
-  },
+  assistantApi: {},
   ratingsApi: {
     saveGameRating: (...args: unknown[]) => mockSaveGameRating(...args),
   },
@@ -96,16 +86,48 @@ vi.mock("../../hooks/useActionPipeline", () => ({
     results.length > 0 ? "[System] Previous actions:\n- mock → success" : "",
 }));
 
-describe("AssistantChat", () => {
-  const existingMessage = {
-    id: "m0",
-    conversationId: "c1",
-    role: "assistant" as const,
-    content: "Hello! How can I help you today?",
-    createdAt: "2026-02-27T12:00:00Z",
-    tokenEstimate: 8,
-  };
+// ── Helpers ──
 
+const mockSendMessage = vi.fn().mockResolvedValue(undefined);
+const mockRetry = vi.fn().mockResolvedValue(undefined);
+const mockEndConversation = vi.fn().mockResolvedValue(undefined);
+const mockInjectMessage = vi.fn();
+const mockClearPendingActions = vi.fn();
+const mockClearT0Expression = vi.fn();
+
+const existingMessage: AiMessage = {
+  id: "m0",
+  conversationId: "c1",
+  role: "assistant",
+  content: "Hello! How can I help you today?",
+  createdAt: "2026-02-27T12:00:00Z",
+  tokenEstimate: 8,
+};
+
+/** Default props for ChatCore — all conversation state is passed as props. */
+function defaultProps(overrides?: Partial<AssistantChatProps>): AssistantChatProps {
+  return {
+    conversationId: "c1",
+    messages: [existingMessage],
+    isStreaming: false,
+    error: null,
+    currentStreamText: "",
+    isCompacting: false,
+    pendingActions: [],
+    t0Expression: null,
+    cloudAiEnabled: true,
+    historyLoaded: true,
+    sendMessage: mockSendMessage,
+    retry: mockRetry,
+    endConversation: mockEndConversation,
+    injectMessage: mockInjectMessage,
+    clearPendingActions: mockClearPendingActions,
+    clearT0Expression: mockClearT0Expression,
+    ...overrides,
+  };
+}
+
+describe("AssistantChat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSendMessage.mockResolvedValue(undefined);
@@ -117,31 +139,26 @@ describe("AssistantChat", () => {
     mockToggleFavorite.mockResolvedValue(undefined);
     mockGetAllHidden.mockResolvedValue([]);
     mockToggleHidden.mockResolvedValue(undefined);
-    // Return a non-empty history by default so auto-greeting doesn't fire
-    mockGetConversationHistory.mockResolvedValue([existingMessage]);
-    mockCheckConversationStale.mockResolvedValue(false);
-    mockAbandonConversation.mockResolvedValue(undefined);
-    // Reset pipeline state + feedback mocks
     mockPipelineState = { actions: [], currentIndex: 0, status: "idle", results: [] };
     mockConsumeResults.mockReturnValue([]);
   });
 
   it("renders empty state with prompt text when no conversation", () => {
-    render(<AssistantChat avatarId="a1" conversationId={null} />);
+    render(<AssistantChat {...defaultProps({ conversationId: null, messages: [] })} />);
     expect(
       screen.getByText("Start a conversation with your assistant."),
     ).toBeInTheDocument();
   });
 
   it("renders input and send button", () => {
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    render(<AssistantChat {...defaultProps()} />);
     expect(screen.getByPlaceholderText("Type a message...")).toBeInTheDocument();
     expect(screen.getByTitle("Send message")).toBeInTheDocument();
   });
 
   it("send button does not send when input is empty", async () => {
     const user = userEvent.setup();
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    render(<AssistantChat {...defaultProps()} />);
     const sendBtn = screen.getByTitle("Send message");
     await user.click(sendBtn);
     // No message should appear — handleSend guards against empty text
@@ -150,7 +167,7 @@ describe("AssistantChat", () => {
 
   it("clears input after sending a message", async () => {
     const user = userEvent.setup();
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    render(<AssistantChat {...defaultProps()} />);
 
     const input = screen.getByPlaceholderText("Type a message...");
     await user.type(input, "Hello there");
@@ -163,313 +180,149 @@ describe("AssistantChat", () => {
     });
   });
 
-  it("renders user messages with correct styling", async () => {
+  it("calls sendMessage when user sends text", async () => {
     const user = userEvent.setup();
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    render(<AssistantChat {...defaultProps()} />);
 
     const input = screen.getByPlaceholderText("Type a message...");
     await user.type(input, "Test message");
     await user.click(screen.getByTitle("Send message"));
 
     await waitFor(() => {
-      const msgEl = screen.getByText("Test message");
-      expect(msgEl.closest(".assistant-chat__message--user")).toBeInTheDocument();
+      expect(mockSendMessage).toHaveBeenCalledWith("Test message", undefined);
     });
   });
 
   it("shows End Conversation button when conversationId is provided", () => {
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
-    expect(screen.getByText("End Conversation")).toBeInTheDocument();
+    render(<AssistantChat {...defaultProps()} />);
+    expect(screen.getByLabelText("End conversation")).toBeInTheDocument();
   });
 
   it("End Conversation button is hidden when hideEndButton is true", () => {
-    render(<AssistantChat avatarId="a1" conversationId="c1" hideEndButton />);
-    expect(screen.queryByText("End Conversation")).not.toBeInTheDocument();
+    render(<AssistantChat {...defaultProps({ hideEndButton: true })} />);
+    expect(screen.queryByLabelText("End conversation")).not.toBeInTheDocument();
   });
 
-  it("calls loadHistory on mount when conversationId exists", async () => {
-    mockGetConversationHistory.mockResolvedValue([
-      {
-        id: "m1",
-        conversationId: "c1",
-        role: "user",
-        content: "Existing message",
-        createdAt: "2026-02-27T12:00:00Z",
-        tokenEstimate: 5,
-      },
-    ]);
-
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Existing message")).toBeInTheDocument();
-    });
-  });
-
-  it("auto-sends greeting on new conversation with empty history", async () => {
-    mockGetConversationHistory.mockResolvedValue([]);
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
-
-    await waitFor(() => {
-      expect(mockSendMessage).toHaveBeenCalledWith(
-        "c1",
-        "a1",
-        expect.stringContaining("A new conversation has started"),
-        true,
-        undefined,
-        undefined,
-        undefined,
-      );
-    });
-  });
-
-  it("auto-sends first-conversation greeting when isFirstConversation is true", async () => {
-    mockGetConversationHistory.mockResolvedValue([]);
-    render(<AssistantChat avatarId="a1" conversationId="c1" isFirstConversation />);
-
-    await waitFor(() => {
-      expect(mockSendMessage).toHaveBeenCalledWith(
-        "c1",
-        "a1",
-        expect.stringContaining("your very first conversation"),
-        true,
-        undefined,
-        undefined,
-        undefined,
-      );
-    });
-  });
-
-  it("does not auto-send greeting when history exists", async () => {
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Hello! How can I help you today?")).toBeInTheDocument();
-    });
-    expect(mockSendMessage).not.toHaveBeenCalled();
-  });
-
-  it("shows error with retry button on failure", async () => {
-    mockSendMessage.mockRejectedValue({ message: "Server error" });
-    const user = userEvent.setup();
-
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
-
-    const input = screen.getByPlaceholderText("Type a message...");
-    await user.type(input, "Hello");
-    await user.click(screen.getByTitle("Send message"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Server error")).toBeInTheDocument();
-      expect(screen.getByText("Retry")).toBeInTheDocument();
-    });
-  });
-
-  it("calls checkConversationStale on mount", async () => {
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
-
-    await waitFor(() => {
-      expect(mockCheckConversationStale).toHaveBeenCalledWith("c1");
-    });
-  });
-
-  it("abandons stale conversation and calls onStaleReset", async () => {
-    mockCheckConversationStale.mockResolvedValue(true);
-    const onStaleReset = vi.fn();
-
-    render(
-      <AssistantChat avatarId="a1" conversationId="c1" onStaleReset={onStaleReset} />,
-    );
-
-    await waitFor(() => {
-      expect(mockAbandonConversation).toHaveBeenCalledWith("c1");
-    });
-    await waitFor(() => {
-      expect(onStaleReset).toHaveBeenCalled();
-    });
-    // Should not have loaded history or sent a greeting
-    expect(mockGetConversationHistory).not.toHaveBeenCalled();
-    expect(mockSendMessage).not.toHaveBeenCalled();
-  });
-
-  it("does not abandon non-stale conversation", async () => {
-    mockCheckConversationStale.mockResolvedValue(false);
-
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
-
-    await waitFor(() => {
-      expect(mockGetConversationHistory).toHaveBeenCalledWith("c1");
-    });
-    expect(mockAbandonConversation).not.toHaveBeenCalled();
-  });
-
-  it("falls through to normal flow when stale check throws", async () => {
-    mockCheckConversationStale.mockRejectedValue(new Error("DB error"));
-    mockGetConversationHistory.mockResolvedValue([]);
-
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
-
-    // Should fall through to normal flow: loadHistory is called
-    await waitFor(() => {
-      expect(mockGetConversationHistory).toHaveBeenCalledWith("c1");
-    });
-    // Greeting should still be sent
-    await waitFor(() => {
-      expect(mockSendMessage).toHaveBeenCalledWith(
-        "c1",
-        "a1",
-        expect.stringContaining("A new conversation has started"),
-        true,
-        undefined,
-        undefined,
-        undefined,
-      );
-    });
-    // Component should not crash — input should be present
-    expect(screen.getByPlaceholderText("Type a message...")).toBeInTheDocument();
+  it("renders existing messages from props", () => {
+    render(<AssistantChat {...defaultProps()} />);
+    expect(screen.getByText("Hello! How can I help you today?")).toBeInTheDocument();
   });
 
   it("does not render End Conversation button when conversationId is null", () => {
-    render(<AssistantChat avatarId="a1" conversationId={null} />);
-    expect(screen.queryByText("End Conversation")).not.toBeInTheDocument();
+    render(<AssistantChat {...defaultProps({ conversationId: null })} />);
+    expect(screen.queryByLabelText("End conversation")).not.toBeInTheDocument();
   });
 
-  it("shows compacting splash when conversation is ending", async () => {
-    // Make endConversation never resolve so isCompacting stays true
-    mockEndConversation.mockReturnValue(new Promise(() => {}));
-    const user = userEvent.setup();
-
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
-
-    // Wait for history to load
-    await waitFor(() => {
-      expect(screen.getByText("Hello! How can I help you today?")).toBeInTheDocument();
-    });
-
-    // Click End Conversation to enter compacting state
-    await user.click(screen.getByText("End Conversation"));
-
-    // Assert compacting splash
-    await waitFor(() => {
-      expect(screen.getByText("Storing memories...")).toBeInTheDocument();
-    });
+  it("shows compacting splash when isCompacting is true", () => {
+    render(<AssistantChat {...defaultProps({ isCompacting: true })} />);
+    expect(screen.getByText("Storing memories...")).toBeInTheDocument();
     expect(
       document.querySelector(".assistant-chat__compacting-spinner"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("End Conversation")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("End conversation")).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Type a message...")).not.toBeInTheDocument();
   });
 
-  it("End Conversation button is disabled while streaming", async () => {
-    // Make sendMessage never resolve so streaming stays active
-    mockSendMessage.mockReturnValue(new Promise(() => {}));
-    const user = userEvent.setup();
+  it("End Conversation button is disabled while streaming", () => {
+    render(<AssistantChat {...defaultProps({ isStreaming: true })} />);
+    expect(screen.getByLabelText("End conversation")).toBeDisabled();
+  });
 
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
-
-    // Wait for history to load
-    await waitFor(() => {
-      expect(screen.getByText("Hello! How can I help you today?")).toBeInTheDocument();
-    });
-
-    // Type and send to enter streaming state
-    const input = screen.getByPlaceholderText("Type a message...");
-    await user.type(input, "test");
-    await user.click(screen.getByTitle("Send message"));
-
-    // End button should be disabled while streaming
-    const endBtn = screen.getByText("End Conversation").closest("button")!;
-    expect(endBtn).toBeDisabled();
+  it("shows error with retry button on error", () => {
+    render(
+      <AssistantChat
+        {...defaultProps({
+          error: "Server error",
+          messages: [
+            existingMessage,
+            {
+              id: "u1",
+              conversationId: "c1",
+              role: "user",
+              content: "Hello",
+              createdAt: "2026-02-27T12:01:00Z",
+              tokenEstimate: 2,
+            },
+          ],
+        })}
+      />,
+    );
+    expect(screen.getByText("Server error")).toBeInTheDocument();
+    expect(screen.getByText("Retry")).toBeInTheDocument();
   });
 
   // ── Post-session review tests ─────────────────────────────────
 
-  it("injects greeting for fresh conversation when pendingReview is set", async () => {
-    mockGetConversationHistory.mockResolvedValue([]);
-    // Suppress the auto-greeting by keeping intro sent
-    mockSendMessage.mockResolvedValue(undefined);
-
+  it("injects greeting for fresh conversation when pendingReview is set", () => {
     render(
       <AssistantChat
-        avatarId="a1"
-        conversationId="c1"
-        pendingReview={{ gameId: "g1", gameName: "Elden Ring", durationMinutes: 90 }}
-        onPendingReviewConsumed={vi.fn()}
+        {...defaultProps({
+          messages: [],
+          pendingReview: { gameId: "g1", gameName: "Elden Ring", durationMinutes: 90 },
+          onPendingReviewConsumed: vi.fn(),
+        })}
       />,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText(/Elden Ring/)).toBeInTheDocument();
-      expect(screen.getByText(/1\.5 hours/)).toBeInTheDocument();
-    });
+    expect(mockInjectMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining("Elden Ring"),
+      }),
+    );
   });
 
-  it("does not inject greeting when pendingReview is null", async () => {
-    render(<AssistantChat avatarId="a1" conversationId="c1" pendingReview={null} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Hello! How can I help you today?")).toBeInTheDocument();
-    });
-    // Should not contain any review-related text
+  it("does not inject greeting when pendingReview is null", () => {
+    render(<AssistantChat {...defaultProps({ pendingReview: null })} />);
     expect(screen.queryByText(/Want to leave a review/)).not.toBeInTheDocument();
   });
 
-  it("shows review confirmation banner for active conversation", async () => {
-    // History with a user message → active conversation
-    mockGetConversationHistory.mockResolvedValue([
-      existingMessage,
-      {
-        id: "m-user",
-        conversationId: "c1",
-        role: "user" as const,
-        content: "Hello AI",
-        createdAt: "2026-02-27T12:01:00Z",
-        tokenEstimate: 2,
-      },
-    ]);
-
+  it("shows review confirmation banner for active conversation", () => {
     render(
       <AssistantChat
-        avatarId="a1"
-        conversationId="c1"
-        pendingReview={{ gameId: "g1", gameName: "Hades", durationMinutes: 45 }}
-        onPendingReviewConsumed={vi.fn()}
+        {...defaultProps({
+          messages: [
+            existingMessage,
+            {
+              id: "m-user",
+              conversationId: "c1",
+              role: "user",
+              content: "Hello AI",
+              createdAt: "2026-02-27T12:01:00Z",
+              tokenEstimate: 2,
+            },
+          ],
+          pendingReview: { gameId: "g1", gameName: "Hades", durationMinutes: 45 },
+          onPendingReviewConsumed: vi.fn(),
+        })}
       />,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText(/Hades/)).toBeInTheDocument();
-      expect(screen.getByText("Yes, let's review")).toBeInTheDocument();
-      expect(screen.getByText("Not now")).toBeInTheDocument();
-    });
+    expect(screen.getByText(/Hades/)).toBeInTheDocument();
+    expect(screen.getByText("Yes, let's review")).toBeInTheDocument();
+    expect(screen.getByText("Not now")).toBeInTheDocument();
   });
 
   it("dismisses review confirmation when Not now is clicked", async () => {
-    mockGetConversationHistory.mockResolvedValue([
-      existingMessage,
-      {
-        id: "m-user",
-        conversationId: "c1",
-        role: "user" as const,
-        content: "Hello AI",
-        createdAt: "2026-02-27T12:01:00Z",
-        tokenEstimate: 2,
-      },
-    ]);
     const user = userEvent.setup();
-
     render(
       <AssistantChat
-        avatarId="a1"
-        conversationId="c1"
-        pendingReview={{ gameId: "g1", gameName: "Hades", durationMinutes: 45 }}
-        onPendingReviewConsumed={vi.fn()}
+        {...defaultProps({
+          messages: [
+            existingMessage,
+            {
+              id: "m-user",
+              conversationId: "c1",
+              role: "user",
+              content: "Hello AI",
+              createdAt: "2026-02-27T12:01:00Z",
+              tokenEstimate: 2,
+            },
+          ],
+          pendingReview: { gameId: "g1", gameName: "Hades", durationMinutes: 45 },
+          onPendingReviewConsumed: vi.fn(),
+        })}
       />,
     );
-
-    await waitFor(() => {
-      expect(screen.getByText("Not now")).toBeInTheDocument();
-    });
 
     await user.click(screen.getByText("Not now"));
 
@@ -478,23 +331,19 @@ describe("AssistantChat", () => {
     });
   });
 
-  it("calls onPendingReviewConsumed after injection", async () => {
-    mockGetConversationHistory.mockResolvedValue([]);
-    mockSendMessage.mockResolvedValue(undefined);
+  it("calls onPendingReviewConsumed after injection", () => {
     const onConsumed = vi.fn();
-
     render(
       <AssistantChat
-        avatarId="a1"
-        conversationId="c1"
-        pendingReview={{ gameId: "g1", gameName: "Elden Ring", durationMinutes: 90 }}
-        onPendingReviewConsumed={onConsumed}
+        {...defaultProps({
+          messages: [],
+          pendingReview: { gameId: "g1", gameName: "Elden Ring", durationMinutes: 90 },
+          onPendingReviewConsumed: onConsumed,
+        })}
       />,
     );
 
-    await waitFor(() => {
-      expect(onConsumed).toHaveBeenCalled();
-    });
+    expect(onConsumed).toHaveBeenCalled();
   });
 
   // ── Phase 13c: Tier 2 confirmation card tests ─────────────────
@@ -515,7 +364,7 @@ describe("AssistantChat", () => {
       results: [],
     };
 
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    render(<AssistantChat {...defaultProps()} />);
     expect(screen.getByText("Add Elden Ring to favorites?")).toBeInTheDocument();
     expect(screen.getByText("Confirm")).toBeInTheDocument();
     expect(screen.getByText("Cancel")).toBeInTheDocument();
@@ -538,7 +387,7 @@ describe("AssistantChat", () => {
       results: [],
     };
 
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    render(<AssistantChat {...defaultProps()} />);
     expect(screen.getByText("Review: Elden Ring")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Write your review...")).toHaveValue(
       "Great combat.",
@@ -564,7 +413,7 @@ describe("AssistantChat", () => {
       results: [],
     };
 
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    render(<AssistantChat {...defaultProps()} />);
     expect(screen.getByText("Note: Hollow Knight")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Write your note...")).toHaveValue(
       "Explore the Abyss.",
@@ -575,7 +424,7 @@ describe("AssistantChat", () => {
   it("does not render cards when pipeline is idle", () => {
     mockPipelineState = { actions: [], currentIndex: 0, status: "idle", results: [] };
 
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    render(<AssistantChat {...defaultProps()} />);
     expect(screen.queryByText("Confirm")).not.toBeInTheDocument();
     expect(screen.queryByText("Save Review")).not.toBeInTheDocument();
     expect(screen.queryByText("Save Note")).not.toBeInTheDocument();
@@ -597,7 +446,7 @@ describe("AssistantChat", () => {
       results: [],
     };
 
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    render(<AssistantChat {...defaultProps()} />);
     await user.click(screen.getByText("Cancel"));
     expect(mockDenyTier2).toHaveBeenCalledTimes(1);
   });
@@ -617,14 +466,14 @@ describe("AssistantChat", () => {
       results: [],
     };
 
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    render(<AssistantChat {...defaultProps()} />);
     expect(screen.getByText("Remaining actions canceled.")).toBeInTheDocument();
   });
 
   it("does not show canceled message when pipeline is idle", () => {
     mockPipelineState = { actions: [], currentIndex: 0, status: "idle", results: [] };
 
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    render(<AssistantChat {...defaultProps()} />);
     expect(screen.queryByText("Remaining actions canceled.")).not.toBeInTheDocument();
   });
 
@@ -644,7 +493,7 @@ describe("AssistantChat", () => {
       results: [],
     };
 
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    render(<AssistantChat {...defaultProps()} />);
 
     const input = screen.getByPlaceholderText("Type a message...");
     await user.type(input, "New question");
@@ -669,24 +518,13 @@ describe("AssistantChat", () => {
       results: [],
     };
 
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
+    render(<AssistantChat {...defaultProps()} />);
     expect(screen.getByText("Execute: shelf-assign:Elden Ring")).toBeInTheDocument();
   });
 
-  // ── Staged actions / Run Actions button tests ─────────────────
-
-  it("does not auto-execute actions — no pipeline.setActions on mount", async () => {
-    // Simulate pendingActions arriving via useConversation
-    // The mock for useConversation returns pendingActions from the hook,
-    // but since we mock useActionPipeline separately, we just verify
-    // that setActions is NOT called automatically on render
+  it("does not auto-execute actions — no pipeline.setActions on mount", () => {
     mockPipelineState = { actions: [], currentIndex: 0, status: "idle", results: [] };
-    render(<AssistantChat avatarId="a1" conversationId="c1" />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Hello! How can I help you today?")).toBeInTheDocument();
-    });
-    // setActions should not have been called (no auto-execution)
+    render(<AssistantChat {...defaultProps({ pendingActions: [] })} />);
     expect(mockSetActions).not.toHaveBeenCalled();
   });
 });

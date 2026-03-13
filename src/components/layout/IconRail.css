@@ -34,26 +34,38 @@
   height: 56px;
   display: flex;
   align-items: center;
-  padding: 0 var(--space-sm);
+  /* 36px = logo icon width; centers logo in collapsed rail, stays put when expanded */
+  padding: 0 var(--space-sm) 0 calc((var(--rail-width) - 36px) / 2);
   border-bottom: 1px solid var(--color-border-subtle);
   flex-shrink: 0;
-  gap: var(--space-sm);
+  gap: 0;
   overflow: hidden;
   white-space: nowrap;
+}
+
+.icon-rail:hover .icon-rail__header,
+.icon-rail--expanded .icon-rail__header {
+  gap: var(--space-sm);
 }
 
 .icon-rail__logo-btn {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: 0;
   background: none;
   border: none;
   cursor: pointer;
   padding: 0;
   color: inherit;
   overflow: hidden;
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
+}
+
+.icon-rail:hover .icon-rail__logo-btn,
+.icon-rail--expanded .icon-rail__logo-btn {
+  flex: 1;
+  gap: var(--space-sm);
 }
 
 .icon-rail__logo-btn:focus-visible {
@@ -63,8 +75,8 @@
 }
 
 .icon-rail__logo-icon {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
   border-radius: var(--radius-sm);
   object-fit: contain;
@@ -80,6 +92,8 @@
   font-weight: var(--font-weight-bold);
   color: var(--color-accent-primary);
   opacity: 0;
+  width: 0;
+  overflow: hidden;
   transition: opacity var(--transition-fast);
   white-space: nowrap;
 }
@@ -87,11 +101,13 @@
 .icon-rail:hover .icon-rail__logo-text,
 .icon-rail--expanded .icon-rail__logo-text {
   opacity: 1;
+  width: auto;
 }
 
 .icon-rail--collapsed .icon-rail__logo-text,
 .icon-rail--collapsed:hover .icon-rail__logo-text {
   opacity: 0;
+  width: 0;
 }
 
 /* ── Navigation ────────────────────────────────────────────────── */
@@ -107,8 +123,10 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm);
+  gap: 0;
+  /* 40px = link icon width; centers icon in collapsed rail, stays put when expanded */
+  padding: var(--space-sm) var(--space-sm) var(--space-sm)
+    calc((var(--rail-width) - 40px) / 2);
   border-radius: var(--radius-md);
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
@@ -119,6 +137,11 @@
   overflow: hidden;
   white-space: nowrap;
   text-decoration: none;
+}
+
+.icon-rail:hover .icon-rail__link,
+.icon-rail--expanded .icon-rail__link {
+  gap: var(--space-sm);
 }
 
 .icon-rail__link:hover {
@@ -149,8 +172,8 @@
 
 .icon-rail__link-icon {
   position: relative;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -188,24 +211,83 @@
 
 .icon-rail__link-label {
   opacity: 0;
+  width: 0;
+  overflow: hidden;
   transition: opacity var(--transition-fast);
 }
 
 .icon-rail:hover .icon-rail__link-label,
 .icon-rail--expanded .icon-rail__link-label {
   opacity: 1;
+  width: auto;
 }
 
 .icon-rail--collapsed .icon-rail__link-label,
 .icon-rail--collapsed:hover .icon-rail__link-label {
   opacity: 0;
+  width: 0;
 }
 
 /* ── Aicon area ───────────────────────────────────────────────── */
 .icon-rail__aicon-area {
   display: flex;
+  flex-direction: column;
   padding: var(--space-xs) 0;
   border-top: 1px solid var(--color-border-subtle);
+}
+
+.icon-rail__assistant-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  height: 26px;
+  padding: 2px var(--space-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  transition:
+    gap var(--transition-fast),
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.icon-rail:hover .icon-rail__assistant-link,
+.icon-rail--expanded .icon-rail__assistant-link {
+  gap: var(--space-xs);
+}
+
+/* Hide the text label when rail is collapsed (icon stays visible) */
+.icon-rail__assistant-link span {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  transition: opacity var(--transition-fast);
+}
+
+.icon-rail:hover .icon-rail__assistant-link span,
+.icon-rail--expanded .icon-rail__assistant-link span {
+  opacity: 1;
+  width: auto;
+}
+
+.icon-rail--collapsed .icon-rail__assistant-link span,
+.icon-rail--collapsed:hover .icon-rail__assistant-link span {
+  opacity: 0;
+  width: 0;
+}
+
+.icon-rail__assistant-link:hover {
+  color: var(--color-accent-primary);
+  background: var(--color-bg-hover);
+}
+
+.icon-rail__assistant-link:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
 }
 
 /* ── Footer ────────────────────────────────────────────────────── */
@@ -223,8 +305,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 28px;
+  width: 40px;
+  height: 32px;
   background: none;
   border: none;
   border-radius: var(--radius-sm);

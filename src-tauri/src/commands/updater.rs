@@ -70,7 +70,8 @@ pub async fn install_update(app_handle: AppHandle) -> Result<(), AppError> {
     app_handle.restart();
 }
 
+/// Must be `async` — keeps main thread free for IPC response delivery.
 #[tauri::command]
-pub fn get_app_version(app_handle: AppHandle) -> String {
+pub async fn get_app_version(app_handle: AppHandle) -> String {
     app_handle.package_info().version.to_string()
 }

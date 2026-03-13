@@ -99,7 +99,7 @@ export function IconRail({
             }
           >
             <span className="icon-rail__link-icon">
-              <AppIcon name={item.icon} size={20} />
+              <AppIcon name={item.icon} size={24} />
               {item.path === "/news" && unreadCount > 0 && (
                 <span className="icon-rail__badge">
                   {unreadCount > 99 ? "99+" : unreadCount}
@@ -117,6 +117,10 @@ export function IconRail({
           onToggleBubble={onToggleBubble}
           bubbleExpanded={bubbleExpanded}
         />
+        <NavLink to="/assistant" className="icon-rail__assistant-link">
+          <AppIcon name="assistant" size={12} />
+          <span>Full View</span>
+        </NavLink>
       </div>
 
       <div className="icon-rail__footer">
@@ -126,7 +130,7 @@ export function IconRail({
           aria-label={`Rail mode: ${RAIL_MODE_LABELS[railMode]}. Click to change.`}
           title={RAIL_MODE_LABELS[railMode]}
         >
-          <AppIcon name={RAIL_MODE_ICONS[railMode]} size={14} />
+          <AppIcon name={RAIL_MODE_ICONS[railMode]} size={16} />
         </button>
         <span className="icon-rail__version">v{appVersion}</span>
       </div>

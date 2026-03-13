@@ -31,6 +31,10 @@ pub struct BackupManifest {
     pub settings_size_bytes: u64,
     pub art_file_count: u32,
     pub art_total_bytes: u64,
+    #[serde(default)]
+    pub sprite_file_count: u32,
+    #[serde(default)]
+    pub sprite_total_bytes: u64,
     pub credential_hints: Vec<String>,
 }
 
@@ -42,6 +46,8 @@ pub struct BackupEstimate {
     pub settings_size_bytes: u64,
     pub art_file_count: u32,
     pub art_total_bytes: u64,
+    pub sprite_file_count: u32,
+    pub sprite_total_bytes: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -86,6 +92,26 @@ fn enumerate_art_files(app_data: &Path) -> Result<Vec<PathBuf>, AppError> {
         let path = entry.path();
         if path.is_file() && path.extension().is_some_and(|ext| ext == "png") {
             files.push(path);
+        }
+    }
+    Ok(files)
+}
+
+fn enumerate_sprite_files(app_data: &Path) -> Result<Vec<PathBuf>, AppError> {
+    let sprites_dir = app_data.join("sprites");
+    if !sprites_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut files = Vec::new();
+    for entry in fs::read_dir(&sprites_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        // Include PNGs and crop sidecar JSON files
+        if path.is_file() {
+            let ext = path.extension().and_then(|e| e.to_str());
+            if ext == Some("png") || path.to_str().is_some_and(|s| s.ends_with(".crops.json")) {
+                files.push(path);
+            }
         }
     }
     Ok(files)
@@ -178,12 +204,17 @@ pub fn estimate_backup_size(
     let art_files = enumerate_art_files(app_data)?;
     let art_total: u64 = art_files.iter().map(|p| file_size(p)).sum();
 
+    let sprite_files = enumerate_sprite_files(app_data)?;
+    let sprite_total: u64 = sprite_files.iter().map(|p| file_size(p)).sum();
+
     Ok(BackupEstimate {
-        total_size_bytes: db_size + settings_size + art_total,
+        total_size_bytes: db_size + settings_size + art_total + sprite_total,
         db_size_bytes: db_size,
         settings_size_bytes: settings_size,
         art_file_count: art_files.len() as u32,
         art_total_bytes: art_total,
+        sprite_file_count: sprite_files.len() as u32,
+        sprite_total_bytes: sprite_total,
     })
 }
 
@@ -221,6 +252,10 @@ pub fn create_backup(
     emit_progress(app_handle, "copying-art", "Scanning custom art...");
     let art_files = enumerate_art_files(app_data)?;
 
+    // 4b. Enumerate sprite files
+    emit_progress(app_handle, "copying-sprites", "Scanning sprites...");
+    let sprite_files = enumerate_sprite_files(app_data)?;
+
     // 5. Build credential hints
     let credential_hints = build_credential_hints();
 
@@ -228,6 +263,7 @@ pub fn create_backup(
     let db_size = file_size(&temp_db);
     let settings_size = file_size(&settings_path);
     let art_total: u64 = art_files.iter().map(|p| file_size(p)).sum();
+    let sprite_total: u64 = sprite_files.iter().map(|p| file_size(p)).sum();
 
     // 7. Build manifest
     let manifest = BackupManifest {
@@ -238,6 +274,8 @@ pub fn create_backup(
         settings_size_bytes: settings_size,
         art_file_count: art_files.len() as u32,
         art_total_bytes: art_total,
+        sprite_file_count: sprite_files.len() as u32,
+        sprite_total_bytes: sprite_total,
         credential_hints,
     };
 
@@ -284,6 +322,18 @@ pub fn create_backup(
         }
     }
 
+    // sprites/ files (PNGs + crop sidecars)
+    for (i, sprite_path) in sprite_files.iter().enumerate() {
+        if let Some(name) = sprite_path.file_name().and_then(|n| n.to_str()) {
+            emit_progress(
+                app_handle,
+                "copying-sprites",
+                &format!("Packing sprites ({}/{})", i + 1, sprite_files.len()),
+            );
+            zip_add_file(&mut zip, options, &format!("sprites/{name}"), sprite_path)?;
+        }
+    }
+
     zip.finish()
         .map_err(|e| AppError::Backup(format!("Failed to finalize archive: {e}")))?;
 
@@ -293,8 +343,9 @@ pub fn create_backup(
     emit_progress(app_handle, "complete", "Backup created successfully!");
     tracing::info!(
         path = %output_path.display(),
-        size_mb = (db_size + settings_size + art_total) / (1024 * 1024),
+        size_mb = (db_size + settings_size + art_total + sprite_total) / (1024 * 1024),
         art_count = art_files.len(),
+        sprite_count = sprite_files.len(),
         "Backup created"
     );
 
@@ -477,6 +528,14 @@ pub fn restore_from_backup(
     }
     fs::create_dir_all(&art_dir)?;
 
+    // 6. Restore sprites directory
+    emit_progress(app_handle, "extracting-sprites", "Restoring sprites...");
+    let sprites_dir = app_data.join("sprites");
+    if sprites_dir.exists() {
+        let _ = fs::remove_dir_all(&sprites_dir);
+    }
+    fs::create_dir_all(&sprites_dir)?;
+
     let file_count = archive.len();
     for i in 0..file_count {
         let mut entry = archive
@@ -488,10 +547,15 @@ pub fn restore_from_backup(
             let dest = art_dir.join(filename);
             let mut out = fs::File::create(&dest)?;
             std::io::copy(&mut entry, &mut out)?;
+        } else if entry_name.starts_with("sprites/") && entry_name.len() > 8 {
+            let filename = &entry_name[8..]; // strip "sprites/"
+            let dest = sprites_dir.join(filename);
+            let mut out = fs::File::create(&dest)?;
+            std::io::copy(&mut entry, &mut out)?;
         }
     }
 
-    // 6. Restore credentials
+    // 7. Restore credentials
     emit_progress(app_handle, "restoring-credentials", "Saving API keys...");
     restore_credentials(credential_values)?;
 
@@ -681,6 +745,8 @@ mod tests {
             settings_size_bytes: 50,
             art_file_count: 0,
             art_total_bytes: 0,
+            sprite_file_count: 0,
+            sprite_total_bytes: 0,
             credential_hints: vec![],
         };
 
@@ -718,6 +784,8 @@ mod tests {
             settings_size_bytes: 50,
             art_file_count: 0,
             art_total_bytes: 0,
+            sprite_file_count: 0,
+            sprite_total_bytes: 0,
             credential_hints: vec![],
         };
 
@@ -752,6 +820,8 @@ mod tests {
             settings_size_bytes: 50,
             art_file_count: 0,
             art_total_bytes: 0,
+            sprite_file_count: 0,
+            sprite_total_bytes: 0,
             credential_hints: vec![],
         };
 
@@ -833,6 +903,69 @@ mod tests {
         let files = enumerate_art_files(dir.path()).unwrap();
         assert_eq!(files.len(), 2);
         assert!(files.iter().all(|f| f.extension().unwrap() == "png"));
+    }
+
+    /// Create a sample sprite file in the test directory.
+    fn write_test_sprite(dir: &Path, name: &str) {
+        let sprites_dir = dir.join("sprites");
+        fs::create_dir_all(&sprites_dir).unwrap();
+        fs::write(sprites_dir.join(name), b"fake sprite png").unwrap();
+    }
+
+    #[test]
+    fn test_enumerate_sprite_files_empty() {
+        let dir = TempDir::new().unwrap();
+        let files = enumerate_sprite_files(dir.path()).unwrap();
+        assert!(files.is_empty());
+    }
+
+    #[test]
+    fn test_enumerate_sprite_files_with_pngs_and_crops() {
+        let dir = TempDir::new().unwrap();
+        write_test_sprite(dir.path(), "generated-abc.png");
+        write_test_sprite(dir.path(), "uploaded-cool.png");
+        // Crop sidecar should be included
+        let sprites_dir = dir.path().join("sprites");
+        fs::write(
+            sprites_dir.join("generated-abc.png.crops.json"),
+            r#"{"neutral":{"x":0,"y":0}}"#,
+        )
+        .unwrap();
+        // Non-PNG/non-crops file should be ignored
+        fs::write(sprites_dir.join("readme.txt"), "ignore me").unwrap();
+
+        let files = enumerate_sprite_files(dir.path()).unwrap();
+        assert_eq!(files.len(), 3); // 2 PNGs + 1 crops.json
+    }
+
+    #[test]
+    fn test_estimate_with_sprites() {
+        let (dir, db) = setup_test_env();
+        write_test_settings(dir.path());
+        write_test_sprite(dir.path(), "generated-test.png");
+
+        let est = estimate_backup_size(dir.path(), &db).unwrap();
+        assert_eq!(est.sprite_file_count, 1);
+        assert!(est.sprite_total_bytes > 0);
+        assert!(est.total_size_bytes > est.db_size_bytes + est.settings_size_bytes);
+    }
+
+    #[test]
+    fn test_manifest_deserializes_without_sprite_fields() {
+        // Old backups won't have sprite fields — serde(default) should handle it
+        let json = r#"{
+            "appVersion": "1.10.0",
+            "schemaVersion": 25,
+            "createdAt": "2026-01-01T00:00:00Z",
+            "dbSizeBytes": 100,
+            "settingsSizeBytes": 50,
+            "artFileCount": 0,
+            "artTotalBytes": 0,
+            "credentialHints": []
+        }"#;
+        let manifest: BackupManifest = serde_json::from_str(json).unwrap();
+        assert_eq!(manifest.sprite_file_count, 0);
+        assert_eq!(manifest.sprite_total_bytes, 0);
     }
 
     #[test]

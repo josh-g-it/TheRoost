@@ -5,6 +5,7 @@ import {
   finalizeStream,
   stripActions,
   parseActionsFromContent,
+  extractT0Expression,
   DELIMITER,
 } from "./actionParser";
 
@@ -383,5 +384,85 @@ describe("parseActionsFromContent", () => {
     const result = parseActionsFromContent(content);
     expect(result.displayText).toBe("Text");
     expect(result.actions).toEqual([]);
+  });
+});
+
+// ── extractT0Expression tests ───────────────────────────────────
+
+describe("extractT0Expression", () => {
+  it("extracts expression:happy as T0", () => {
+    const { expression, remaining } = extractT0Expression([
+      { actionId: "expression:happy", tier: 0 },
+      { actionId: "nav:library", tier: 1 },
+    ]);
+    expect(expression).toBe("happy");
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].actionId).toBe("nav:library");
+  });
+
+  it("extracts all four valid expressions", () => {
+    for (const name of ["happy", "sad", "interested", "bored"]) {
+      const { expression } = extractT0Expression([
+        { actionId: `expression:${name}`, tier: 0 },
+      ]);
+      expect(expression).toBe(name);
+    }
+  });
+
+  it("strips T0 actions from remaining before T1/T2 processing", () => {
+    const { expression, remaining } = extractT0Expression([
+      { actionId: "sort:playtime", tier: 1 },
+      { actionId: "expression:interested", tier: 0 },
+      { actionId: "favorite:Hades", tier: 2, description: "Fav Hades" },
+    ]);
+    expect(expression).toBe("interested");
+    expect(remaining).toHaveLength(2);
+    expect(remaining[0].actionId).toBe("sort:playtime");
+    expect(remaining[1].actionId).toBe("favorite:Hades");
+  });
+
+  it("ignores unknown expression names", () => {
+    const { expression, remaining } = extractT0Expression([
+      { actionId: "expression:angry", tier: 0 },
+      { actionId: "nav:library", tier: 1 },
+    ]);
+    // "angry" is not a valid expression — treated as unknown, not extracted
+    expect(expression).toBe(null);
+    // But it's still filtered out (it's tier 0 + expression prefix, just invalid name)
+    expect(remaining).toHaveLength(1);
+  });
+
+  it("uses last expression when multiple present", () => {
+    const { expression } = extractT0Expression([
+      { actionId: "expression:happy", tier: 0 },
+      { actionId: "expression:sad", tier: 0 },
+      { actionId: "expression:bored", tier: 0 },
+    ]);
+    expect(expression).toBe("bored");
+  });
+
+  it("returns null expression when no T0 actions present", () => {
+    const { expression, remaining } = extractT0Expression([
+      { actionId: "nav:library", tier: 1 },
+      { actionId: "sort:name", tier: 1 },
+    ]);
+    expect(expression).toBe(null);
+    expect(remaining).toHaveLength(2);
+  });
+
+  it("returns null expression and empty remaining for empty input", () => {
+    const { expression, remaining } = extractT0Expression([]);
+    expect(expression).toBe(null);
+    expect(remaining).toEqual([]);
+  });
+
+  it("does not extract expression actions with wrong tier", () => {
+    const { expression, remaining } = extractT0Expression([
+      { actionId: "expression:happy", tier: 1 },
+    ]);
+    // tier 1 expression actions are treated as regular actions
+    expect(expression).toBe(null);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].actionId).toBe("expression:happy");
   });
 });

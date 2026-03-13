@@ -2,8 +2,10 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm);
+  gap: 0;
+  /* 44px = sprite size; centers avatar in collapsed rail, stays put when expanded */
+  padding: var(--space-sm) var(--space-sm) var(--space-sm)
+    calc((var(--rail-width) - 44px) / 2);
   background: none;
   border: none;
   cursor: pointer;
@@ -17,6 +19,11 @@
   width: 100%;
 }
 
+.icon-rail:hover .aicon,
+.icon-rail--expanded .aicon {
+  gap: var(--space-sm);
+}
+
 .aicon:hover {
   background: var(--color-bg-hover);
   color: var(--color-text-primary);
@@ -28,9 +35,9 @@
 }
 
 .aicon__circle {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  border-radius: 20%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -70,15 +77,19 @@
   color: inherit;
   white-space: nowrap;
   opacity: 0;
+  width: 0;
+  overflow: hidden;
   transition: opacity var(--transition-fast);
 }
 
 .icon-rail:hover .aicon__label,
 .icon-rail--expanded .aicon__label {
   opacity: 1;
+  width: auto;
 }
 
 .icon-rail--collapsed .aicon__label,
 .icon-rail--collapsed:hover .aicon__label {
   opacity: 0;
+  width: 0;
 }

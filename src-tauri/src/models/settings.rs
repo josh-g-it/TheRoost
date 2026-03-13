@@ -171,9 +171,22 @@ pub struct AppSettings {
     #[serde(default)]
     pub assistant_bubble_height: Option<u32>,
     #[serde(default)]
+    pub assistant_bubble_x: Option<i32>,
+    #[serde(default)]
+    pub assistant_bubble_y: Option<i32>,
+    #[serde(default)]
     pub assistant_action_delay: u32,
     #[serde(default)]
     pub news_blocked_sources: Vec<String>,
+    #[serde(default)]
+    pub custom_style_presets: Vec<CustomStylePreset>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomStylePreset {
+    pub id: String,
+    pub label: String,
+    pub prompt: String,
 }
 
 impl Default for AppSettings {
@@ -213,8 +226,11 @@ impl Default for AppSettings {
             assistant_bubble_expanded: false,
             assistant_bubble_width: None,
             assistant_bubble_height: None,
+            assistant_bubble_x: None,
+            assistant_bubble_y: None,
             assistant_action_delay: 0,
             news_blocked_sources: Vec::new(),
+            custom_style_presets: Vec::new(),
         }
     }
 }

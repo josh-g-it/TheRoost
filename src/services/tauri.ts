@@ -40,7 +40,10 @@ import type {
   AiMessage,
   AiMemory,
   AiDailyLog,
+  CompanionRolePreset,
   ResolvedActionSet,
+  SpriteInfo,
+  SpriteCropOffsets,
 } from "../types";
 
 export const steamApi = {
@@ -415,6 +418,8 @@ export interface BackupEstimate {
   settingsSizeBytes: number;
   artFileCount: number;
   artTotalBytes: number;
+  spriteFileCount: number;
+  spriteTotalBytes: number;
 }
 
 export interface BackupManifest {
@@ -425,6 +430,8 @@ export interface BackupManifest {
   settingsSizeBytes: number;
   artFileCount: number;
   artTotalBytes: number;
+  spriteFileCount: number;
+  spriteTotalBytes: number;
   credentialHints: string[];
 }
 
@@ -482,7 +489,7 @@ export const assistantApi = {
     maxOutputTokens?: number,
     pageContext?: string,
   ) =>
-    invoke<void>("send_message", {
+    invoke<string>("send_message", {
       conversationId,
       avatarId,
       message,
@@ -511,12 +518,25 @@ export const assistantApi = {
     invoke<void>("apply_external_compaction", { conversationId, avatarId, jsonData }),
   listAvatars: () => invoke<AiAvatar[]>("list_avatars"),
   getActiveAvatar: () => invoke<AiAvatar | null>("get_active_avatar"),
-  createAvatar: (name: string, personalityId: string) =>
-    invoke<AiAvatar>("create_avatar", { name, personalityId }),
+  createAvatar: (
+    name: string,
+    personalityId: string,
+    companionRoleId?: string | null,
+    companionRoleCustom?: string | null,
+    imagePath?: string | null,
+  ) =>
+    invoke<AiAvatar>("create_avatar", {
+      name,
+      personalityId,
+      companionRoleId: companionRoleId ?? null,
+      companionRoleCustom: companionRoleCustom ?? null,
+      imagePath: imagePath ?? null,
+    }),
   switchAvatar: (avatarId: string) => invoke<void>("switch_avatar", { avatarId }),
   listPersonalities: () => invoke<AiPersonality[]>("list_personalities"),
   createPersonality: (name: string, promptText: string) =>
     invoke<AiPersonality>("create_personality", { name, promptText }),
+  deletePersonality: (id: string) => invoke<void>("delete_personality", { id }),
   getMemories: (avatarId: string) => invoke<AiMemory[]>("get_memories", { avatarId }),
   deleteMemory: (memoryId: string) => invoke<void>("delete_memory", { memoryId }),
   getJournal: (avatarId: string) => invoke<AiDailyLog[]>("get_journal", { avatarId }),
@@ -526,6 +546,29 @@ export const assistantApi = {
     invoke<string>("get_memory_context", { avatarId }),
   deleteAvatar: (avatarId: string) => invoke<void>("delete_avatar", { avatarId }),
   wipeAvatarData: (avatarId: string) => invoke<void>("wipe_avatar_data", { avatarId }),
+  updateAvatar: (
+    avatarId: string,
+    fields: {
+      name?: string;
+      personalityId?: string;
+      imagePath?: string | null;
+      companionRoleId?: string | null;
+      companionRoleCustom?: string | null;
+    },
+  ) => invoke<AiAvatar>("update_avatar", { avatarId, ...fields }),
+  listCompanionRoles: () => invoke<CompanionRolePreset[]>("list_companion_roles"),
+  createCompanionRole: (name: string, description: string, systemPromptText: string) =>
+    invoke<CompanionRolePreset>("create_companion_role", {
+      name,
+      description,
+      systemPromptText,
+    }),
+  deleteCompanionRole: (id: string) => invoke<void>("delete_companion_role", { id }),
+  getAvatarStats: (avatarId: string) =>
+    invoke<{ memoryCount: number; journalCount: number; createdAt: string }>(
+      "get_avatar_stats",
+      { avatarId },
+    ),
   generateEncryptionKey: () => invoke<void>("generate_encryption_key"),
   checkEncryptionKeyExists: () => invoke<boolean>("check_encryption_key_exists"),
   importEncryptionKey: (keyBase64: string) =>
@@ -538,6 +581,8 @@ export const assistantApi = {
     invoke<void>("start_conversation_timer", { conversationId, avatarId }),
   stopConversationTimer: () => invoke<void>("stop_conversation_timer"),
   resetConversationTimer: () => invoke<void>("reset_conversation_timer"),
+  setConversationTimerViewing: (viewing: boolean) =>
+    invoke<void>("set_conversation_timer_viewing", { viewing }),
   getConversationTimerState: () =>
     invoke<{ remainingSeconds: number; isPaused: boolean } | null>(
       "get_conversation_timer_state",
@@ -550,4 +595,38 @@ export const assistantApi = {
       payload?: Record<string, unknown>;
     }[],
   ) => invoke<ResolvedActionSet>("validate_and_resolve_ai_actions", { actions }),
+};
+
+// ── Sprite API ───────────────────────────────────────────────────
+
+export const spriteApi = {
+  listSprites: () => invoke<SpriteInfo[]>("list_sprites"),
+  saveSprite: (filename: string, data: number[]) =>
+    invoke<SpriteInfo>("save_sprite", { filename, data }),
+  deleteSprite: (filename: string) => invoke<void>("delete_sprite", { filename }),
+  renameSprite: (oldFilename: string, newDisplayName: string) =>
+    invoke<SpriteInfo>("rename_sprite", { oldFilename, newDisplayName }),
+  readSprite: (filename: string) => invoke<string>("read_sprite", { filename }),
+  setActiveSprite: (avatarId: string, filename: string | null) =>
+    invoke<void>("set_active_sprite", { avatarId, filename }),
+  getActiveSprite: (avatarId: string) =>
+    invoke<string | null>("get_active_sprite", { avatarId }),
+  saveCropOffsets: (filename: string, crops: SpriteCropOffsets) =>
+    invoke<void>("save_crop_offsets", { filename, crops }),
+  validateSprite: (data: number[]) =>
+    invoke<[number, number]>("validate_sprite", { data }),
+  exportSprite: (filename: string, destination: string) =>
+    invoke<void>("export_sprite", { filename, destination }),
+  importSpriteFromPath: (sourcePath: string) =>
+    invoke<SpriteInfo>("import_sprite_from_path", { sourcePath }),
+  generateSprite: (
+    style: string,
+    characterDescription: string,
+    backgroundColor: string,
+  ) =>
+    invoke<SpriteInfo>("generate_sprite", {
+      style,
+      characterDescription,
+      backgroundColor,
+    }),
 };

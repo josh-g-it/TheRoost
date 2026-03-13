@@ -1,23 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import type {
   AiMessage,
   CompactionEventPayload,
   ConversationEndedPayload,
+  Expression,
   ResolvedAction,
-  StreamChunk,
+  StreamChunkPayload,
   UserMessagePayload,
 } from "../types";
 import { assistantApi } from "../services/tauri";
 import { getErrorMessage } from "../utils/errors";
 import { logger } from "../utils/logger";
-import {
-  createParserState,
-  processChunk,
-  finalizeStream,
-  stripActions,
-} from "../utils/actionParser";
+import { stripActions, extractT0Expression } from "../utils/actionParser";
 import { buildPageContext } from "../utils/pageContext";
-import type { StreamParserState } from "../utils/actionParser";
 import { useEventListener } from "./useEventListener";
 
 interface UseConversationOptions {
@@ -39,150 +35,36 @@ export function useConversation({
   const [error, setError] = useState<string | null>(null);
   const [currentStreamText, setCurrentStreamText] = useState("");
   const [isEnded, setIsEnded] = useState(false);
+  const [endReason, setEndReason] = useState<"manual" | "timer" | null>(null);
   const [isCompacting, setIsCompacting] = useState(false);
   const [pendingActions, setPendingActions] = useState<ResolvedAction[]>([]);
+  const [t0Expression, setT0Expression] = useState<Expression | null>(null);
   const lastUserMessageRef = useRef<string | null>(null);
   const isStreamingRef = useRef(false);
   const convIdRef = useRef(conversationId);
   const isLocalEndRef = useRef(false);
-  const parserStateRef = useRef<StreamParserState | null>(null);
   const cloudAiEnabledRef = useRef(cloudAiEnabled);
   cloudAiEnabledRef.current = cloudAiEnabled;
 
-  // Stream debounce: accumulate chunks in a ref and flush to state every 50ms (20 fps)
-  const streamBufferRef = useRef("");
-  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // Dedup ref: stores the timestamp of the last user message sent from THIS window.
-  // When the `ai-user-message` event arrives, we compare its timestamp against this
-  // to avoid adding the same message twice (the sender already has it in local state).
   const lastSentTimestampRef = useRef<number | null>(null);
 
   useEffect(() => {
     convIdRef.current = conversationId;
-    // Clear state for new conversation
     setMessages([]);
     setCurrentStreamText("");
     setError(null);
     setIsEnded(false);
+    setEndReason(null);
     setIsCompacting(false);
     setPendingActions([]);
-    parserStateRef.current = null;
+    setT0Expression(null);
     lastSentTimestampRef.current = null;
-    // Clear any pending debounce timer
-    if (flushTimerRef.current) {
-      clearTimeout(flushTimerRef.current);
-      flushTimerRef.current = null;
-    }
-    streamBufferRef.current = "";
   }, [conversationId]);
 
-  useEventListener<StreamChunk>(
-    "ai-stream-chunk",
-    (event) => {
-      const chunk = event.payload;
-      if (chunk.conversationId !== convIdRef.current) return;
+  // ── Cross-window event listeners ──
 
-      if (chunk.isFinal) {
-        // Flush any pending debounced text first
-        if (flushTimerRef.current) {
-          clearTimeout(flushTimerRef.current);
-          flushTimerRef.current = null;
-        }
-        const pendingBuffer = streamBufferRef.current;
-        streamBufferRef.current = "";
-
-        // Initialize parser if not yet started (edge case: only final chunk)
-        if (!parserStateRef.current) {
-          parserStateRef.current = createParserState();
-        }
-
-        // Process the final chunk through the parser
-        const safeText = processChunk(parserStateRef.current, chunk.text);
-
-        // Finalize — get remaining display text and parsed actions
-        const result = finalizeStream(parserStateRef.current);
-        parserStateRef.current = null;
-
-        setCurrentStreamText((prev) => {
-          let finalText = prev + pendingBuffer + safeText + result.displayText;
-          // Safety-strip delimiter if parser didn't fully catch it
-          const delimIdx = finalText.indexOf("---ACTIONS---");
-          if (delimIdx >= 0) finalText = finalText.substring(0, delimIdx).trimEnd();
-          setMessages((msgs) => [
-            ...msgs,
-            {
-              id: crypto.randomUUID(),
-              conversationId: chunk.conversationId,
-              role: "assistant",
-              content: finalText,
-              createdAt: new Date().toISOString(),
-              tokenEstimate: Math.ceil(finalText.length / 4),
-            },
-          ]);
-          return "";
-        });
-
-        setIsStreaming(false);
-        isStreamingRef.current = false;
-
-        // Validate and resolve actions via IPC
-        if (result.actions.length > 0) {
-          assistantApi
-            .validateAndResolveAiActions(result.actions)
-            .then((resolved) => {
-              logger.info("useConversation", "ai", "Actions validated", {
-                validCount: resolved.actions.length,
-                rejectedCount: resolved.rejectedCount,
-                actions: resolved.actions.map(
-                  (a) => `${a.originalActionId} → ${a.actionId} (T${a.tier})`,
-                ),
-              });
-              if (resolved.actions.length > 0) {
-                setPendingActions(resolved.actions);
-              }
-              if (resolved.rejectedCount > 0) {
-                logger.warn("useConversation", "ai", "Some actions rejected", {
-                  rejectedCount: resolved.rejectedCount,
-                });
-              }
-            })
-            .catch((err) => {
-              logger.warn("useConversation", "ai", "Failed to validate actions", {
-                error: getErrorMessage(err),
-              });
-            });
-        }
-      } else {
-        // Initialize parser on first non-final chunk
-        if (!parserStateRef.current) {
-          parserStateRef.current = createParserState();
-        }
-        const displayText = processChunk(parserStateRef.current, chunk.text);
-        if (displayText) {
-          streamBufferRef.current += displayText;
-          // Debounce: flush accumulated text every 50ms (20 fps)
-          if (!flushTimerRef.current) {
-            flushTimerRef.current = setTimeout(() => {
-              const buffered = streamBufferRef.current;
-              streamBufferRef.current = "";
-              flushTimerRef.current = null;
-              if (buffered) {
-                setCurrentStreamText((prev) => prev + buffered);
-              }
-            }, 50);
-          }
-        }
-      }
-    },
-    [conversationId],
-    { enabled: !!conversationId },
-  );
-
-  // Listen for cross-window user message sync (KI #9).
-  // When the OTHER window sends a user message, the Rust backend emits
-  // `ai-user-message` to all windows. The sender deduplicates by comparing
-  // the event timestamp against lastSentTimestampRef.
+  // Listen for cross-window user message sync.
   useEventListener<UserMessagePayload>(
     "ai-user-message",
     (event) => {
@@ -190,17 +72,14 @@ export function useConversation({
       if (msgConvId !== convIdRef.current) return;
 
       // Dedup: skip if this message originated from this window.
-      // We match on timestamp (seconds precision) set just before the IPC call.
       if (
         lastSentTimestampRef.current !== null &&
         Math.abs(timestamp - lastSentTimestampRef.current) <= 2
       ) {
-        // Clear the ref so the next event is not falsely deduped
         lastSentTimestampRef.current = null;
         return;
       }
 
-      // Add the user message from the other window to local state
       const userMessage: AiMessage = {
         id: crypto.randomUUID(),
         conversationId: msgConvId,
@@ -215,10 +94,6 @@ export function useConversation({
     { enabled: !!conversationId },
   );
 
-  // Listen for cross-window compaction started event (KI #9).
-  // When any window starts ending a conversation, the Rust backend emits
-  // `ai-compaction-started`. The window that initiated the end already
-  // has isCompacting=true, but this covers the OTHER window.
   useEventListener<CompactionEventPayload>(
     "ai-compaction-started",
     (event) => {
@@ -229,9 +104,6 @@ export function useConversation({
     { enabled: !!conversationId },
   );
 
-  // Listen for cross-window compaction complete event (KI #9).
-  // When compaction finishes, clear the splash on the OTHER window and
-  // reload conversation history to pick up any compacted state.
   useEventListener<CompactionEventPayload>(
     "ai-compaction-complete",
     (event) => {
@@ -242,13 +114,11 @@ export function useConversation({
     { enabled: !!conversationId },
   );
 
-  // Listen for cross-window conversation-ended events
   useEventListener<ConversationEndedPayload>(
     "ai-conversation-ended",
     (event) => {
       const endedConvId = event.payload.conversationId;
       if (endedConvId !== convIdRef.current) return;
-      // Skip if we are the one who triggered the end
       if (isLocalEndRef.current) {
         isLocalEndRef.current = false;
         return;
@@ -257,6 +127,7 @@ export function useConversation({
       setCurrentStreamText("");
       setIsStreaming(false);
       isStreamingRef.current = false;
+      setEndReason(event.payload.reason ?? "manual");
       setIsEnded(true);
       setPendingActions([]);
     },
@@ -264,21 +135,84 @@ export function useConversation({
     { enabled: !!conversationId },
   );
 
+  /** Process a full AI response: strip actions for display, parse actions, validate. */
+  const processFullResponse = useCallback((convId: string, fullResponse: string) => {
+    if (!fullResponse) return;
+
+    // Strip actions delimiter for display
+    const displayText = stripActions(fullResponse);
+
+    if (displayText) {
+      const assistantMessage: AiMessage = {
+        id: crypto.randomUUID(),
+        conversationId: convId,
+        role: "assistant",
+        content: displayText,
+        createdAt: new Date().toISOString(),
+        tokenEstimate: Math.ceil(displayText.length / 4),
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+    }
+
+    // Parse actions from the raw response (JSON array after delimiter)
+    if (fullResponse.includes("---ACTIONS---")) {
+      const actionsBlock = fullResponse.split("---ACTIONS---")[1]?.trim();
+      if (actionsBlock) {
+        try {
+          const parsed = JSON.parse(actionsBlock);
+          const actions = Array.isArray(parsed)
+            ? parsed.filter(
+                (a: unknown): a is { actionId: string; tier: number } =>
+                  typeof a === "object" &&
+                  a !== null &&
+                  "actionId" in a &&
+                  typeof (a as Record<string, unknown>).actionId === "string",
+              )
+            : [];
+
+          if (actions.length > 0) {
+            const { expression: t0Expr, remaining: nonT0Actions } =
+              extractT0Expression(actions);
+            if (t0Expr) setT0Expression(t0Expr);
+
+            if (nonT0Actions.length > 0) {
+              assistantApi
+                .validateAndResolveAiActions(nonT0Actions)
+                .then((resolved) => {
+                  logger.info("useConversation", "ai", "Actions validated", {
+                    validCount: resolved.actions.length,
+                    rejectedCount: resolved.rejectedCount,
+                    actions: resolved.actions.map(
+                      (a) => `${a.originalActionId} → ${a.actionId} (T${a.tier})`,
+                    ),
+                  });
+                  if (resolved.actions.length > 0) {
+                    setPendingActions(resolved.actions);
+                  }
+                })
+                .catch((err) => {
+                  logger.warn("useConversation", "ai", "Failed to validate actions", {
+                    error: getErrorMessage(err),
+                  });
+                });
+            }
+          }
+        } catch {
+          logger.warn("useConversation", "ai", "Failed to parse actions JSON");
+        }
+      }
+    }
+  }, []);
+
   const loadHistory = useCallback(async (convId: string): Promise<AiMessage[]> => {
     try {
       const history = await assistantApi.getConversationHistory(convId);
-
-      // Strip ---ACTIONS--- from all messages for display.
-      // v1.12.1: We no longer restore actions from history. With auto-execute (Phase D),
-      // replaying them on component remount would cause unintended re-execution (e.g.,
-      // nav actions bouncing the user away from /assistant).
       const cleaned = history.map((msg) => {
         if (msg.role === "assistant" && msg.content.includes("---ACTIONS---")) {
           return { ...msg, content: stripActions(msg.content) };
         }
         return msg;
       });
-
       setMessages(cleaned);
       logger.info("useConversation", "api", "Loaded conversation history", {
         conversationId: convId,
@@ -294,6 +228,7 @@ export function useConversation({
     }
   }, []);
 
+  // ── Send message — streams chunks via events, awaits full response as commit ──
   const sendMessage = useCallback(
     async (text: string, options?: { hidden?: boolean; actionFeedback?: string }) => {
       if (!conversationId) return;
@@ -302,7 +237,6 @@ export function useConversation({
       // Block all messages when Cloud AI is disabled
       if (!cloudAiEnabledRef.current) {
         if (!options?.hidden) {
-          // Show the user's message in the chat
           const userMessage: AiMessage = {
             id: crypto.randomUUID(),
             conversationId,
@@ -312,7 +246,6 @@ export function useConversation({
             tokenEstimate: Math.ceil(text.length / 4),
           };
           setMessages((prev) => [...prev, userMessage]);
-          // Add a system-style response explaining why it's blocked
           const systemMessage: AiMessage = {
             id: crypto.randomUUID(),
             conversationId,
@@ -328,13 +261,10 @@ export function useConversation({
       }
 
       setError(null);
-      // Only track non-hidden messages for retry
       if (!options?.hidden) lastUserMessageRef.current = text;
 
       if (!options?.hidden) {
-        // Record timestamp for cross-window dedup BEFORE adding to local state
         lastSentTimestampRef.current = Math.floor(Date.now() / 1000);
-
         const userMessage: AiMessage = {
           id: crypto.randomUUID(),
           conversationId,
@@ -348,15 +278,20 @@ export function useConversation({
       setIsStreaming(true);
       isStreamingRef.current = true;
       setCurrentStreamText("");
-      parserStateRef.current = null;
+
+      // Set up stream chunk listener for progressive rendering
+      // (hidden messages skip streaming emission on the Rust side)
+      const convIdForStream = conversationId;
+      const unlisten = await listen<StreamChunkPayload>("ai-stream-chunk", (event) => {
+        if (event.payload.conversationId !== convIdForStream) return;
+        setCurrentStreamText((prev) => prev + event.payload.text);
+      });
 
       try {
-        // Build lightweight page context (~20-30 tokens) for the AI to know
-        // what the user is looking at. Only include for visible user messages;
-        // hidden messages (auto-greetings) don't need page context.
         const pageContext = options?.hidden ? undefined : buildPageContext();
 
-        await assistantApi.sendMessage(
+        // Rust streams chunks via events AND returns the full response when done.
+        const fullResponse = await assistantApi.sendMessage(
           conversationId,
           avatarId,
           text,
@@ -365,7 +300,15 @@ export function useConversation({
           maxOutputTokens,
           pageContext,
         );
+
+        unlisten();
+        setCurrentStreamText("");
+        processFullResponse(conversationId, fullResponse);
+        setIsStreaming(false);
+        isStreamingRef.current = false;
       } catch (err) {
+        unlisten();
+        setCurrentStreamText("");
         setIsStreaming(false);
         isStreamingRef.current = false;
         setError(getErrorMessage(err));
@@ -374,12 +317,13 @@ export function useConversation({
         });
       }
     },
-    [conversationId, avatarId, maxOutputTokens],
+    [conversationId, avatarId, maxOutputTokens, processFullResponse],
   );
 
   const retry = useCallback(async () => {
     if (isStreamingRef.current) return;
     if (!lastUserMessageRef.current) return;
+
     setMessages((prev) => {
       const lastIdx = prev.length - 1;
       if (lastIdx >= 0 && prev[lastIdx].role === "user") {
@@ -393,19 +337,15 @@ export function useConversation({
   const endConversation = useCallback(async () => {
     if (!conversationId) return;
     if (isCompacting) return;
+
     isLocalEndRef.current = true;
-    // Note: isCompacting is now set by the `ai-compaction-started` event (broadcast
-    // from Rust), which fires before the actual compaction begins. This ensures both
-    // windows show the journaling splash simultaneously. We still set it here as a
-    // fast local fallback in case the event arrives slightly after the IPC call.
     setIsCompacting(true);
     try {
       await assistantApi.endConversation(conversationId, avatarId);
       logger.info("useConversation", "api", "Conversation ended", { conversationId });
-      // Compaction is done — the `ai-compaction-complete` event will clear isCompacting
-      // on both windows. For the local window, also clear immediately for snappy UX.
       isLocalEndRef.current = false;
       setIsCompacting(false);
+      setEndReason("manual");
       setIsEnded(true);
     } catch (err) {
       isLocalEndRef.current = false;
@@ -425,19 +365,26 @@ export function useConversation({
     setPendingActions([]);
   }, []);
 
+  const clearT0Expression = useCallback(() => {
+    setT0Expression(null);
+  }, []);
+
   return {
     messages,
     isStreaming,
     error,
     currentStreamText,
     isEnded,
+    endReason,
     isCompacting,
     pendingActions,
+    t0Expression,
     sendMessage,
     retry,
     endConversation,
     loadHistory,
     injectMessage,
     clearPendingActions,
+    clearT0Expression,
   };
 }

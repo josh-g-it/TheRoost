@@ -38,6 +38,7 @@ export function clearInvokeMocks(): void {
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(() => Promise.resolve(() => {})),
   emit: vi.fn(() => Promise.resolve()),
+  emitTo: vi.fn(() => Promise.resolve()),
 }));
 
 // Mock Tauri API for tests — prevents errors when components call invoke()
@@ -50,8 +51,9 @@ vi.mock("@tauri-apps/api/core", () => ({
       }
       return Promise.resolve(entry.response);
     }
-    // Backward compatible: unregistered commands return undefined
-    return undefined;
+    // Unregistered commands resolve to null (must return a Promise so
+    // callers can safely .then()/.catch() without TypeError).
+    return Promise.resolve(null);
   }),
   convertFileSrc: (path: string) => `http://asset.localhost/${encodeURIComponent(path)}`,
 }));

@@ -115,11 +115,12 @@ export type {
 export type {
   AiPersonality,
   AiAvatar,
+  AvatarStats,
+  CompanionRolePreset,
   AiConversation,
   AiMessage,
   AiMemory,
   AiDailyLog,
-  StreamChunk,
   ConversationEndedPayload,
   UserMessagePayload,
   CompactionEventPayload,
@@ -129,7 +130,12 @@ export type {
   ResolvedActionSet,
   PipelineStatus,
   ActionResult,
+  StreamChunkPayload,
+  SpriteInfo,
+  Expression,
+  SpriteCropOffsets,
 } from "./assistant";
+export { EXPRESSION_GRID, EXPRESSION_LABELS } from "./assistant";
 export type { UpdateInfo } from "./updater";
 export type {
   RecapData,

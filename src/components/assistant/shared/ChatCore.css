@@ -89,8 +89,7 @@
 
 /* ── Streaming Bubble ────────────────────────────────────────── */
 .assistant-chat__streaming {
-  align-self: flex-start;
-  max-width: 80%;
+  max-width: 65%;
   padding: 0.65rem 0.85rem;
   background: var(--color-bg-secondary);
   color: var(--color-text-primary);

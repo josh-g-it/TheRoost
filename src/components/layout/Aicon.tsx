@@ -1,7 +1,7 @@
 import React, { useCallback, forwardRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useConversationContext } from "../assistant/ConversationProvider";
-import { getAvatarColor } from "../../utils/avatarColors";
+import { SpriteRenderer } from "../assistant/SpriteRenderer";
 import { AppIcon } from "../common/AppIcon";
 import "./Aicon.css";
 
@@ -15,7 +15,8 @@ export const Aicon = React.memo(
     { onToggleBubble, bubbleExpanded },
     ref,
   ) {
-    const { activeAvatar, hasUnread, clearUnread } = useConversationContext();
+    const { activeAvatar, hasUnread, clearUnread, spriteDataUrl, expression } =
+      useConversationContext();
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -49,18 +50,20 @@ export const Aicon = React.memo(
         type="button"
       >
         {activeAvatar ? (
-          <span
-            className="aicon__circle"
-            style={{ background: getAvatarColor(activeAvatar.name) }}
-          >
-            {activeAvatar.name.charAt(0).toUpperCase()}
-          </span>
+          <SpriteRenderer
+            spriteDataUrl={spriteDataUrl}
+            expression={expression}
+            size={44}
+            fallbackText={activeAvatar.name}
+            circular
+            className="aicon__sprite"
+          />
         ) : (
           <span
             className="aicon__circle"
             style={{ background: "var(--color-bg-tertiary)" }}
           >
-            <AppIcon name="assistant" size={20} />
+            <AppIcon name="assistant" size={24} />
           </span>
         )}
         {hasUnread && <span className="aicon__dot" aria-label="Unread messages" />}

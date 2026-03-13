@@ -3,6 +3,7 @@
 pub struct GeminiConfig {
     pub model: &'static str,
     pub tts_model: &'static str,
+    pub image_model: &'static str,
     pub endpoint: &'static str,
     pub max_output_tokens_chat: u32,
     pub max_output_tokens_compact: u32,
@@ -14,6 +15,7 @@ pub struct GeminiConfig {
 pub const GEMINI_CONFIG: GeminiConfig = GeminiConfig {
     model: "gemini-3-flash-preview",
     tts_model: "gemini-2.5-flash-tts",
+    image_model: "gemini-3-pro-image-preview",
     endpoint: "https://generativelanguage.googleapis.com/v1beta",
     max_output_tokens_chat: 8192,
     max_output_tokens_compact: 1024,

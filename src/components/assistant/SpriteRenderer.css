@@ -1,0 +1,47 @@
+.sprite-renderer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+  image-rendering: auto;
+}
+
+.sprite-renderer--circular {
+  border-radius: 20%;
+  overflow: hidden;
+}
+
+.sprite-renderer--monogram {
+  background: var(--accent-color, #6366f1);
+  color: var(--accent-text, #ffffff);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Bump animation: sprite moves up 3px then back down */
+@keyframes sprite-bump {
+  0% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-3px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.sprite-renderer--bump {
+  animation: sprite-bump 200ms ease-out;
+}
+
+/* Interactive states */
+.sprite-renderer[role="button"] {
+  cursor: pointer;
+}
+
+.sprite-renderer[role="button"]:focus-visible {
+  outline: 2px solid var(--accent-color, #6366f1);
+  outline-offset: 2px;
+}

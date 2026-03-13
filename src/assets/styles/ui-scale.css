@@ -34,7 +34,7 @@ html[data-ui-scale="minimal"] {
   --radius-lg: 8px;
   --radius-xl: 12px;
 
-  --rail-width: 42px;
+  --rail-width: 56px;
   --rail-expanded-width: 160px;
   --header-height: 44px;
 }
@@ -63,7 +63,7 @@ html[data-ui-scale="expanded"] {
   --radius-lg: 14px;
   --radius-xl: 20px;
 
-  --rail-width: 52px;
+  --rail-width: 68px;
   --rail-expanded-width: 200px;
   --header-height: 62px;
 }
@@ -89,7 +89,7 @@ html[data-ui-scale="large"] {
   --radius-lg: 16px;
   --radius-xl: 24px;
 
-  --rail-width: 56px;
+  --rail-width: 72px;
   --rail-expanded-width: 220px;
   --header-height: 68px;
 }

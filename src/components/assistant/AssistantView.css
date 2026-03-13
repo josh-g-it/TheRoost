@@ -12,74 +12,53 @@
   overflow: hidden;
 }
 
-/* ── Avatar Panel (left sidebar) ─────────────────────────────── */
-.assistant-view__avatar-panel {
-  width: 260px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 1.5rem 1rem;
-  border-right: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-secondary);
-}
-
-.assistant-view__avatar-circle {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
+/* ── Chat Hero Pill (floating, translucent) ─────────────────── */
+.assistant-view__chat-hero {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
   display: flex;
   align-items: center;
+  gap: 3rem;
+  padding: 0.65rem 0.65rem;
+  min-width: min(65%, 400px);
   justify-content: center;
-  font-size: 2rem;
-  font-weight: 700;
-  color: #fff;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-bg-secondary) 75%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid color-mix(in srgb, var(--color-border-subtle) 60%, transparent);
+  pointer-events: none;
 }
 
-.assistant-view__avatar-name {
-  font-size: 1rem;
+.assistant-view__chat-hero .sprite-renderer {
+  border-radius: var(--radius-md, 8px);
+}
+
+.assistant-view__chat-hero-name {
+  font-size: var(--hero-name-size, 1.75rem);
   font-weight: 700;
   color: var(--color-text-primary);
-  text-align: center;
+  line-height: 1.2;
+  word-break: break-word;
 }
 
-.assistant-view__avatar-personality {
-  font-size: 0.75rem;
-  color: var(--color-text-tertiary);
-  text-align: center;
+/* Add top padding to message list so it starts below the floating pill,
+   and horizontal padding to narrow the conversation column */
+.assistant-view__tab-content .assistant-chat__messages {
+  padding-top: 10rem;
+  padding-left: 200px;
+  padding-right: 200px;
 }
 
-.assistant-view__avatar-status {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.7rem;
-  color: var(--color-text-tertiary);
+.assistant-view__tab-content .assistant-chat__input-bar {
+  padding-left: 200px;
+  padding-right: 200px;
 }
 
-.assistant-view__status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.assistant-view__status-dot--active {
-  background: #22c55e;
-}
-
-.assistant-view__status-dot--idle {
-  background: var(--color-text-tertiary);
-}
-
-.assistant-view__timer {
-  font-size: 0.65rem;
-  color: var(--color-text-tertiary);
-  margin-top: 0.25rem;
-}
-
-/* ── Content (right panel) ───────────────────────────────────── */
+/* ── Content ─────────────────────────────────────────────────── */
 .assistant-view__content {
   flex: 1;
   display: flex;
@@ -123,7 +102,10 @@
 /* ── Tab Content ─────────────────────────────────────────────── */
 .assistant-view__tab-content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
 /* ── Recovery Banners (Phase 10) ─────────────────────────────── */

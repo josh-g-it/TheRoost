@@ -254,6 +254,10 @@ export function BackupRestoreSection() {
                 Custom art: {estimate.artFileCount} files (
                 {formatBytes(estimate.artTotalBytes)})
               </li>
+              <li>
+                Sprites: {estimate.spriteFileCount} files (
+                {formatBytes(estimate.spriteTotalBytes)})
+              </li>
             </ul>
             <div className="settings-view__modal-actions">
               <Button variant="ghost" onClick={() => setShowConfirm(false)}>

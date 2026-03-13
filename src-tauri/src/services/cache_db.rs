@@ -98,6 +98,150 @@ exploration at a leisurely pace, and enjoying the journey over the destination. 
 You never pressure the player about backlogs or completion rates. \
 Your vibe is laid-back and comforting — like gaming on a rainy afternoon with no agenda.";
 
+// ── v1.12.5 Personality Tones (8 built-in presets) ──────────────────
+
+const TONE_WARM_FRIENDLY: &str = "\
+You are supportive, positive, and approachable. You celebrate wins, empathize with frustrations, \
+and make the player feel welcome. Your responses feel like chatting with a caring friend who \
+genuinely wants them to have a great time. Example: \"Hey, nice pick! I think you'll really enjoy that one.\"";
+
+const TONE_WITTY_SARCASTIC: &str = "\
+You use dry humor, playful ribbing, and clever wordplay. You tease the player about their habits \
+in an affectionate way — never mean-spirited, always funny. Pop-culture references are your bread \
+and butter. Example: \"Oh, another 200 hours in Factorio? How delightfully original.\"";
+
+const TONE_CALM_MEASURED: &str = "\
+You are thoughtful, deliberate, and even-keeled. You weigh options carefully and present information \
+in a clear, organized way. You don't rush to conclusions and you acknowledge nuance. \
+Example: \"That's worth considering. Here are the trade-offs as I see them.\"";
+
+const TONE_ENERGETIC_HYPED: &str = "\
+You are enthusiastic, excitable, and full of energy. You use emphasis, exclamation marks, and get \
+visibly pumped about gaming news, milestones, and discoveries. Your excitement is infectious. \
+Example: \"YES! Okay this is gonna be SO good, trust me!\"";
+
+const TONE_BLUNT_DIRECT: &str = "\
+You cut straight to the point with no fluff. You are efficient, matter-of-fact, and value the \
+player's time. You give clear opinions and don't hedge unnecessarily. Brevity is your strength. \
+Example: \"Three options. First one's best. Here's why.\"";
+
+const TONE_CHARMING_PLAYFUL: &str = "\
+You are smooth, teasing, and charismatic. You flatter the player's taste, use playful language, \
+and make every interaction feel like a fun exchange. You're the charming rogue of gaming companions. \
+Example: \"Well well, someone's got excellent taste tonight.\"";
+
+const TONE_LAID_BACK_CHILL: &str = "\
+You are relaxed, unhurried, and go-with-the-flow. Nothing is urgent, everything is vibes. You \
+never pressure the player and you appreciate taking things at whatever pace feels right. \
+Example: \"Yeah that's cool, no rush. Whatever feels right.\"";
+
+const TONE_DRAMATIC_THEATRICAL: &str = "\
+You speak with grandiose flair, storytelling drama, and epic emphasis. Every game is a legend, \
+every session is a saga, and every recommendation is a quest. You treat gaming like high theater. \
+Example: \"Behold! A library of legends awaits your command!\"";
+
+// ── v1.12.5 Companion Role Presets ──────────────────────────────────
+
+use crate::models::assistant::CompanionRolePreset;
+
+/// Static list of built-in companion roles. Not stored in the database.
+pub fn companion_role_presets() -> Vec<CompanionRolePreset> {
+    vec![
+        CompanionRolePreset {
+            id: "gaming-companion".into(),
+            name: "Gaming Companion".into(),
+            description: "Balanced approach to all aspects of gaming".into(),
+            system_prompt_text: "a gaming companion who helps with all aspects of the \
+                user's library and gaming life"
+                .into(),
+            is_builtin: true,
+        },
+        CompanionRolePreset {
+            id: "strategic-advisor".into(),
+            name: "Strategic Advisor".into(),
+            description: "Recommendations, backlog optimization, discovery".into(),
+            system_prompt_text: "a strategic advisor focused on helping the user discover, \
+                prioritize, and optimize their gaming time"
+                .into(),
+            is_builtin: true,
+        },
+        CompanionRolePreset {
+            id: "lore-keeper".into(),
+            name: "Lore Keeper".into(),
+            description: "Narratives, world-building, stories, thematic depth".into(),
+            system_prompt_text: "a lore keeper who explores game narratives, themes, \
+                and world-building with the user"
+                .into(),
+            is_builtin: true,
+        },
+        CompanionRolePreset {
+            id: "hype-partner".into(),
+            name: "Hype Partner".into(),
+            description: "Milestones, achievements, celebration, motivation".into(),
+            system_prompt_text: "a hype partner who celebrates milestones, tracks progress, \
+                and keeps gaming motivation high"
+                .into(),
+            is_builtin: true,
+        },
+        CompanionRolePreset {
+            id: "critic-reviewer".into(),
+            name: "Critic & Reviewer".into(),
+            description: "Analysis, comparisons, quality, informed opinion".into(),
+            system_prompt_text: "a thoughtful critic who analyzes games, compares experiences, \
+                and helps form informed opinions"
+                .into(),
+            is_builtin: true,
+        },
+        CompanionRolePreset {
+            id: "curator".into(),
+            name: "Curator".into(),
+            description: "Organization, discovery, curation, hidden gems".into(),
+            system_prompt_text: "a curator who organizes, categorizes, and surfaces hidden \
+                gems and forgotten favorites"
+                .into(),
+            is_builtin: true,
+        },
+        CompanionRolePreset {
+            id: "historian".into(),
+            name: "Historian".into(),
+            description: "Gaming history, context, legacy, genre evolution".into(),
+            system_prompt_text: "a gaming historian who provides context on genres, studios, \
+                and how games influenced each other"
+                .into(),
+            is_builtin: true,
+        },
+        CompanionRolePreset {
+            id: "completionist-coach".into(),
+            name: "Completionist Coach".into(),
+            description: "100% runs, achievement hunting, efficiency".into(),
+            system_prompt_text: "a completionist coach who tracks progress toward 100%, \
+                finds missed content, and plans efficient routes"
+                .into(),
+            is_builtin: true,
+        },
+    ]
+}
+
+/// Get a companion role's system prompt text by ID. Checks built-in presets only.
+/// For custom DB roles, use `CacheDb::resolve_companion_role_prompt`.
+#[allow(dead_code)]
+pub fn get_companion_role_prompt(role_id: Option<&str>, custom_text: Option<&str>) -> String {
+    if let Some(custom) = custom_text {
+        if !custom.is_empty() {
+            return custom.to_string();
+        }
+    }
+    let target_id = role_id.unwrap_or("gaming-companion");
+    companion_role_presets()
+        .into_iter()
+        .find(|r| r.id == target_id)
+        .map(|r| r.system_prompt_text)
+        .unwrap_or_else(|| {
+            "a gaming companion who helps with all aspects of the user's library and gaming life"
+                .into()
+        })
+}
+
 /// Raw DB row for ai_memories — content is still encrypted.
 #[derive(Debug, Clone)]
 pub struct AiMemoryRow {
@@ -255,6 +399,9 @@ impl CacheDb {
         if current < 26 {
             self.apply_v26()?;
         }
+
+        // v1.12.5: Add companion role columns + new personality tones (idempotent)
+        self.migrate_avatar_roles()?;
 
         // Repair: restore any entries invalidated by cache invalidation (cached_at = 0).
         // This is a fast no-op if no rows match.
@@ -1190,6 +1337,77 @@ impl CacheDb {
         Ok(())
     }
 
+    /// v1.12.5: Add companion_role_id/companion_role_custom columns to ai_avatars,
+    /// reclassify old built-in personalities as custom, and insert 8 new tone presets.
+    /// Idempotent — safe to run on every startup.
+    fn migrate_avatar_roles(&self) -> Result<(), AppError> {
+        // Check if migration already applied by looking for the new column
+        let has_role_col: bool = self
+            .conn
+            .prepare("SELECT companion_role_id FROM ai_avatars LIMIT 0")
+            .is_ok();
+        if has_role_col {
+            return Ok(());
+        }
+
+        tracing::info!("Applying v1.12.5 avatar role migration");
+
+        // Add new columns
+        self.conn.execute_batch(
+            "ALTER TABLE ai_avatars ADD COLUMN companion_role_id TEXT;
+             ALTER TABLE ai_avatars ADD COLUMN companion_role_custom TEXT;",
+        )?;
+
+        // Reclassify old built-in personalities as custom
+        self.conn.execute(
+            "UPDATE ai_personalities SET is_builtin = 0 WHERE is_builtin = 1",
+            [],
+        )?;
+
+        // Insert 8 new personality tones as built-in
+        let tones: &[(&str, &str, &str)] = &[
+            ("bp-warm-friendly", "Warm & Friendly", TONE_WARM_FRIENDLY),
+            (
+                "bp-witty-sarcastic",
+                "Witty & Sarcastic",
+                TONE_WITTY_SARCASTIC,
+            ),
+            ("bp-calm-measured", "Calm & Measured", TONE_CALM_MEASURED),
+            (
+                "bp-energetic-hyped",
+                "Energetic & Hyped",
+                TONE_ENERGETIC_HYPED,
+            ),
+            ("bp-blunt-direct", "Blunt & Direct", TONE_BLUNT_DIRECT),
+            (
+                "bp-charming-playful",
+                "Charming & Playful",
+                TONE_CHARMING_PLAYFUL,
+            ),
+            (
+                "bp-laid-back-chill",
+                "Laid Back & Chill",
+                TONE_LAID_BACK_CHILL,
+            ),
+            (
+                "bp-dramatic-theatrical",
+                "Dramatic & Theatrical",
+                TONE_DRAMATIC_THEATRICAL,
+            ),
+        ];
+
+        for (id, name, prompt) in tones {
+            self.conn.execute(
+                "INSERT OR IGNORE INTO ai_personalities (id, name, prompt_text, is_builtin, created_at)
+                 VALUES (?1, ?2, ?3, 1, datetime('now'))",
+                params![id, name, prompt],
+            )?;
+        }
+
+        tracing::info!("v1.12.5 avatar role migration complete");
+        Ok(())
+    }
+
     // ── Manual Playtime ─────────────────────────────────────────────
 
     /// Get the manual playtime for a game (in minutes).
@@ -1941,9 +2159,9 @@ impl CacheDb {
 
     /// Get game_ids of games that have cached metadata but no SteamSpy tags yet.
     pub fn get_game_ids_missing_tags(&self) -> Result<Vec<String>, AppError> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT game_id FROM store_metadata WHERE steam_tags IS NULL")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT game_id FROM store_metadata WHERE steam_tags IS NULL OR steam_tags = '[]'",
+        )?;
         let ids = stmt
             .query_map([], |row| row.get(0))?
             .collect::<Result<Vec<String>, _>>()?;
@@ -3612,12 +3830,176 @@ impl CacheDb {
         })
     }
 
+    /// Delete a custom AI personality. Rejects built-in personalities and
+    /// personalities currently referenced by any avatar.
+    pub fn delete_ai_personality(&self, id: &str) -> Result<(), AppError> {
+        // Check exists and is custom
+        let is_builtin: bool = self
+            .conn
+            .query_row(
+                "SELECT is_builtin FROM ai_personalities WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .map_err(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => {
+                    AppError::NotFound(format!("Personality not found: {}", id))
+                }
+                other => AppError::Database(other),
+            })?;
+
+        if is_builtin {
+            return Err(AppError::Validation(
+                "Cannot delete built-in personalities".into(),
+            ));
+        }
+
+        // Check not in use
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM ai_avatars WHERE personality_id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        if count > 0 {
+            return Err(AppError::Validation(
+                "Cannot delete a personality that is in use by an avatar".into(),
+            ));
+        }
+
+        self.conn.execute(
+            "DELETE FROM ai_personalities WHERE id = ?1 AND is_builtin = 0",
+            params![id],
+        )?;
+        Ok(())
+    }
+
+    // ── AI Companion Role CRUD ─────────────────────────────────────
+
+    /// List all companion roles: built-in (from static list) + custom (from DB).
+    pub fn list_ai_companion_roles(&self) -> Result<Vec<CompanionRolePreset>, AppError> {
+        let mut roles = companion_role_presets(); // built-in
+
+        // Add custom roles from DB if table exists
+        let table_exists: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='ai_companion_roles'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|c| c > 0)
+            .unwrap_or(false);
+
+        if table_exists {
+            let mut stmt = self.conn.prepare(
+                "SELECT id, name, description, system_prompt_text
+                 FROM ai_companion_roles
+                 ORDER BY name ASC",
+            )?;
+            let custom_rows = stmt
+                .query_map([], |row| {
+                    Ok(CompanionRolePreset {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        description: row.get(2)?,
+                        system_prompt_text: row.get(3)?,
+                        is_builtin: false,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            roles.extend(custom_rows);
+        }
+
+        Ok(roles)
+    }
+
+    /// Create a custom companion role. Stored in ai_companion_roles table.
+    pub fn create_ai_companion_role(
+        &self,
+        name: &str,
+        description: &str,
+        system_prompt_text: &str,
+    ) -> Result<CompanionRolePreset, AppError> {
+        // Ensure table exists
+        self.conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS ai_companion_roles (
+                id                TEXT PRIMARY KEY,
+                name              TEXT NOT NULL,
+                description       TEXT NOT NULL,
+                system_prompt_text TEXT NOT NULL,
+                created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+        )?;
+
+        let id = Uuid::new_v4().to_string();
+        self.conn
+            .execute(
+                "INSERT INTO ai_companion_roles (id, name, description, system_prompt_text)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![id, name, description, system_prompt_text],
+            )
+            .map_err(|e| {
+                if let rusqlite::Error::SqliteFailure(err, _) = &e {
+                    if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                        return AppError::Validation(
+                            "A companion role with that name already exists.".into(),
+                        );
+                    }
+                }
+                AppError::Database(e)
+            })?;
+
+        Ok(CompanionRolePreset {
+            id,
+            name: name.to_string(),
+            description: description.to_string(),
+            system_prompt_text: system_prompt_text.to_string(),
+            is_builtin: false,
+        })
+    }
+
+    /// Delete a custom companion role. Rejects built-in roles and roles
+    /// currently referenced by any avatar.
+    pub fn delete_ai_companion_role(&self, id: &str) -> Result<(), AppError> {
+        // Check it's not a built-in role
+        let builtins = companion_role_presets();
+        if builtins.iter().any(|r| r.id == id) {
+            return Err(AppError::Validation(
+                "Cannot delete built-in companion roles".into(),
+            ));
+        }
+
+        // Check not in use by any avatar
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM ai_avatars WHERE companion_role_id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        if count > 0 {
+            return Err(AppError::Validation(
+                "Cannot delete a companion role that is in use by an avatar".into(),
+            ));
+        }
+
+        let deleted = self
+            .conn
+            .execute("DELETE FROM ai_companion_roles WHERE id = ?1", params![id])?;
+        if deleted == 0 {
+            return Err(AppError::NotFound(format!(
+                "Companion role not found: {}",
+                id
+            )));
+        }
+        Ok(())
+    }
+
     // ── AI Avatar CRUD ──────────────────────────────────────────────
 
     /// List all AI avatars, active first then by creation date.
     pub fn list_ai_avatars(&self) -> Result<Vec<AiAvatar>, AppError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, personality_id, image_path, is_active, created_at
+            "SELECT id, name, personality_id, image_path, companion_role_id,
+                    companion_role_custom, is_active, created_at
              FROM ai_avatars
              ORDER BY is_active DESC, created_at ASC",
         )?;
@@ -3628,8 +4010,10 @@ impl CacheDb {
                     name: row.get(1)?,
                     personality_id: row.get(2)?,
                     image_path: row.get(3)?,
-                    is_active: row.get::<_, i32>(4)? != 0,
-                    created_at: row.get(5)?,
+                    companion_role_id: row.get(4)?,
+                    companion_role_custom: row.get(5)?,
+                    is_active: row.get::<_, i32>(6)? != 0,
+                    created_at: row.get(7)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -3639,7 +4023,8 @@ impl CacheDb {
     /// Get the currently active AI avatar, if any.
     pub fn get_active_ai_avatar(&self) -> Result<Option<AiAvatar>, AppError> {
         let result = self.conn.query_row(
-            "SELECT id, name, personality_id, image_path, is_active, created_at
+            "SELECT id, name, personality_id, image_path, companion_role_id,
+                    companion_role_custom, is_active, created_at
              FROM ai_avatars WHERE is_active = 1",
             [],
             |row| {
@@ -3648,8 +4033,10 @@ impl CacheDb {
                     name: row.get(1)?,
                     personality_id: row.get(2)?,
                     image_path: row.get(3)?,
+                    companion_role_id: row.get(4)?,
+                    companion_role_custom: row.get(5)?,
                     is_active: true,
-                    created_at: row.get(5)?,
+                    created_at: row.get(7)?,
                 })
             },
         );
@@ -3661,7 +4048,14 @@ impl CacheDb {
     }
 
     /// Create a new AI avatar linked to a personality.
-    pub fn create_ai_avatar(&self, name: &str, personality_id: &str) -> Result<AiAvatar, AppError> {
+    pub fn create_ai_avatar(
+        &self,
+        name: &str,
+        personality_id: &str,
+        companion_role_id: Option<&str>,
+        companion_role_custom: Option<&str>,
+        image_path: Option<&str>,
+    ) -> Result<AiAvatar, AppError> {
         // Validate personality exists
         let exists: bool = self
             .conn
@@ -3680,9 +4074,10 @@ impl CacheDb {
 
         let id = Uuid::new_v4().to_string();
         self.conn.execute(
-            "INSERT INTO ai_avatars (id, name, personality_id, image_path, is_active, created_at)
-             VALUES (?1, ?2, ?3, NULL, 0, datetime('now'))",
-            params![id, name, personality_id],
+            "INSERT INTO ai_avatars (id, name, personality_id, image_path, companion_role_id,
+                                     companion_role_custom, is_active, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, datetime('now'))",
+            params![id, name, personality_id, image_path, companion_role_id, companion_role_custom],
         ).map_err(|e| {
             if let rusqlite::Error::SqliteFailure(err, _) = &e {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
@@ -3702,10 +4097,127 @@ impl CacheDb {
             id,
             name: name.to_string(),
             personality_id: personality_id.to_string(),
-            image_path: None,
+            image_path: image_path.map(|s| s.to_string()),
+            companion_role_id: companion_role_id.map(|s| s.to_string()),
+            companion_role_custom: companion_role_custom.map(|s| s.to_string()),
             is_active: false,
             created_at,
         })
+    }
+
+    /// Update an existing AI avatar's mutable fields.
+    /// Only non-None fields are updated. Returns the updated avatar.
+    pub fn update_ai_avatar(
+        &self,
+        avatar_id: &str,
+        name: Option<&str>,
+        personality_id: Option<&str>,
+        image_path: Option<Option<&str>>,
+        companion_role_id: Option<Option<&str>>,
+        companion_role_custom: Option<Option<&str>>,
+    ) -> Result<AiAvatar, AppError> {
+        // Build dynamic SET clauses
+        let mut sets: Vec<String> = Vec::new();
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+        if let Some(n) = name {
+            sets.push(format!("name = ?{}", sets.len() + 1));
+            param_values.push(Box::new(n.to_string()));
+        }
+        if let Some(pid) = personality_id {
+            sets.push(format!("personality_id = ?{}", sets.len() + 1));
+            param_values.push(Box::new(pid.to_string()));
+        }
+        if let Some(ip) = image_path {
+            sets.push(format!("image_path = ?{}", sets.len() + 1));
+            param_values.push(Box::new(ip.map(|s| s.to_string())));
+        }
+        if let Some(rid) = companion_role_id {
+            sets.push(format!("companion_role_id = ?{}", sets.len() + 1));
+            param_values.push(Box::new(rid.map(|s| s.to_string())));
+        }
+        if let Some(rc) = companion_role_custom {
+            sets.push(format!("companion_role_custom = ?{}", sets.len() + 1));
+            param_values.push(Box::new(rc.map(|s| s.to_string())));
+        }
+
+        if sets.is_empty() {
+            // Nothing to update — just return current avatar
+            return self.get_ai_avatar_by_id(avatar_id);
+        }
+
+        let idx = sets.len() + 1;
+        let sql = format!(
+            "UPDATE ai_avatars SET {} WHERE id = ?{}",
+            sets.join(", "),
+            idx
+        );
+        param_values.push(Box::new(avatar_id.to_string()));
+
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|p| p.as_ref()).collect();
+
+        let updated = self.conn.execute(&sql, params_ref.as_slice())?;
+        if updated == 0 {
+            return Err(AppError::NotFound(format!(
+                "Avatar '{}' not found",
+                avatar_id
+            )));
+        }
+
+        self.get_ai_avatar_by_id(avatar_id)
+    }
+
+    /// Get a single AI avatar by ID.
+    pub fn get_ai_avatar_by_id(&self, avatar_id: &str) -> Result<AiAvatar, AppError> {
+        let result = self.conn.query_row(
+            "SELECT id, name, personality_id, image_path, companion_role_id,
+                    companion_role_custom, is_active, created_at
+             FROM ai_avatars WHERE id = ?1",
+            params![avatar_id],
+            |row| {
+                Ok(AiAvatar {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    personality_id: row.get(2)?,
+                    image_path: row.get(3)?,
+                    companion_role_id: row.get(4)?,
+                    companion_role_custom: row.get(5)?,
+                    is_active: row.get::<_, i32>(6)? != 0,
+                    created_at: row.get(7)?,
+                })
+            },
+        );
+        match result {
+            Ok(avatar) => Ok(avatar),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound(format!(
+                "Avatar '{}' not found",
+                avatar_id
+            ))),
+            Err(e) => Err(AppError::Database(e)),
+        }
+    }
+
+    /// Clear image_path on all avatars referencing a given sprite filename.
+    pub fn clear_avatar_sprite(&self, filename: &str) -> Result<(), AppError> {
+        self.conn.execute(
+            "UPDATE ai_avatars SET image_path = NULL WHERE image_path = ?1",
+            params![filename],
+        )?;
+        Ok(())
+    }
+
+    /// Update image_path on all avatars referencing a sprite that was renamed.
+    pub fn update_avatar_sprite_references(
+        &self,
+        old_filename: &str,
+        new_filename: &str,
+    ) -> Result<(), AppError> {
+        self.conn.execute(
+            "UPDATE ai_avatars SET image_path = ?1 WHERE image_path = ?2",
+            params![new_filename, old_filename],
+        )?;
+        Ok(())
     }
 
     /// Switch the active avatar. Deactivates all, then activates the specified one.
@@ -3943,6 +4455,16 @@ impl CacheDb {
             ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
         self.conn.execute(&sql, params.as_slice())?;
         Ok(())
+    }
+
+    /// Count journal (daily log) entries for an avatar.
+    pub fn count_avatar_journal_entries(&self, avatar_id: &str) -> Result<u32, AppError> {
+        let count: u32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM ai_daily_log WHERE avatar_id = ?1",
+            params![avatar_id],
+            |row| row.get(0),
+        )?;
+        Ok(count)
     }
 
     /// Count active non-system memories for an avatar.
@@ -4326,6 +4848,42 @@ impl CacheDb {
         }
     }
 
+    /// Get companion role system prompt text. Checks custom text, then built-in
+    /// presets, then custom DB roles, falling back to gaming companion default.
+    pub fn resolve_companion_role_prompt(
+        &self,
+        role_id: Option<&str>,
+        custom_text: Option<&str>,
+    ) -> String {
+        // Custom text takes precedence
+        if let Some(custom) = custom_text {
+            if !custom.is_empty() {
+                return custom.to_string();
+            }
+        }
+        let target_id = role_id.unwrap_or("gaming-companion");
+
+        // Check built-in presets first
+        if let Some(role) = companion_role_presets()
+            .into_iter()
+            .find(|r| r.id == target_id)
+        {
+            return role.system_prompt_text;
+        }
+
+        // Check custom DB roles
+        if let Ok(prompt) = self.conn.query_row(
+            "SELECT system_prompt_text FROM ai_companion_roles WHERE id = ?1",
+            params![target_id],
+            |row| row.get::<_, String>(0),
+        ) {
+            return prompt;
+        }
+
+        // Fallback
+        "a gaming companion who helps with all aspects of the user's library and gaming life".into()
+    }
+
     // ── AI Data Wipe ────────────────────────────────────────────────
 
     /// Wipe all AI conversation data (messages, journal, memories, conversations).
@@ -4694,7 +5252,8 @@ mod tests {
     #[test]
     fn test_ai_personalities_seeded() {
         let db = test_db();
-        let count: u32 = db
+        // v1.12.5: 6 original personalities reclassified as custom, 8 new tones as builtin
+        let builtin_count: u32 = db
             .conn
             .query_row(
                 "SELECT COUNT(*) FROM ai_personalities WHERE is_builtin = 1",
@@ -4702,7 +5261,17 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(count, 6, "Expected 6 built-in personalities");
+        assert_eq!(builtin_count, 8, "Expected 8 built-in personality tones");
+        let total: u32 = db
+            .conn
+            .query_row("SELECT COUNT(*) FROM ai_personalities", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            total, 14,
+            "Expected 14 total personalities (6 legacy + 8 new)"
+        );
     }
 
     #[test]
@@ -4720,8 +5289,8 @@ mod tests {
             )
             .unwrap();
         assert_eq!(
-            count, 6,
-            "Idempotent: still exactly 6 built-in personalities"
+            count, 8,
+            "Idempotent: still exactly 8 built-in personality tones"
         );
         let version: u32 = db
             .conn
@@ -4766,7 +5335,8 @@ mod tests {
     fn test_ai_personality_records_complete() {
         let db = test_db();
 
-        let expected: &[(&str, &str)] = &[
+        // v1.12.5: Old 6 are reclassified as custom (is_builtin = 0)
+        let legacy: &[(&str, &str)] = &[
             ("a1b2c3d4-0001-4000-8000-000000000001", "Friendly Guide"),
             ("a1b2c3d4-0002-4000-8000-000000000002", "Stoic Advisor"),
             ("a1b2c3d4-0003-4000-8000-000000000003", "Witty Companion"),
@@ -4775,7 +5345,7 @@ mod tests {
             ("a1b2c3d4-0006-4000-8000-000000000006", "Chill Buddy"),
         ];
 
-        for (expected_id, expected_name) in expected {
+        for (expected_id, expected_name) in legacy {
             let row: (String, String, i32, String) = db
                 .conn
                 .query_row(
@@ -4795,12 +5365,46 @@ mod tests {
                 "prompt_text should be non-empty for '{}'",
                 expected_name
             );
-            assert_eq!(row.2, 1, "is_builtin should be 1 for '{}'", expected_name);
-            assert!(
-                !row.3.is_empty(),
-                "created_at should be non-null for '{}'",
+            assert_eq!(
+                row.2, 0,
+                "Legacy personality '{}' should be reclassified as custom",
                 expected_name
             );
+        }
+
+        // v1.12.5: 8 new tones are built-in
+        let new_tones: &[(&str, &str)] = &[
+            ("bp-warm-friendly", "Warm & Friendly"),
+            ("bp-witty-sarcastic", "Witty & Sarcastic"),
+            ("bp-calm-measured", "Calm & Measured"),
+            ("bp-energetic-hyped", "Energetic & Hyped"),
+            ("bp-blunt-direct", "Blunt & Direct"),
+            ("bp-charming-playful", "Charming & Playful"),
+            ("bp-laid-back-chill", "Laid Back & Chill"),
+            ("bp-dramatic-theatrical", "Dramatic & Theatrical"),
+        ];
+
+        for (expected_id, expected_name) in new_tones {
+            let row: (String, String, i32, String) = db
+                .conn
+                .query_row(
+                    "SELECT name, prompt_text, is_builtin, created_at FROM ai_personalities WHERE id = ?1",
+                    rusqlite::params![expected_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                )
+                .unwrap_or_else(|_| panic!("Missing tone: {} ({})", expected_name, expected_id));
+
+            assert_eq!(
+                row.0, *expected_name,
+                "Name mismatch for ID {}",
+                expected_id
+            );
+            assert!(
+                !row.1.is_empty(),
+                "prompt_text should be non-empty for '{}'",
+                expected_name
+            );
+            assert_eq!(row.2, 1, "Tone '{}' should be builtin", expected_name);
         }
     }
 
@@ -7207,8 +7811,10 @@ mod tests {
     fn test_list_ai_personalities_returns_builtin() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        assert_eq!(personalities.len(), 6); // 6 built-in from v24 seed
-        assert!(personalities[0].is_builtin);
+        // v1.12.5: 6 legacy (custom) + 8 new tones (builtin) = 14
+        assert_eq!(personalities.len(), 14);
+        let builtin_count = personalities.iter().filter(|p| p.is_builtin).count();
+        assert_eq!(builtin_count, 8);
     }
 
     #[test]
@@ -7220,7 +7826,7 @@ mod tests {
         assert_eq!(p.name, "Test Bot");
         assert!(!p.is_builtin);
         let all = db.list_ai_personalities().unwrap();
-        assert_eq!(all.len(), 7); // 6 builtin + 1 custom
+        assert_eq!(all.len(), 15); // 14 existing + 1 custom
     }
 
     // ── AI Avatar Tests ─────────────────────────────────────────────
@@ -7230,7 +7836,9 @@ mod tests {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
         let pid = &personalities[0].id;
-        let avatar = db.create_ai_avatar("TestAvatar", pid).unwrap();
+        let avatar = db
+            .create_ai_avatar("TestAvatar", pid, None, None, None)
+            .unwrap();
         assert_eq!(avatar.name, "TestAvatar");
         assert!(!avatar.is_active);
         let avatars = db.list_ai_avatars().unwrap();
@@ -7242,8 +7850,12 @@ mod tests {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
         let pid = &personalities[0].id;
-        let a1 = db.create_ai_avatar("Avatar1", pid).unwrap();
-        let a2 = db.create_ai_avatar("Avatar2", pid).unwrap();
+        let a1 = db
+            .create_ai_avatar("Avatar1", pid, None, None, None)
+            .unwrap();
+        let a2 = db
+            .create_ai_avatar("Avatar2", pid, None, None, None)
+            .unwrap();
 
         db.switch_ai_avatar(&a1.id).unwrap();
         let active = db.get_active_ai_avatar().unwrap().unwrap();
@@ -7263,7 +7875,7 @@ mod tests {
     #[test]
     fn test_create_avatar_invalid_personality() {
         let db = test_db();
-        let result = db.create_ai_avatar("Test", "nonexistent-id");
+        let result = db.create_ai_avatar("Test", "nonexistent-id", None, None, None);
         assert!(result.is_err());
     }
 
@@ -7273,7 +7885,9 @@ mod tests {
     fn test_insert_and_get_memories() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("MemBot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("MemBot", &personalities[0].id, None, None, None)
+            .unwrap();
 
         let id = db
             .insert_ai_memory_raw(&avatar.id, "encrypted_content", 5, "general", None, false)
@@ -7290,7 +7904,9 @@ mod tests {
     fn test_soft_delete_memory() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("DelBot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("DelBot", &personalities[0].id, None, None, None)
+            .unwrap();
         let id = db
             .insert_ai_memory_raw(&avatar.id, "content", 5, "general", None, false)
             .unwrap();
@@ -7304,7 +7920,9 @@ mod tests {
     fn test_system_memories_separate_from_vault() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("SysBot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("SysBot", &personalities[0].id, None, None, None)
+            .unwrap();
 
         db.insert_ai_memory_raw(&avatar.id, "system_mem", 10, "system", None, true)
             .unwrap();
@@ -7324,7 +7942,9 @@ mod tests {
     fn test_mark_memory_superseded() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("SupBot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("SupBot", &personalities[0].id, None, None, None)
+            .unwrap();
         let old_id = db
             .insert_ai_memory_raw(&avatar.id, "old", 5, "general", None, false)
             .unwrap();
@@ -7339,11 +7959,48 @@ mod tests {
     }
 
     #[test]
+    fn test_count_avatar_journal_entries() {
+        let db = test_db();
+        let personalities = db.list_ai_personalities().unwrap();
+        let avatar = db
+            .create_ai_avatar("JournalBot", &personalities[0].id, None, None, None)
+            .unwrap();
+
+        // Need a conversation for FK constraint
+        let conv = db.create_ai_conversation(&avatar.id).unwrap();
+        let conv_id = conv.id;
+
+        // Insert some daily log entries
+        for i in 0..3 {
+            db.conn
+                .execute(
+                    "INSERT INTO ai_daily_log (id, avatar_id, conversation_id, log_date, summary, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![
+                        format!("log_{}", i),
+                        avatar.id,
+                        conv_id,
+                        format!("2026-01-0{}", i + 1),
+                        format!("Day {} summary", i + 1),
+                        "2026-01-01T00:00:00Z",
+                    ],
+                )
+                .unwrap();
+        }
+
+        assert_eq!(db.count_avatar_journal_entries(&avatar.id).unwrap(), 3);
+        // Different avatar should have 0
+        let avatar2 = db
+            .create_ai_avatar("Other", &personalities[0].id, None, None, None)
+            .unwrap();
+        assert_eq!(db.count_avatar_journal_entries(&avatar2.id).unwrap(), 0);
+    }
+
+    #[test]
     fn test_count_active_vault_memories() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
         let avatar = db
-            .create_ai_avatar("CountBot", &personalities[0].id)
+            .create_ai_avatar("CountBot", &personalities[0].id, None, None, None)
             .unwrap();
 
         for i in 0..5 {
@@ -7362,10 +8019,10 @@ mod tests {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
         let a1 = db
-            .create_ai_avatar("Avatar1", &personalities[0].id)
+            .create_ai_avatar("Avatar1", &personalities[0].id, None, None, None)
             .unwrap();
         let a2 = db
-            .create_ai_avatar("Avatar2", &personalities[0].id)
+            .create_ai_avatar("Avatar2", &personalities[0].id, None, None, None)
             .unwrap();
 
         // High importance memory on avatar2 — should be visible to avatar1
@@ -7387,7 +8044,7 @@ mod tests {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
         let avatar = db
-            .create_ai_avatar("JournalBot", &personalities[0].id)
+            .create_ai_avatar("JournalBot", &personalities[0].id, None, None, None)
             .unwrap();
         // Need a conversation for FK
         db.create_ai_conversation_stub("conv-1", &avatar.id)
@@ -7408,7 +8065,7 @@ mod tests {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
         let avatar = db
-            .create_ai_avatar("DelJBot", &personalities[0].id)
+            .create_ai_avatar("DelJBot", &personalities[0].id, None, None, None)
             .unwrap();
         db.create_ai_conversation_stub("conv-2", &avatar.id)
             .unwrap();
@@ -7428,7 +8085,7 @@ mod tests {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
         let avatar = db
-            .create_ai_avatar("WipeBot", &personalities[0].id)
+            .create_ai_avatar("WipeBot", &personalities[0].id, None, None, None)
             .unwrap();
         db.insert_ai_memory_raw(&avatar.id, "mem", 5, "general", None, false)
             .unwrap();
@@ -7448,8 +8105,12 @@ mod tests {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
         let pid = &personalities[0].id;
-        let a1 = db.create_ai_avatar("Avatar1", pid).unwrap();
-        let a2 = db.create_ai_avatar("Avatar2", pid).unwrap();
+        let a1 = db
+            .create_ai_avatar("Avatar1", pid, None, None, None)
+            .unwrap();
+        let a2 = db
+            .create_ai_avatar("Avatar2", pid, None, None, None)
+            .unwrap();
 
         // Add data to both avatars
         db.insert_ai_memory_raw(&a1.id, "mem1", 5, "general", None, false)
@@ -7488,8 +8149,12 @@ mod tests {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
         let pid = &personalities[0].id;
-        let a1 = db.create_ai_avatar("WipeMe", pid).unwrap();
-        let a2 = db.create_ai_avatar("KeepMe", pid).unwrap();
+        let a1 = db
+            .create_ai_avatar("WipeMe", pid, None, None, None)
+            .unwrap();
+        let a2 = db
+            .create_ai_avatar("KeepMe", pid, None, None, None)
+            .unwrap();
 
         // Add data to both
         db.insert_ai_memory_raw(&a1.id, "mem1", 5, "general", None, false)
@@ -7525,10 +8190,10 @@ mod tests {
 
         let personalities = db.list_ai_personalities().unwrap();
         let pid = &personalities[0].id;
-        db.create_ai_avatar("One", pid).unwrap();
+        db.create_ai_avatar("One", pid, None, None, None).unwrap();
         assert_eq!(db.count_ai_avatars().unwrap(), 1);
 
-        let a2 = db.create_ai_avatar("Two", pid).unwrap();
+        let a2 = db.create_ai_avatar("Two", pid, None, None, None).unwrap();
         assert_eq!(db.count_ai_avatars().unwrap(), 2);
 
         db.delete_ai_avatar(&a2.id).unwrap();
@@ -7541,7 +8206,9 @@ mod tests {
     fn test_get_active_conversation_returns_none_when_empty() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let result = db.get_active_conversation(&avatar.id).unwrap();
         assert!(result.is_none());
     }
@@ -7550,7 +8217,9 @@ mod tests {
     fn test_get_active_conversation_returns_none_after_ended() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
         db.end_ai_conversation(&conv.id).unwrap();
         let result = db.get_active_conversation(&avatar.id).unwrap();
@@ -7561,7 +8230,9 @@ mod tests {
     fn test_create_ai_conversation_fields() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
         assert!(!conv.id.is_empty());
         assert_eq!(conv.avatar_id, avatar.id);
@@ -7576,7 +8247,9 @@ mod tests {
     fn test_complete_ai_conversation_sets_fields() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
         db.complete_ai_conversation(&conv.id, "encrypted_summary")
             .unwrap();
@@ -7591,7 +8264,9 @@ mod tests {
     fn test_complete_ai_conversation_preserves_ended_at() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
         // First end it
         db.end_ai_conversation(&conv.id).unwrap();
@@ -7610,7 +8285,9 @@ mod tests {
     fn test_delete_ai_messages_by_ids_selective() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
         let id1 = db.insert_ai_message(&conv.id, "user", "msg1", 10).unwrap();
         let id2 = db
@@ -7646,7 +8323,9 @@ mod tests {
     fn test_store_message_pair_atomic() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
         db.store_message_pair(&conv.id, "user_enc", 10, "asst_enc", 20, false)
@@ -7664,7 +8343,9 @@ mod tests {
     fn test_complete_compaction_atomic() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
         // Insert some messages first
@@ -7715,7 +8396,9 @@ mod tests {
     fn test_store_message_pair_skip_user() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
         db.store_message_pair(&conv.id, "user_enc", 10, "asst_enc", 20, true)
@@ -7735,7 +8418,9 @@ mod tests {
     fn test_abandon_conversation() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv1 = db.create_ai_conversation(&avatar.id).unwrap();
         let conv2 = db.create_ai_conversation(&avatar.id).unwrap();
 
@@ -7783,7 +8468,9 @@ mod tests {
     fn test_abandon_conversation_already_ended() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
         // End it first
@@ -7797,7 +8484,9 @@ mod tests {
     fn test_has_user_messages_empty() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
         assert!(!db.has_user_messages(&conv.id).unwrap());
@@ -7807,7 +8496,9 @@ mod tests {
     fn test_has_user_messages_assistant_only() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
         db.insert_ai_message(&conv.id, "assistant", "hello", 5)
@@ -7820,7 +8511,9 @@ mod tests {
     fn test_has_user_messages_with_user() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
         db.insert_ai_message(&conv.id, "user", "hi", 2).unwrap();
@@ -7832,7 +8525,9 @@ mod tests {
     fn test_get_conversation_started_at() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
         let started_at = db.get_conversation_started_at(&conv.id).unwrap();
@@ -7865,7 +8560,9 @@ mod tests {
     fn test_pending_compaction_empty_when_all_compacted() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
         // End and mark as compacted via complete_compaction
         db.end_ai_conversation(&conv.id).unwrap();
@@ -7886,7 +8583,9 @@ mod tests {
     fn test_pending_compaction_returns_ended_uncompacted_with_messages() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
         // Insert a message
@@ -7907,7 +8606,9 @@ mod tests {
     fn test_pending_compaction_skips_ended_uncompacted_without_messages() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
         // End the conversation with no messages (short conversation, no compaction needed)
@@ -7921,7 +8622,9 @@ mod tests {
     fn test_pending_compaction_returns_multiple() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let key = [0u8; 32];
 
         let conv1 = db.create_ai_conversation(&avatar.id).unwrap();
@@ -7946,7 +8649,9 @@ mod tests {
     fn test_compaction_data_returns_avatar_and_messages() {
         let db = test_db();
         let personalities = db.list_ai_personalities().unwrap();
-        let avatar = db.create_ai_avatar("Bot", &personalities[0].id).unwrap();
+        let avatar = db
+            .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
+            .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
         let key = [0u8; 32];

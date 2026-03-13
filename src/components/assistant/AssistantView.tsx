@@ -1,7 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useConversationContext } from "./ConversationProvider";
-import { getAvatarColor } from "../../utils/avatarColors";
+import { SpriteRenderer } from "./SpriteRenderer";
 import { Header } from "../layout/Header";
 import { AssistantFirstRun } from "./AssistantFirstRun";
 import { AssistantChat } from "./AssistantChat";
@@ -19,24 +19,12 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "avatar", label: "Avatar" },
 ];
 
-function formatTimer(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
 export function AssistantView() {
   const navigate = useNavigate();
   const {
     activeAvatar,
-    personalities,
     conversationId,
-    hasConversation,
-    isFirstConversation,
     isLoading,
-    timerRemaining,
-    timerIsPaused,
-    timerIsActive,
     pendingCompactionConvId,
     isCompacting,
     compactionError,
@@ -44,20 +32,57 @@ export function AssistantView() {
     consumePendingReview,
     handleFirstRunComplete,
     handleConversationEnding,
-    handleConversationEnd,
     handleConversationStart,
-    handleStaleReset,
+    setTimerViewing,
     handleAvatarSwitch,
     handleAvatarDeleted,
     handleAvatarDataWiped,
     handleCompactNow,
     handleCopyRawData,
     handlePasteResponse,
+    onStreamStart,
+    onStreamEnd,
+    onUserTyping,
+    onUserSentMessage,
+    expression,
+    spriteDataUrl,
+    refreshActiveAvatar,
+    // Conversation state from hub
+    messages,
+    isStreaming,
+    conversationError,
+    currentStreamText,
+    isConversationCompacting,
+    pendingActions,
+    t0Expression,
+    cloudAiEnabled,
+    historyLoaded,
+    sendMessage,
+    retry,
+    endActiveConversation,
+    injectMessage,
+    clearPendingActions,
+    clearT0Expression,
   } = useConversationContext();
+
+  // Pause timer while on /assistant page
+  useEffect(() => {
+    setTimerViewing(true);
+    return () => setTimerViewing(false);
+  }, [setTimerViewing]);
 
   const [activeTab, setActiveTab] = useState<TabId>("chat");
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteValue, setPasteValue] = useState("");
+
+  // Scale hero name font size based on character count
+  const heroNameSize = useMemo(() => {
+    const len = activeAvatar?.name?.length ?? 0;
+    if (len <= 6) return "1.75rem";
+    if (len <= 12) return "1.5rem";
+    if (len <= 18) return "1.25rem";
+    return "1rem";
+  }, [activeAvatar?.name]);
 
   // Wrap avatar switch to also switch to chat tab locally
   const onAvatarSwitch = useCallback(
@@ -92,39 +117,10 @@ export function AssistantView() {
     );
   }
 
-  const personalityName =
-    personalities.find((p) => p.id === activeAvatar.personalityId)?.name ?? "Unknown";
-
   return (
     <div className="assistant-view">
       <Header title="Assistant" subtitle={activeAvatar.name} />
       <div className="assistant-view__body">
-        <aside className="assistant-view__avatar-panel">
-          <div
-            className="assistant-view__avatar-circle"
-            style={{ background: getAvatarColor(activeAvatar.name) }}
-          >
-            {activeAvatar.name.charAt(0).toUpperCase()}
-          </div>
-          <div className="assistant-view__avatar-name">{activeAvatar.name}</div>
-          <div className="assistant-view__avatar-personality">{personalityName}</div>
-          <div className="assistant-view__avatar-status">
-            <span
-              className={`assistant-view__status-dot ${hasConversation ? "assistant-view__status-dot--active" : "assistant-view__status-dot--idle"}`}
-            />
-            {hasConversation ? "In conversation" : "Idle"}
-          </div>
-          {hasConversation &&
-            timerIsActive &&
-            !(timerIsPaused && timerRemaining === 3600) && (
-              <div className="assistant-view__timer">
-                {timerIsPaused
-                  ? "Timer paused (game active)"
-                  : `Timeout: ${formatTimer(timerRemaining)}`}
-              </div>
-            )}
-        </aside>
-
         <div className="assistant-view__content">
           {/* Compaction retry banner */}
           {pendingCompactionConvId && (
@@ -174,27 +170,61 @@ export function AssistantView() {
           </div>
           <div className="assistant-view__tab-content">
             {activeTab === "chat" && (
-              <AssistantChat
-                avatarId={activeAvatar.id}
-                conversationId={conversationId}
-                onConversationStart={handleConversationStart}
-                onConversationEnding={handleConversationEnding}
-                onConversationEnd={handleConversationEnd}
-                isFirstConversation={isFirstConversation}
-                onStaleReset={handleStaleReset}
-                pendingReview={pendingReview}
-                onPendingReviewConsumed={consumePendingReview}
-                navigate={navigate}
-              />
+              <>
+                <div className="assistant-view__chat-hero">
+                  <SpriteRenderer
+                    spriteDataUrl={spriteDataUrl}
+                    expression={expression}
+                    size={128}
+                    fallbackText={activeAvatar.name}
+                  />
+                  <span
+                    className="assistant-view__chat-hero-name"
+                    style={{ "--hero-name-size": heroNameSize } as React.CSSProperties}
+                  >
+                    {activeAvatar.name}
+                  </span>
+                </div>
+                <AssistantChat
+                  conversationId={conversationId}
+                  messages={messages}
+                  isStreaming={isStreaming}
+                  error={conversationError}
+                  currentStreamText={currentStreamText}
+                  isCompacting={isConversationCompacting}
+                  pendingActions={pendingActions}
+                  t0Expression={t0Expression}
+                  cloudAiEnabled={cloudAiEnabled}
+                  historyLoaded={historyLoaded}
+                  sendMessage={sendMessage}
+                  retry={retry}
+                  endConversation={endActiveConversation}
+                  injectMessage={injectMessage}
+                  clearPendingActions={clearPendingActions}
+                  clearT0Expression={clearT0Expression}
+                  onConversationStart={handleConversationStart}
+                  onConversationEnding={handleConversationEnding}
+                  pendingReview={pendingReview}
+                  onPendingReviewConsumed={consumePendingReview}
+                  navigate={navigate}
+                  onExpressionStreamStart={onStreamStart}
+                  onExpressionStreamEnd={onStreamEnd}
+                  onExpressionUserTyping={onUserTyping}
+                  onExpressionUserSentMessage={onUserSentMessage}
+                  avatarName={activeAvatar.name}
+                />
+              </>
             )}
             {activeTab === "memories" && <AssistantMemories avatarId={activeAvatar.id} />}
             {activeTab === "journals" && <AssistantJournals avatarId={activeAvatar.id} />}
             {activeTab === "avatar" && (
               <AssistantAvatars
                 activeAvatarId={activeAvatar.id}
+                isStreaming={isStreaming}
                 onAvatarSwitch={onAvatarSwitch}
                 onAvatarDeleted={handleAvatarDeleted}
                 onAvatarDataWiped={handleAvatarDataWiped}
+                onSpriteChanged={refreshActiveAvatar}
               />
             )}
           </div>

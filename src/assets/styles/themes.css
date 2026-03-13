@@ -71,7 +71,7 @@
   --transition-slow: 400ms ease;
 
   /* Layout */
-  --rail-width: 48px;
+  --rail-width: 64px;
   --rail-expanded-width: 180px;
   --header-height: 56px;
 }

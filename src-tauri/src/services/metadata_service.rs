@@ -137,8 +137,12 @@ impl MetadataService {
             for game_id in game_ids {
                 if db.is_metadata_fresh(game_id)? {
                     if let Some(cached) = db.get_store_metadata(game_id)? {
-                        results.push((game_id.clone(), Some(cached)));
-                        continue;
+                        if !cached.steam_tags.is_empty() {
+                            results.push((game_id.clone(), Some(cached)));
+                            continue;
+                        }
+                        // Tags empty — SteamSpy may have failed silently.
+                        // Fall through to re-fetch from SteamSpy.
                     }
                 }
                 // Resolve to Steam appid for uncached games
@@ -202,7 +206,21 @@ impl MetadataService {
                 });
 
                 if let Some(ref m) = meta {
-                    let _ = db.cache_store_metadata(m);
+                    // If a row already exists (e.g., re-fetching tags for enriched data),
+                    // only update the tags column to preserve Store API fields.
+                    if db.get_store_metadata(&game_id)?.is_some() {
+                        if !m.steam_tags.is_empty() {
+                            let _ = db.update_steam_tags(&game_id, &m.steam_tags);
+                        }
+                        // Return the enriched row with fresh tags merged in
+                        if let Some(mut existing) = db.get_store_metadata(&game_id)? {
+                            existing.steam_tags = m.steam_tags.clone();
+                            results.push((game_id, Some(existing)));
+                            continue;
+                        }
+                    } else {
+                        let _ = db.cache_store_metadata(m);
+                    }
                 }
                 results.push((game_id, meta));
             }

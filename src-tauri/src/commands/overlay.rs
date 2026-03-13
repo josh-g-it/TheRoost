@@ -22,7 +22,7 @@ pub fn hide_overlay(app: AppHandle) {
 ///
 /// Returns an error if the main window is not available (06-F7).
 #[tauri::command]
-pub fn show_main_and_navigate(app: AppHandle, route: String) -> Result<(), AppError> {
+pub async fn show_main_and_navigate(app: AppHandle, route: String) -> Result<(), AppError> {
     let win = app
         .get_webview_window("main")
         .ok_or_else(|| AppError::Validation("Main window is not available".to_string()))?;
@@ -52,7 +52,7 @@ pub fn update_overlay_shortcut(app: AppHandle, shortcut: String) {
 ///
 /// Returns an error if the main window is not available (06-F7).
 #[tauri::command]
-pub fn overlay_select_game(app: AppHandle, game_id: String) -> Result<(), AppError> {
+pub async fn overlay_select_game(app: AppHandle, game_id: String) -> Result<(), AppError> {
     let win = app
         .get_webview_window("main")
         .ok_or_else(|| AppError::Validation("Main window is not available".to_string()))?;
@@ -78,7 +78,7 @@ pub fn overlay_select_game(app: AppHandle, game_id: String) -> Result<(), AppErr
 /// Notify both windows that settings were changed.
 /// Each listener reloads from disk — no loop since loading doesn't trigger save.
 #[tauri::command]
-pub fn notify_settings_changed(app: AppHandle) {
+pub async fn notify_settings_changed(app: AppHandle) {
     if let Err(e) = app.emit_to("main", "settings-changed", ()) {
         tracing::warn!(error = %e, window = "main", event = "settings-changed", "emit_to failed");
     }
@@ -91,7 +91,7 @@ pub fn notify_settings_changed(app: AppHandle) {
 ///
 /// Returns an error if the main window is not available (06-F7).
 #[tauri::command]
-pub fn overlay_apply_tag_filter(app: AppHandle, tag_ids: Vec<i64>) -> Result<(), AppError> {
+pub async fn overlay_apply_tag_filter(app: AppHandle, tag_ids: Vec<i64>) -> Result<(), AppError> {
     let win = app
         .get_webview_window("main")
         .ok_or_else(|| AppError::Validation("Main window is not available".to_string()))?;
@@ -122,7 +122,7 @@ pub fn overlay_apply_tag_filter(app: AppHandle, tag_ids: Vec<i64>) -> Result<(),
 ///
 /// Returns an error if the main window is not available (06-F7).
 #[tauri::command]
-pub fn overlay_execute_palette_action(
+pub async fn overlay_execute_palette_action(
     app: AppHandle,
     action_id: String,
     game_id: Option<String>,
@@ -163,8 +163,12 @@ pub fn overlay_execute_palette_action(
 }
 
 /// Lightweight library read for the overlay — reads from SQLite, no API calls.
+///
+/// Must be `async` so the DB lock doesn't block the main thread. During AI
+/// `assemble_context`, the DB lock can be held for hundreds of milliseconds;
+/// a sync command waiting for the lock would freeze the entire IPC pipeline.
 #[tauri::command]
-pub fn get_overlay_library(db: State<'_, CacheDbHandle>) -> Result<GameLibrary, AppError> {
+pub async fn get_overlay_library(db: State<'_, CacheDbHandle>) -> Result<GameLibrary, AppError> {
     let db = db.lock_or_err("DB")?;
     let rows = db.get_overlay_games()?;
     let games: Vec<Game> = rows

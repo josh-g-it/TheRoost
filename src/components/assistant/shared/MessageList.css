@@ -2,6 +2,7 @@
 .assistant-chat__messages {
   flex: 1;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 1rem;
   display: flex;
   flex-direction: column;

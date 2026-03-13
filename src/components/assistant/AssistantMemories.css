@@ -177,6 +177,7 @@
 .memory-card__confirm {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 0.5rem;
   padding-top: 0.5rem;

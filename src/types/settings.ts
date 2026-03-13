@@ -16,8 +16,7 @@ export type OverlayPanelId =
   | "game-notes"
   | "system-monitor"
   | "media-controls"
-  | "audio-mixer"
-  | "assistant";
+  | "audio-mixer";
 
 export interface OverlayPanelPosition {
   x: number;
@@ -63,6 +62,9 @@ export interface AppSettings {
   assistantBubbleExpanded?: boolean;
   assistantBubbleWidth?: number | null;
   assistantBubbleHeight?: number | null;
+  assistantBubbleX?: number | null;
+  assistantBubbleY?: number | null;
   assistantActionDelay?: number;
   newsBlockedSources?: string[];
+  customStylePresets?: Array<{ id: string; label: string; prompt: string }>;
 }

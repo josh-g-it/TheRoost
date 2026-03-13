@@ -196,6 +196,13 @@ export function RestoreWizard({ archivePath, validation, onCancel }: RestoreWiza
           </span>
         </div>
         <div className="restore-wizard__info-row">
+          <span className="restore-wizard__info-label">Sprites</span>
+          <span className="restore-wizard__info-value">
+            {manifest.spriteFileCount ?? 0} files (
+            {formatBytes(manifest.spriteTotalBytes ?? 0)})
+          </span>
+        </div>
+        <div className="restore-wizard__info-row">
           <span className="restore-wizard__info-label">Schema Version</span>
           <span className="restore-wizard__info-value">v{manifest.schemaVersion}</span>
         </div>

@@ -8,13 +8,23 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(vi.fn()),
 }));
 
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  save: vi.fn().mockResolvedValue(null),
+  open: vi.fn().mockResolvedValue(null),
+}));
+
 const mockListAvatars = vi.fn();
 const mockListPersonalities = vi.fn();
 const mockSwitchAvatar = vi.fn();
 const mockCreateAvatar = vi.fn();
-const mockCreatePersonality = vi.fn();
 const mockDeleteAvatar = vi.fn();
 const mockWipeAvatarData = vi.fn();
+const mockUpdateAvatar = vi.fn();
+const mockListCompanionRoles = vi.fn();
+const mockGetAvatarStats = vi.fn();
+const mockListSprites = vi.fn();
+const mockReadSprite = vi.fn();
+const mockStartConversation = vi.fn();
 
 vi.mock("../../services/tauri", () => ({
   assistantApi: {
@@ -22,9 +32,20 @@ vi.mock("../../services/tauri", () => ({
     listPersonalities: (...args: unknown[]) => mockListPersonalities(...args),
     switchAvatar: (...args: unknown[]) => mockSwitchAvatar(...args),
     createAvatar: (...args: unknown[]) => mockCreateAvatar(...args),
-    createPersonality: (...args: unknown[]) => mockCreatePersonality(...args),
     deleteAvatar: (...args: unknown[]) => mockDeleteAvatar(...args),
     wipeAvatarData: (...args: unknown[]) => mockWipeAvatarData(...args),
+    updateAvatar: (...args: unknown[]) => mockUpdateAvatar(...args),
+    listCompanionRoles: (...args: unknown[]) => mockListCompanionRoles(...args),
+    getAvatarStats: (...args: unknown[]) => mockGetAvatarStats(...args),
+    startConversation: (...args: unknown[]) => mockStartConversation(...args),
+  },
+  spriteApi: {
+    listSprites: (...args: unknown[]) => mockListSprites(...args),
+    readSprite: (...args: unknown[]) => mockReadSprite(...args),
+    setActiveSprite: vi.fn().mockResolvedValue(undefined),
+    deleteSprite: vi.fn().mockResolvedValue(undefined),
+    exportSprite: vi.fn().mockResolvedValue(undefined),
+    importSpriteFromPath: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -52,16 +73,31 @@ describe("AssistantAvatars", () => {
     mockCreateAvatar.mockResolvedValue(
       makeAiAvatar("a3", { name: "NewBot", personalityId: "p1" }),
     );
-    mockCreatePersonality.mockResolvedValue(
-      makeAiPersonality("p3", { name: "Custom", isBuiltin: false }),
-    );
     mockDeleteAvatar.mockResolvedValue(undefined);
     mockWipeAvatarData.mockResolvedValue(undefined);
+    mockUpdateAvatar.mockImplementation((_id: string, fields: Record<string, unknown>) =>
+      Promise.resolve(makeAiAvatar("a1", { ...fields })),
+    );
+    mockListCompanionRoles.mockResolvedValue([
+      {
+        id: "gaming-companion",
+        name: "Gaming Companion",
+        description: "A friendly gaming buddy",
+        systemPromptText: "You are a gaming companion.",
+      },
+    ]);
+    mockStartConversation.mockResolvedValue("conv-1");
+    mockGetAvatarStats.mockResolvedValue({
+      memoryCount: 5,
+      journalCount: 3,
+      createdAt: "2026-01-01T00:00:00Z",
+    });
+    mockListSprites.mockResolvedValue([]);
+    mockReadSprite.mockRejectedValue(new Error("not found"));
   });
 
   it("renders avatar list with names", async () => {
-    const onSwitch = vi.fn();
-    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={onSwitch} />);
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText("Buddy")).toBeInTheDocument();
@@ -69,28 +105,41 @@ describe("AssistantAvatars", () => {
     });
   });
 
-  it("active avatar shows active badge", async () => {
-    const onSwitch = vi.fn();
-    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={onSwitch} />);
+  it("active avatar shows active badge in list and detail", async () => {
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Active")).toBeInTheDocument();
+      // Active badge appears in both list panel and detail panel
+      expect(screen.getAllByText("Active").length).toBeGreaterThanOrEqual(1);
     });
-
-    // The non-active avatar should have a Switch button
-    expect(screen.getByText("Switch")).toBeInTheDocument();
   });
 
-  it("switch avatar calls API and fires onAvatarSwitch", async () => {
+  it("selecting an avatar shows detail panel", async () => {
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      // Active avatar is selected by default — detail panel should show name input
+      expect(screen.getByLabelText("Avatar name")).toBeInTheDocument();
+    });
+  });
+
+  it("switch avatar calls API from detail panel", async () => {
     const onSwitch = vi.fn();
     const user = userEvent.setup();
     render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={onSwitch} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Switch")).toBeInTheDocument();
+      expect(screen.getByText("Scholar")).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText("Switch"));
+    // Select the non-active avatar
+    await user.click(screen.getByLabelText("Select avatar Scholar"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Switch to This Avatar")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Switch to This Avatar"));
 
     await waitFor(() => {
       expect(mockSwitchAvatar).toHaveBeenCalledWith("a2");
@@ -98,20 +147,42 @@ describe("AssistantAvatars", () => {
     });
   });
 
-  it("create avatar form submission calls API", async () => {
-    const onSwitch = vi.fn();
+  it("create avatar flow works via + button with wizard", async () => {
     const user = userEvent.setup();
-    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={onSwitch} />);
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Avatar name")).toBeInTheDocument();
+      expect(screen.getByText("Buddy")).toBeInTheDocument();
     });
 
-    await user.type(screen.getByPlaceholderText("Avatar name"), "NewBot");
-    await user.click(screen.getByRole("button", { name: /Create Avatar/ }));
+    // Click the + button to show wizard
+    await user.click(screen.getByLabelText("Create new avatar"));
 
     await waitFor(() => {
-      expect(mockCreateAvatar).toHaveBeenCalledWith("NewBot", "p1");
+      expect(screen.getByText("Create New Avatar")).toBeInTheDocument();
+    });
+
+    // Step 1: enter name
+    await user.type(screen.getByPlaceholderText("Enter a name..."), "NewBot");
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+
+    // Step 2: accept default role
+    await waitFor(() => {
+      expect(screen.getByText("Choose a Companion Role")).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+
+    // Step 3: skip sprite
+    await user.click(screen.getByText("Skip & Create"));
+
+    await waitFor(() => {
+      expect(mockCreateAvatar).toHaveBeenCalledWith(
+        "NewBot",
+        "p1",
+        "gaming-companion",
+        null,
+        null,
+      );
     });
   });
 
@@ -125,11 +196,23 @@ describe("AssistantAvatars", () => {
     render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Avatar name")).toBeInTheDocument();
+      expect(screen.getByText("Buddy")).toBeInTheDocument();
     });
 
-    await user.type(screen.getByPlaceholderText("Avatar name"), "Buddy");
-    await user.click(screen.getByRole("button", { name: /Create Avatar/ }));
+    await user.click(screen.getByLabelText("Create new avatar"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Create New Avatar")).toBeInTheDocument();
+    });
+
+    // Go through wizard
+    await user.type(screen.getByPlaceholderText("Enter a name..."), "Buddy");
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Choose a Companion Role")).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByText("Skip & Create"));
 
     await waitFor(() => {
       expect(
@@ -138,80 +221,31 @@ describe("AssistantAvatars", () => {
         ),
       ).toBeInTheDocument();
     });
-  });
-
-  it("clears avatar creation error when user types in name field", async () => {
-    const user = userEvent.setup();
-    mockCreateAvatar.mockRejectedValue({
-      code: "VALIDATION_ERROR",
-      message: "An avatar with that name already exists. Please choose a different name.",
-    });
-
-    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText("Avatar name")).toBeInTheDocument();
-    });
-
-    await user.type(screen.getByPlaceholderText("Avatar name"), "Buddy");
-    await user.click(screen.getByRole("button", { name: /Create Avatar/ }));
-
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "An avatar with that name already exists. Please choose a different name.",
-        ),
-      ).toBeInTheDocument();
-    });
-
-    // Typing in the name field should clear the error
-    await user.type(screen.getByPlaceholderText("Avatar name"), "X");
-
-    expect(
-      screen.queryByText(
-        "An avatar with that name already exists. Please choose a different name.",
-      ),
-    ).not.toBeInTheDocument();
-  });
-
-  it("personality list renders built-in and custom personalities", async () => {
-    const onSwitch = vi.fn();
-    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={onSwitch} />);
-
-    await waitFor(() => {
-      // "Friendly" appears in both the avatar item personality and personality list,
-      // so use getAllByText to verify at least one exists
-      expect(screen.getAllByText("Friendly").length).toBeGreaterThanOrEqual(1);
-      // "Analytical" appears in the avatar personality display and personality list
-      expect(screen.getAllByText("Analytical").length).toBeGreaterThanOrEqual(1);
-    });
-
-    // Built-in badge should appear for the first personality
-    expect(screen.getByText("Built-in")).toBeInTheDocument();
   });
 
   it("shows loading state", () => {
     mockListAvatars.mockReturnValue(new Promise(() => {}));
     mockListPersonalities.mockReturnValue(new Promise(() => {}));
+    mockListCompanionRoles.mockReturnValue(new Promise(() => {}));
+    mockListSprites.mockReturnValue(new Promise(() => {}));
 
-    const onSwitch = vi.fn();
-    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={onSwitch} />);
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
 
     expect(screen.getByText("Loading...")).toBeInTheDocument();
   });
 
   // ── Delete Avatar Tests ──────────────────────────────────────────
 
-  it("delete button hidden for active avatar", async () => {
+  it("delete button hidden for active avatar when other avatars exist", async () => {
     render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText("Buddy")).toBeInTheDocument();
     });
 
-    // Only one Delete button should exist (for non-active Scholar, not for active Buddy)
-    const deleteButtons = screen.getAllByTitle("Delete this avatar");
-    expect(deleteButtons).toHaveLength(1);
+    // Active avatar (Buddy) is selected by default — detail shows no delete button
+    // because it's active and other avatars exist
+    expect(screen.queryByTitle("Delete this avatar")).not.toBeInTheDocument();
   });
 
   it("delete button shown for last avatar (allows reset to first-run)", async () => {
@@ -281,10 +315,18 @@ describe("AssistantAvatars", () => {
 
   it("clicking delete shows confirmation dialog", async () => {
     const user = userEvent.setup();
+    // Use a non-active avatar to get a delete button (select Scholar)
     render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText("Scholar")).toBeInTheDocument();
+    });
+
+    // Select Scholar (non-active)
+    await user.click(screen.getByLabelText("Select avatar Scholar"));
+
+    await waitFor(() => {
+      expect(screen.getByTitle("Delete this avatar")).toBeInTheDocument();
     });
 
     await user.click(screen.getByTitle("Delete this avatar"));
@@ -292,7 +334,6 @@ describe("AssistantAvatars", () => {
     expect(
       screen.getByText(/All conversations, memories, and journal entries/),
     ).toBeInTheDocument();
-    // Confirmation dialog has a danger-styled Delete button
     const confirmOverlay = screen
       .getByText(/All conversations, memories, and journal entries/)
       .closest(".avatar-item__confirm-overlay")!;
@@ -316,8 +357,14 @@ describe("AssistantAvatars", () => {
       expect(screen.getByText("Scholar")).toBeInTheDocument();
     });
 
+    // Select Scholar (non-active)
+    await user.click(screen.getByLabelText("Select avatar Scholar"));
+
+    await waitFor(() => {
+      expect(screen.getByTitle("Delete this avatar")).toBeInTheDocument();
+    });
+
     await user.click(screen.getByTitle("Delete this avatar"));
-    // Click the danger-styled confirm button inside the overlay
     const confirmOverlay = screen
       .getByText(/All conversations, memories, and journal entries/)
       .closest(".avatar-item__confirm-overlay")!;
@@ -330,19 +377,21 @@ describe("AssistantAvatars", () => {
       expect(mockDeleteAvatar).toHaveBeenCalledWith("a2");
       expect(onDeleted).toHaveBeenCalledWith("a2");
     });
-
-    // Scholar should be removed from the list
-    await waitFor(() => {
-      expect(screen.queryByText("Scholar")).not.toBeInTheDocument();
-    });
   });
 
   it("cancel dismisses delete confirmation", async () => {
     const user = userEvent.setup();
+    // Select non-active avatar to see delete button
     render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText("Scholar")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText("Select avatar Scholar"));
+
+    await waitFor(() => {
+      expect(screen.getByTitle("Delete this avatar")).toBeInTheDocument();
     });
 
     await user.click(screen.getByTitle("Delete this avatar"));
@@ -360,16 +409,14 @@ describe("AssistantAvatars", () => {
 
   // ── Wipe Avatar Data Tests ───────────────────────────────────────
 
-  it("clear data button visible for all avatars", async () => {
+  it("clear data button visible in detail panel", async () => {
     render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText("Buddy")).toBeInTheDocument();
     });
 
-    // Both avatars should have Clear Data buttons
-    const clearButtons = screen.getAllByTitle("Clear all data for this avatar");
-    expect(clearButtons).toHaveLength(2);
+    expect(screen.getByTitle("Clear all data for this avatar")).toBeInTheDocument();
   });
 
   it("clicking clear data shows confirmation dialog", async () => {
@@ -380,13 +427,11 @@ describe("AssistantAvatars", () => {
       expect(screen.getByText("Buddy")).toBeInTheDocument();
     });
 
-    const clearButtons = screen.getAllByTitle("Clear all data for this avatar");
-    await user.click(clearButtons[0]);
+    await user.click(screen.getByTitle("Clear all data for this avatar"));
 
     expect(
       screen.getByText(/all memories, journal entries, and conversation history/),
     ).toBeInTheDocument();
-    // Confirmation dialog has a danger-styled Clear Data button
     const confirmOverlay = screen
       .getByText(/all memories, journal entries, and conversation history/)
       .closest(".avatar-item__confirm-overlay")!;
@@ -403,9 +448,7 @@ describe("AssistantAvatars", () => {
       expect(screen.getByText("Buddy")).toBeInTheDocument();
     });
 
-    const clearButtons = screen.getAllByTitle("Clear all data for this avatar");
-    await user.click(clearButtons[0]);
-    // Click the danger-styled confirm button inside the overlay
+    await user.click(screen.getByTitle("Clear all data for this avatar"));
     const confirmOverlay = screen
       .getByText(/all memories, journal entries, and conversation history/)
       .closest(".avatar-item__confirm-overlay")!;
@@ -427,19 +470,82 @@ describe("AssistantAvatars", () => {
       expect(screen.getByText("Buddy")).toBeInTheDocument();
     });
 
-    const clearButtons = screen.getAllByTitle("Clear all data for this avatar");
-    await user.click(clearButtons[0]);
+    await user.click(screen.getByTitle("Clear all data for this avatar"));
     expect(
       screen.getByText(/all memories, journal entries, and conversation history/),
     ).toBeInTheDocument();
 
-    // Get the Cancel button from within the confirmation overlay
-    const cancelButtons = screen.getAllByRole("button", { name: "Cancel" });
-    await user.click(cancelButtons[cancelButtons.length - 1]);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(
       screen.queryByText(/all memories, journal entries, and conversation history/),
     ).not.toBeInTheDocument();
     expect(mockWipeAvatarData).not.toHaveBeenCalled();
+  });
+
+  // ── Detail Panel Feature Tests ───────────────────────────────────
+
+  it("stats display shows memory and journal counts", async () => {
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("5 memories")).toBeInTheDocument();
+      expect(screen.getByText("3 journals")).toBeInTheDocument();
+    });
+  });
+
+  it("expression preview grid renders all 8 expressions", async () => {
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Neutral")).toBeInTheDocument();
+      expect(screen.getByText("Speaking")).toBeInTheDocument();
+      expect(screen.getByText("Listening")).toBeInTheDocument();
+      expect(screen.getByText("Sleepy")).toBeInTheDocument();
+      expect(screen.getByText("Happy")).toBeInTheDocument();
+      expect(screen.getByText("Sad")).toBeInTheDocument();
+      expect(screen.getByText("Interested")).toBeInTheDocument();
+      expect(screen.getByText("Bored")).toBeInTheDocument();
+    });
+  });
+
+  it("personality dropdown auto-saves on change", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Buddy")).toBeInTheDocument();
+    });
+
+    // Change personality dropdown
+    const selects = screen.getAllByRole("combobox");
+    const personalitySelect = selects.find((s) =>
+      Array.from(s.querySelectorAll("option")).some((o) =>
+        o.textContent?.includes("Friendly"),
+      ),
+    )!;
+    await user.selectOptions(personalitySelect, "p2");
+
+    await waitFor(() => {
+      expect(mockUpdateAvatar).toHaveBeenCalledWith("a1", { personalityId: "p2" });
+    });
+  });
+
+  it("inline name rename calls updateAvatar on blur", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAvatars activeAvatarId="a1" onAvatarSwitch={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Avatar name")).toBeInTheDocument();
+    });
+
+    const nameInput = screen.getByLabelText("Avatar name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "NewName");
+    await user.tab(); // blur
+
+    await waitFor(() => {
+      expect(mockUpdateAvatar).toHaveBeenCalledWith("a1", { name: "NewName" });
+    });
   });
 });

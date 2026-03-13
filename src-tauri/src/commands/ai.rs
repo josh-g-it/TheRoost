@@ -4,6 +4,7 @@ use tauri::{Emitter, Manager, State};
 use crate::models::ai::{CloudAiUsage, CloudProvider, ResolvedIntent};
 use crate::models::assistant::{
     AiAvatar, AiDailyLog, AiMemory, AiMessage, AiPersonality, CompactionResult,
+    CompanionRolePreset, SpriteCropOffsets, SpriteInfo,
 };
 use crate::services::ai::action_resolver;
 use crate::services::ai::action_validator::{self, RawAiAction};
@@ -18,6 +19,7 @@ use crate::services::ai::encryption;
 use crate::services::ai::memory;
 use crate::services::ai::orchestrator::AiOrchestrator;
 use crate::services::ai::pattern_matcher::PatternMatcher;
+use crate::services::ai::sprite;
 use crate::services::cache_db::CacheDbHandle;
 use crate::services::credential_store;
 use crate::services::settings_store;
@@ -38,7 +40,7 @@ struct CompactionEventPayload {
 /// then the lock is dropped before fuzzy matching runs. This prevents lock
 /// contention during the O(n) Jaro-Winkler scan over the full game library.
 #[tauri::command]
-pub fn validate_and_resolve_ai_actions(
+pub async fn validate_and_resolve_ai_actions(
     actions: Vec<RawAiAction>,
     db: State<'_, CacheDbHandle>,
 ) -> Result<action_resolver::ResolvedActionSet, AppError> {
@@ -62,7 +64,7 @@ pub fn validate_and_resolve_ai_actions(
 /// Pattern-matcher-only AI resolution (instant, local, always available).
 /// Called automatically by the frontend for every qualifying search query.
 #[tauri::command]
-pub fn ai_resolve_intent(
+pub async fn ai_resolve_intent(
     query: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<Option<ResolvedIntent>, AppError> {
@@ -141,17 +143,17 @@ pub async fn ai_cloud_resolve(
 }
 
 #[tauri::command]
-pub fn store_cloud_api_key(provider: String, key: String) -> Result<(), AppError> {
+pub async fn store_cloud_api_key(provider: String, key: String) -> Result<(), AppError> {
     credential_store::store_cloud_key(&provider, &key)
 }
 
 #[tauri::command]
-pub fn delete_cloud_api_key(provider: String) -> Result<(), AppError> {
+pub async fn delete_cloud_api_key(provider: String) -> Result<(), AppError> {
     credential_store::delete_cloud_key(&provider)
 }
 
 #[tauri::command]
-pub fn get_cloud_api_key_status(provider: String) -> Result<bool, AppError> {
+pub async fn get_cloud_api_key_status(provider: String) -> Result<bool, AppError> {
     Ok(credential_store::load_cloud_key(&provider)?.is_some())
 }
 
@@ -196,7 +198,9 @@ pub async fn test_cloud_api_key(provider: String) -> Result<bool, AppError> {
 }
 
 #[tauri::command]
-pub fn get_cloud_ai_usage(cloud: State<'_, CloudConfigHandle>) -> Result<CloudAiUsage, AppError> {
+pub async fn get_cloud_ai_usage(
+    cloud: State<'_, CloudConfigHandle>,
+) -> Result<CloudAiUsage, AppError> {
     let mut config = cloud.lock_or_err("CloudConfig")?;
     config.maybe_reset_daily();
     Ok(CloudAiUsage {
@@ -208,7 +212,7 @@ pub fn get_cloud_ai_usage(cloud: State<'_, CloudConfigHandle>) -> Result<CloudAi
 }
 
 #[tauri::command]
-pub fn update_cloud_ai_settings(
+pub async fn update_cloud_ai_settings(
     enabled: bool,
     provider: String,
     daily_limit: u32,
@@ -235,13 +239,15 @@ pub fn update_cloud_ai_settings(
 // ── Personality Commands ────────────────────────────────────────────
 
 #[tauri::command]
-pub fn list_personalities(db: State<'_, CacheDbHandle>) -> Result<Vec<AiPersonality>, AppError> {
+pub async fn list_personalities(
+    db: State<'_, CacheDbHandle>,
+) -> Result<Vec<AiPersonality>, AppError> {
     let db = db.lock_or_err("DB")?;
     db.list_ai_personalities()
 }
 
 #[tauri::command]
-pub fn create_personality(
+pub async fn create_personality(
     name: String,
     prompt_text: String,
     db: State<'_, CacheDbHandle>,
@@ -265,24 +271,33 @@ pub fn create_personality(
     db.create_ai_personality(&name, &prompt_text)
 }
 
+#[tauri::command]
+pub async fn delete_personality(id: String, db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
+    let db = db.lock_or_err("DB")?;
+    db.delete_ai_personality(&id)
+}
+
 // ── Avatar Commands ─────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn list_avatars(db: State<'_, CacheDbHandle>) -> Result<Vec<AiAvatar>, AppError> {
+pub async fn list_avatars(db: State<'_, CacheDbHandle>) -> Result<Vec<AiAvatar>, AppError> {
     let db = db.lock_or_err("DB")?;
     db.list_ai_avatars()
 }
 
 #[tauri::command]
-pub fn get_active_avatar(db: State<'_, CacheDbHandle>) -> Result<Option<AiAvatar>, AppError> {
+pub async fn get_active_avatar(db: State<'_, CacheDbHandle>) -> Result<Option<AiAvatar>, AppError> {
     let db = db.lock_or_err("DB")?;
     db.get_active_ai_avatar()
 }
 
 #[tauri::command]
-pub fn create_avatar(
+pub async fn create_avatar(
     name: String,
     personality_id: String,
+    companion_role_id: Option<String>,
+    companion_role_custom: Option<String>,
+    image_path: Option<String>,
     db: State<'_, CacheDbHandle>,
 ) -> Result<AiAvatar, AppError> {
     if name.trim().is_empty() {
@@ -298,11 +313,24 @@ pub fn create_avatar(
     let key = encryption::load_encryption_key().ok();
 
     let db = db.lock_or_err("DB")?;
-    let avatar = db.create_ai_avatar(&name, &personality_id)?;
+    let avatar = db.create_ai_avatar(
+        &name,
+        &personality_id,
+        companion_role_id.as_deref(),
+        companion_role_custom.as_deref(),
+        image_path.as_deref(),
+    )?;
 
     // Seed system memories if encryption key is available
     if let Some(key) = &key {
-        if let Err(e) = memory::seed_system_memories(&db, &avatar.id, &avatar.name, key) {
+        if let Err(e) = memory::seed_system_memories(
+            &db,
+            &avatar.id,
+            &avatar.name,
+            avatar.companion_role_id.as_deref(),
+            avatar.companion_role_custom.as_deref(),
+            key,
+        ) {
             tracing::warn!(error = %e, "Failed to seed system memories for new avatar — they will be seeded later");
         }
     }
@@ -311,13 +339,19 @@ pub fn create_avatar(
 }
 
 #[tauri::command]
-pub fn switch_avatar(avatar_id: String, db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
+pub async fn switch_avatar(
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<(), AppError> {
     let db = db.lock_or_err("DB")?;
     db.switch_ai_avatar(&avatar_id)
 }
 
 #[tauri::command]
-pub fn delete_avatar(avatar_id: String, db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
+pub async fn delete_avatar(
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<(), AppError> {
     let db_guard = db.lock_or_err("DB")?;
 
     let count = db_guard.count_ai_avatars()?;
@@ -341,27 +375,41 @@ pub fn delete_avatar(avatar_id: String, db: State<'_, CacheDbHandle>) -> Result<
 }
 
 #[tauri::command]
-pub fn wipe_avatar_data(avatar_id: String, db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
+pub async fn wipe_avatar_data(
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<(), AppError> {
     // Load encryption key BEFORE acquiring DB lock (keyring I/O)
     let key = encryption::load_encryption_key()?;
 
-    // First lock scope: get avatar name + wipe data
-    let avatar_name = {
+    // First lock scope: get avatar info + wipe data
+    let (avatar_name, role_id, role_custom) = {
         let db_guard = db.lock_or_err("DB")?;
         let avatars = db_guard.list_ai_avatars()?;
-        let name = avatars
+        let avatar = avatars
             .iter()
             .find(|a| a.id == avatar_id)
-            .map(|a| a.name.clone())
             .ok_or_else(|| AppError::NotFound("Avatar not found".into()))?;
+        let info = (
+            avatar.name.clone(),
+            avatar.companion_role_id.clone(),
+            avatar.companion_role_custom.clone(),
+        );
         db_guard.wipe_avatar_data(&avatar_id)?;
-        name
+        info
     }; // DB lock dropped
 
     // Second lock scope: re-seed system memories
     {
         let db_guard = db.lock_or_err("DB")?;
-        memory::seed_system_memories(&db_guard, &avatar_id, &avatar_name, &key)?;
+        memory::seed_system_memories(
+            &db_guard,
+            &avatar_id,
+            &avatar_name,
+            role_id.as_deref(),
+            role_custom.as_deref(),
+            &key,
+        )?;
     }
 
     tracing::info!(
@@ -371,10 +419,125 @@ pub fn wipe_avatar_data(avatar_id: String, db: State<'_, CacheDbHandle>) -> Resu
     Ok(())
 }
 
+// ── Avatar Stats Command ────────────────────────────────────────────
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AvatarStats {
+    pub memory_count: u32,
+    pub journal_count: u32,
+    pub created_at: String,
+}
+
+#[tauri::command]
+pub async fn get_avatar_stats(
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<AvatarStats, AppError> {
+    let db = db.lock_or_err("DB")?;
+    let avatar = db.get_ai_avatar_by_id(&avatar_id)?;
+    Ok(AvatarStats {
+        memory_count: db.count_active_vault_memories(&avatar_id)?,
+        journal_count: db.count_avatar_journal_entries(&avatar_id)?,
+        created_at: avatar.created_at,
+    })
+}
+
+// ── Companion Role Commands ─────────────────────────────────────────
+
+#[tauri::command]
+pub async fn list_companion_roles(
+    db: State<'_, CacheDbHandle>,
+) -> Result<Vec<CompanionRolePreset>, AppError> {
+    let db = db.lock_or_err("DB")?;
+    db.list_ai_companion_roles()
+}
+
+#[tauri::command]
+pub async fn create_companion_role(
+    name: String,
+    description: String,
+    system_prompt_text: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<CompanionRolePreset, AppError> {
+    if name.trim().is_empty() {
+        return Err(AppError::Validation(
+            "Companion role name cannot be empty".into(),
+        ));
+    }
+    if name.chars().count() > 100 {
+        return Err(AppError::Validation(
+            "Companion role name exceeds maximum length of 100 characters".into(),
+        ));
+    }
+    if description.trim().is_empty() {
+        return Err(AppError::Validation(
+            "Companion role description cannot be empty".into(),
+        ));
+    }
+    if system_prompt_text.trim().is_empty() {
+        return Err(AppError::Validation(
+            "Companion role prompt cannot be empty".into(),
+        ));
+    }
+    let db = db.lock_or_err("DB")?;
+    db.create_ai_companion_role(&name, &description, &system_prompt_text)
+}
+
+#[tauri::command]
+pub async fn delete_companion_role(
+    id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<(), AppError> {
+    let db = db.lock_or_err("DB")?;
+    db.delete_ai_companion_role(&id)
+}
+
+#[tauri::command]
+pub async fn update_avatar(
+    avatar_id: String,
+    name: Option<String>,
+    personality_id: Option<String>,
+    image_path: Option<Option<String>>,
+    companion_role_id: Option<Option<String>>,
+    companion_role_custom: Option<Option<String>>,
+    db: State<'_, CacheDbHandle>,
+) -> Result<AiAvatar, AppError> {
+    // Validate name if provided
+    if let Some(ref n) = name {
+        if n.trim().is_empty() {
+            return Err(AppError::Validation("Avatar name cannot be empty".into()));
+        }
+        if n.chars().count() > 100 {
+            return Err(AppError::Validation(
+                "Avatar name exceeds maximum length of 100 characters".into(),
+            ));
+        }
+    }
+    // Validate custom role text if provided
+    if let Some(Some(ref text)) = companion_role_custom {
+        if text.chars().count() > 10_000 {
+            return Err(AppError::Validation(
+                "Custom role text exceeds maximum length of 10,000 characters".into(),
+            ));
+        }
+    }
+
+    let db = db.lock_or_err("DB")?;
+    db.update_ai_avatar(
+        &avatar_id,
+        name.as_deref(),
+        personality_id.as_deref(),
+        image_path.as_ref().map(|o| o.as_deref()),
+        companion_role_id.as_ref().map(|o| o.as_deref()),
+        companion_role_custom.as_ref().map(|o| o.as_deref()),
+    )
+}
+
 // ── Memory Commands ─────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_memories(
+pub async fn get_memories(
     avatar_id: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<Vec<AiMemory>, AppError> {
@@ -402,7 +565,10 @@ pub fn get_memories(
 }
 
 #[tauri::command]
-pub fn delete_memory(memory_id: String, db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
+pub async fn delete_memory(
+    memory_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<(), AppError> {
     let db = db.lock_or_err("DB")?;
     db.soft_delete_user_memory(&memory_id)
 }
@@ -410,7 +576,7 @@ pub fn delete_memory(memory_id: String, db: State<'_, CacheDbHandle>) -> Result<
 // ── Journal Commands ────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_journal(
+pub async fn get_journal(
     avatar_id: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<Vec<AiDailyLog>, AppError> {
@@ -433,7 +599,7 @@ pub fn get_journal(
 }
 
 #[tauri::command]
-pub fn delete_journal_entry(
+pub async fn delete_journal_entry(
     entry_id: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<(), AppError> {
@@ -444,7 +610,7 @@ pub fn delete_journal_entry(
 // ── Encryption Key Commands ─────────────────────────────────────────
 
 #[tauri::command]
-pub fn generate_encryption_key() -> Result<(), AppError> {
+pub async fn generate_encryption_key() -> Result<(), AppError> {
     if encryption::has_encryption_key()? {
         return Err(AppError::Encryption("Encryption key already exists".into()));
     }
@@ -454,12 +620,12 @@ pub fn generate_encryption_key() -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub fn check_encryption_key_exists() -> Result<bool, AppError> {
+pub async fn check_encryption_key_exists() -> Result<bool, AppError> {
     encryption::has_encryption_key()
 }
 
 #[tauri::command]
-pub fn import_encryption_key(key_base64: String) -> Result<(), AppError> {
+pub async fn import_encryption_key(key_base64: String) -> Result<(), AppError> {
     if key_base64.trim().is_empty() {
         return Err(AppError::Validation("Key cannot be empty".into()));
     }
@@ -469,7 +635,7 @@ pub fn import_encryption_key(key_base64: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub fn export_encryption_key() -> Result<String, AppError> {
+pub async fn export_encryption_key() -> Result<String, AppError> {
     let key = encryption::load_encryption_key()?;
     Ok(base64::engine::general_purpose::STANDARD.encode(*key))
 }
@@ -488,7 +654,7 @@ pub async fn start_conversation(
 /// Get the active (un-ended) conversation ID for an avatar, if any.
 /// Used by the overlay to synchronize its local state with the Rust-side truth.
 #[tauri::command]
-pub fn get_active_conversation_id(
+pub async fn get_active_conversation_id(
     avatar_id: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<Option<String>, AppError> {
@@ -497,6 +663,11 @@ pub fn get_active_conversation_id(
     Ok(conv.map(|c| c.id))
 }
 
+/// Send a message and return the full AI response text.
+///
+/// No streaming events are emitted — the frontend awaits this invoke and
+/// receives the complete response directly. Internally, the cloud provider
+/// still streams via a channel, but responses are collected server-side.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn send_message(
@@ -510,8 +681,7 @@ pub async fn send_message(
     db: State<'_, CacheDbHandle>,
     cloud: State<'_, CloudConfigHandle>,
     app_handle: tauri::AppHandle,
-) -> Result<(), AppError> {
-    // Validate message
+) -> Result<String, AppError> {
     let message = message.trim().to_string();
     if message.is_empty() {
         return Err(AppError::Validation("Message cannot be empty".into()));
@@ -541,7 +711,7 @@ pub async fn send_message(
     let settings = settings_store::load_settings(&app_handle)?;
     let key = encryption::load_encryption_key()?;
 
-    conversation::send_message_and_stream(
+    let response = conversation::send_message_and_collect(
         &db,
         &conversation_id,
         &avatar_id,
@@ -562,19 +732,18 @@ pub async fn send_message(
         config.record_request();
     }
 
-    // Reset inactivity timer only for real user messages — hidden messages
-    // (auto-greetings, system prompts) should not start/reset the timer.
+    // Reset inactivity timer only for real user messages
     if !skip_user_persist {
         if let Some(timer) = app_handle.try_state::<ConversationTimerHandle>() {
             let _ = conversation_timer::reset_timer(&timer);
         }
     }
 
-    Ok(())
+    Ok(response)
 }
 
 #[tauri::command]
-pub fn abandon_conversation(
+pub async fn abandon_conversation(
     conversation_id: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<(), AppError> {
@@ -588,7 +757,7 @@ pub fn abandon_conversation(
 /// conversations from sessions where the user opened the assistant but
 /// never interacted.
 #[tauri::command]
-pub fn check_conversation_stale(
+pub async fn check_conversation_stale(
     conversation_id: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<bool, AppError> {
@@ -629,13 +798,13 @@ pub async fn end_conversation(
     let compaction_payload = CompactionEventPayload {
         conversation_id: conversation_id.clone(),
     };
-    let _ = app_handle.emit("ai-compaction-started", &compaction_payload);
+    conversation::emit_safe(&app_handle, "ai-compaction-started", &compaction_payload);
 
     let result =
         conversation::end_conversation(&db, &conversation_id, &avatar_id, &key, &settings).await;
 
     // Notify all windows that compaction is complete (clears journaling splash)
-    let _ = app_handle.emit("ai-compaction-complete", &compaction_payload);
+    conversation::emit_safe(&app_handle, "ai-compaction-complete", &compaction_payload);
 
     // Propagate any error from end_conversation after emitting compaction-complete
     result?;
@@ -649,13 +818,13 @@ pub async fn end_conversation(
         conversation_id: conversation_id.clone(),
         reason: "manual".to_string(),
     };
-    let _ = app_handle.emit("ai-conversation-ended", &payload);
+    conversation::emit_safe(&app_handle, "ai-conversation-ended", &payload);
 
     Ok(())
 }
 
 #[tauri::command]
-pub fn get_conversation_history(
+pub async fn get_conversation_history(
     conversation_id: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<Vec<AiMessage>, AppError> {
@@ -703,13 +872,13 @@ pub async fn retry_compaction(
     let compaction_payload = CompactionEventPayload {
         conversation_id: conversation_id.clone(),
     };
-    let _ = app_handle.emit("ai-compaction-started", &compaction_payload);
+    conversation::emit_safe(&app_handle, "ai-compaction-started", &compaction_payload);
 
     let result =
         conversation::end_conversation(&db, &conversation_id, &avatar_id, &key, &settings).await;
 
     // Notify all windows that compaction is complete
-    let _ = app_handle.emit("ai-compaction-complete", &compaction_payload);
+    conversation::emit_safe(&app_handle, "ai-compaction-complete", &compaction_payload);
 
     let compacted = result?;
 
@@ -722,7 +891,7 @@ pub async fn retry_compaction(
 }
 
 #[tauri::command]
-pub fn get_memory_context(
+pub async fn get_memory_context(
     avatar_id: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<String, AppError> {
@@ -741,7 +910,7 @@ pub fn get_memory_context(
 }
 
 #[tauri::command]
-pub fn check_post_session_review(
+pub async fn check_post_session_review(
     game_id: String,
     duration_minutes: u32,
     db: State<'_, CacheDbHandle>,
@@ -776,7 +945,7 @@ pub fn check_post_session_review(
 // ── Nuclear Wipe ────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn wipe_ai_memory(db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
+pub async fn wipe_ai_memory(db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
     // Load key BEFORE lock (keyring I/O)
     let key = encryption::load_encryption_key().ok();
 
@@ -785,7 +954,14 @@ pub fn wipe_ai_memory(db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
     // Re-seed system memories for the active avatar if one exists
     if let Some(avatar) = db_guard.get_active_ai_avatar()? {
         if let Some(key) = &key {
-            memory::seed_system_memories(&db_guard, &avatar.id, &avatar.name, key)?;
+            memory::seed_system_memories(
+                &db_guard,
+                &avatar.id,
+                &avatar.name,
+                avatar.companion_role_id.as_deref(),
+                avatar.companion_role_custom.as_deref(),
+                key,
+            )?;
         }
     }
     Ok(())
@@ -794,7 +970,7 @@ pub fn wipe_ai_memory(db: State<'_, CacheDbHandle>) -> Result<(), AppError> {
 // ── Conversation Timer Commands ─────────────────────────────────────
 
 #[tauri::command]
-pub fn start_conversation_timer(
+pub async fn start_conversation_timer(
     conversation_id: String,
     avatar_id: String,
     timer: State<'_, ConversationTimerHandle>,
@@ -811,17 +987,29 @@ pub fn start_conversation_timer(
 }
 
 #[tauri::command]
-pub fn stop_conversation_timer(timer: State<'_, ConversationTimerHandle>) -> Result<(), AppError> {
+pub async fn stop_conversation_timer(
+    timer: State<'_, ConversationTimerHandle>,
+) -> Result<(), AppError> {
     conversation_timer::stop_timer(&timer)
 }
 
 #[tauri::command]
-pub fn reset_conversation_timer(timer: State<'_, ConversationTimerHandle>) -> Result<(), AppError> {
+pub async fn reset_conversation_timer(
+    timer: State<'_, ConversationTimerHandle>,
+) -> Result<(), AppError> {
     conversation_timer::reset_timer(&timer)
 }
 
 #[tauri::command]
-pub fn get_conversation_timer_state(
+pub async fn set_conversation_timer_viewing(
+    viewing: bool,
+    timer: State<'_, ConversationTimerHandle>,
+) -> Result<(), AppError> {
+    conversation_timer::set_viewing(&timer, viewing)
+}
+
+#[tauri::command]
+pub async fn get_conversation_timer_state(
     timer: State<'_, ConversationTimerHandle>,
 ) -> Result<Option<TimerTickPayload>, AppError> {
     conversation_timer::get_timer_state(&timer)
@@ -830,7 +1018,7 @@ pub fn get_conversation_timer_state(
 // ── Error Recovery Commands (Phase 10) ──────────────────────────────
 
 #[tauri::command]
-pub fn check_orphaned_conversations(
+pub async fn check_orphaned_conversations(
     avatar_id: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<Vec<String>, AppError> {
@@ -839,7 +1027,7 @@ pub fn check_orphaned_conversations(
 }
 
 #[tauri::command]
-pub fn get_compaction_pending_conversations(
+pub async fn get_compaction_pending_conversations(
     db: State<'_, CacheDbHandle>,
 ) -> Result<Vec<(String, String)>, AppError> {
     let db_guard = db.lock_or_err("DB")?;
@@ -847,7 +1035,7 @@ pub fn get_compaction_pending_conversations(
 }
 
 #[tauri::command]
-pub fn get_compaction_raw_data(
+pub async fn get_compaction_raw_data(
     conversation_id: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<String, AppError> {
@@ -886,7 +1074,7 @@ pub fn get_compaction_raw_data(
 }
 
 #[tauri::command]
-pub fn apply_external_compaction(
+pub async fn apply_external_compaction(
     conversation_id: String,
     avatar_id: String,
     json_data: String,
@@ -972,5 +1160,305 @@ pub fn apply_external_compaction(
         memories_count = memories.len(),
         "External compaction applied successfully"
     );
+    Ok(())
+}
+
+// ── Sprite Commands ─────────────────────────────────────────────────
+
+/// Helper: resolve sprites directory from app handle.
+fn get_sprites_dir(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, AppError> {
+    let app_data = app_handle.path().app_data_dir().map_err(|e| {
+        AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            e.to_string(),
+        ))
+    })?;
+    Ok(sprite::sprites_dir(&app_data))
+}
+
+#[tauri::command]
+pub async fn list_sprites(app_handle: tauri::AppHandle) -> Result<Vec<SpriteInfo>, AppError> {
+    let dir = get_sprites_dir(&app_handle)?;
+    sprite::list_sprites(&dir)
+}
+
+#[tauri::command]
+pub async fn save_sprite(
+    filename: String,
+    data: Vec<u8>,
+    app_handle: tauri::AppHandle,
+) -> Result<SpriteInfo, AppError> {
+    // Validate filename format
+    if !filename.ends_with(".png") {
+        return Err(AppError::Validation(
+            "Sprite filename must end with .png".into(),
+        ));
+    }
+    if filename.starts_with("prebuilt-") {
+        return Err(AppError::Validation(
+            "Cannot overwrite pre-built sprites".into(),
+        ));
+    }
+
+    let dir = get_sprites_dir(&app_handle)?;
+    sprite::ensure_sprites_dir(&app_handle.path().app_data_dir().map_err(|e| {
+        AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            e.to_string(),
+        ))
+    })?)?;
+    sprite::save_sprite(&dir, &filename, &data)
+}
+
+#[tauri::command]
+pub async fn delete_sprite(
+    filename: String,
+    db: State<'_, CacheDbHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), AppError> {
+    let dir = get_sprites_dir(&app_handle)?;
+    sprite::delete_sprite(&dir, &filename)?;
+
+    // Clear image_path on any avatars using this sprite
+    let db_guard = db.lock_or_err("DB")?;
+    db_guard.clear_avatar_sprite(&filename)?;
+
+    tracing::info!(filename = filename.as_str(), "Sprite deleted");
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn read_sprite(
+    filename: String,
+    app_handle: tauri::AppHandle,
+) -> Result<String, AppError> {
+    let dir = get_sprites_dir(&app_handle)?;
+    sprite::read_sprite_as_data_url(&dir, &filename)
+}
+
+#[tauri::command]
+pub async fn set_active_sprite(
+    avatar_id: String,
+    filename: Option<String>,
+    db: State<'_, CacheDbHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), AppError> {
+    // Validate sprite exists if setting one
+    if let Some(ref f) = filename {
+        let dir = get_sprites_dir(&app_handle)?;
+        if !dir.join(f).exists() {
+            return Err(AppError::NotFound(format!("Sprite not found: {}", f)));
+        }
+    }
+
+    let db_guard = db.lock_or_err("DB")?;
+    db_guard.update_ai_avatar(
+        &avatar_id,
+        None,
+        None,
+        Some(filename.as_deref()),
+        None,
+        None,
+    )?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_active_sprite(
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<Option<String>, AppError> {
+    let db_guard = db.lock_or_err("DB")?;
+    let avatars = db_guard.list_ai_avatars()?;
+    let avatar = avatars.into_iter().find(|a| a.id == avatar_id);
+    Ok(avatar.and_then(|a| a.image_path))
+}
+
+#[tauri::command]
+pub async fn save_crop_offsets(
+    filename: String,
+    crops: SpriteCropOffsets,
+    app_handle: tauri::AppHandle,
+) -> Result<(), AppError> {
+    let dir = get_sprites_dir(&app_handle)?;
+    sprite::save_crop_offsets(&dir, &filename, &crops)
+}
+
+#[tauri::command]
+pub async fn validate_sprite(data: Vec<u8>) -> Result<(u32, u32), AppError> {
+    sprite::validate_sprite(&data)
+}
+
+#[tauri::command]
+pub async fn rename_sprite(
+    old_filename: String,
+    new_display_name: String,
+    db: State<'_, CacheDbHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<SpriteInfo, AppError> {
+    let dir = get_sprites_dir(&app_handle)?;
+    let new_filename = sprite::rename_sprite(&dir, &old_filename, &new_display_name)?;
+
+    // Update all avatar references from old filename to new
+    let db_guard = db.lock_or_err("DB")?;
+    db_guard.update_avatar_sprite_references(&old_filename, &new_filename)?;
+
+    tracing::info!(
+        old = old_filename.as_str(),
+        new = new_filename.as_str(),
+        "Sprite renamed"
+    );
+    sprite::get_sprite_info(&dir, &new_filename)
+}
+
+#[tauri::command]
+pub async fn export_sprite(
+    filename: String,
+    destination: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), AppError> {
+    let dir = get_sprites_dir(&app_handle)?;
+    let src = dir.join(&filename);
+    if !src.exists() {
+        return Err(AppError::NotFound(format!(
+            "Sprite not found: {}",
+            filename
+        )));
+    }
+    std::fs::copy(&src, &destination)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn import_sprite_from_path(
+    source_path: String,
+    app_handle: tauri::AppHandle,
+) -> Result<SpriteInfo, AppError> {
+    let data = std::fs::read(&source_path)?;
+    sprite::validate_sprite(&data)?;
+
+    let filename = format!(
+        "uploaded-{}.png",
+        uuid::Uuid::new_v4()
+            .to_string()
+            .split('-')
+            .next()
+            .unwrap_or("unknown")
+    );
+    let app_data = app_handle.path().app_data_dir().map_err(|e| {
+        AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            e.to_string(),
+        ))
+    })?;
+    sprite::ensure_sprites_dir(&app_data)?;
+    let dir = get_sprites_dir(&app_handle)?;
+    sprite::save_sprite(&dir, &filename, &data)
+}
+
+#[tauri::command]
+pub async fn generate_sprite(
+    style: String,
+    character_description: String,
+    background_color: String,
+    app_handle: tauri::AppHandle,
+) -> Result<SpriteInfo, AppError> {
+    use crate::services::ai::providers::gemini;
+    use image::{GenericImageView, ImageFormat};
+
+    // Load API key
+    let settings = settings_store::load_settings(&app_handle)?;
+    let api_key =
+        credential_store::load_cloud_key(&settings.cloud_ai_provider)?.ok_or_else(|| {
+            AppError::Credential(
+                "No AI API key configured. Add your Gemini API key in Settings → Connections."
+                    .into(),
+            )
+        })?;
+
+    tracing::info!(
+        style = style.as_str(),
+        desc_len = character_description.len(),
+        background = background_color.as_str(),
+        "Starting sprite generation"
+    );
+
+    // Call Gemini image generation API
+    let raw_bytes =
+        gemini::generate_sprite_image(&api_key, &style, &character_description, &background_color)
+            .await?;
+
+    // Validate the returned image
+    let img = image::load_from_memory(&raw_bytes)
+        .map_err(|e| AppError::Validation(format!("Generated image is not valid: {}", e)))?;
+
+    let (w, h) = img.dimensions();
+    tracing::info!(width = w, height = h, "Sprite image received from Gemini");
+
+    // Resize to exact 2:1 aspect ratio (2048×1024) so the 4×2 grid produces
+    // perfectly square 512×512 cells. Gemini returns 16:9 which would give
+    // non-square cells and cause misaligned cropping in SpriteRenderer.
+    let target_w: u32 = 2048;
+    let target_h: u32 = 1024;
+    let final_img = if w != target_w || h != target_h {
+        tracing::info!(
+            from_w = w,
+            from_h = h,
+            to_w = target_w,
+            to_h = target_h,
+            "Resizing sprite sheet to 2:1 aspect ratio"
+        );
+        img.resize_exact(target_w, target_h, image::imageops::FilterType::Lanczos3)
+    } else {
+        img
+    };
+
+    // Encode the final image as PNG
+    let mut png_buf = std::io::Cursor::new(Vec::new());
+    final_img
+        .write_to(&mut png_buf, ImageFormat::Png)
+        .map_err(|e| AppError::Validation(format!("Failed to encode resized sprite: {}", e)))?;
+    let png_bytes = png_buf.into_inner();
+
+    // Save to sprites directory
+    let filename = format!(
+        "generated-{}.png",
+        uuid::Uuid::new_v4()
+            .to_string()
+            .split('-')
+            .next()
+            .unwrap_or("unknown")
+    );
+    let app_data = app_handle.path().app_data_dir().map_err(|e| {
+        AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            e.to_string(),
+        ))
+    })?;
+    sprite::ensure_sprites_dir(&app_data)?;
+    let dir = get_sprites_dir(&app_handle)?;
+    let info = sprite::save_sprite(&dir, &filename, &png_bytes)?;
+
+    tracing::info!(filename = filename.as_str(), "Sprite generated and saved");
+    Ok(info)
+}
+
+// ── Overlay relay commands ──
+// The overlay cannot directly emit events to other windows (Tauri v2 frontend
+// `emit`/`emitTo` don't cross window boundaries). These lightweight commands
+// let the overlay relay user actions to the main window via `app_handle.emit()`.
+
+/// Generic cross-window event relay.
+/// Frontend `emit`/`emitTo` don't cross window boundaries in Tauri v2.
+/// This command lets any window broadcast an event via `app_handle.emit()`.
+#[tauri::command]
+pub async fn relay_event(
+    event: String,
+    payload: serde_json::Value,
+    app_handle: tauri::AppHandle,
+) -> Result<(), AppError> {
+    app_handle
+        .emit(&event, &payload)
+        .map_err(|e| AppError::StoreApi(format!("Failed to relay event '{event}': {e}")))?;
     Ok(())
 }

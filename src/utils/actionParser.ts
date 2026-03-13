@@ -6,9 +6,18 @@
  * so the action payload is never shown to the user.
  */
 
+import type { Expression } from "../types";
 import { logger } from "./logger";
 
 export const DELIMITER = "\n---ACTIONS---\n";
+
+/** Valid AI-controllable expression names for T0 actions. */
+const VALID_EXPRESSIONS: ReadonlySet<string> = new Set([
+  "happy",
+  "sad",
+  "interested",
+  "bored",
+]);
 
 /** A raw action as parsed from the AI response JSON. */
 export interface ParsedAiAction {
@@ -201,4 +210,33 @@ export function finalizeStream(state: StreamParserState): {
     );
     return { displayText: "", actions: [] };
   }
+}
+
+/**
+ * Extract T0 expression actions from parsed actions and return them separately.
+ *
+ * T0 expressions are invisible to the user — no queue, no confirmation, no delay.
+ * Only the LAST `expression:*` action in the array is applied (design doc spec).
+ * Returns the remaining non-T0 actions and the extracted expression (if any).
+ */
+export function extractT0Expression(actions: ParsedAiAction[]): {
+  expression: Expression | null;
+  remaining: ParsedAiAction[];
+} {
+  let expression: Expression | null = null;
+  const remaining: ParsedAiAction[] = [];
+
+  for (const action of actions) {
+    if (action.tier === 0 && action.actionId.startsWith("expression:")) {
+      const name = action.actionId.slice("expression:".length);
+      if (VALID_EXPRESSIONS.has(name)) {
+        // Last one wins
+        expression = name as Expression;
+      }
+    } else {
+      remaining.push(action);
+    }
+  }
+
+  return { expression, remaining };
 }

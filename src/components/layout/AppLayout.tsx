@@ -1,5 +1,5 @@
-import { useCallback, useRef } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useRef } from "react";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "../../store/settingsSlice";
 import { useTrayListener } from "../../hooks/useTrayListener";
@@ -20,6 +20,7 @@ interface PostSessionReviewPayload {
 export function AppLayout() {
   useTrayListener();
   const navigate = useNavigate();
+  const location = useLocation();
   const settings = useSettingsStore((s) => s.settings);
   const saveSettings = useSettingsStore((s) => s.saveSettings);
   const railMode = settings?.railMode ?? "dynamic";
@@ -49,9 +50,23 @@ export function AppLayout() {
     }
   }, [settings, saveSettings]);
 
+  // Auto-expand bubble when user navigates away from /assistant.
+  // This covers both action-triggered navigations and manual route changes,
+  // ensuring conversation continuity in the bubble.
+  const prevPathRef = useRef(location.pathname);
+  useEffect(() => {
+    const prev = prevPathRef.current;
+    prevPathRef.current = location.pathname;
+    if (
+      bubbleEnabled &&
+      prev.startsWith("/assistant") &&
+      !location.pathname.startsWith("/assistant")
+    ) {
+      expandBubble();
+    }
+  }, [location.pathname, bubbleEnabled, expandBubble]);
+
   // Global listener for post-session review prompts from process monitor.
-  // Instead of navigating to /assistant, store the review payload and open
-  // the bubble so the user can interact inline.
   useEventListener<PostSessionReviewPayload>(
     "post-session-review",
     (event) => {
@@ -60,7 +75,6 @@ export function AppLayout() {
         "pendingReview",
         JSON.stringify({ gameId, gameName, durationMinutes }),
       );
-      // If bubble is enabled, open it instead of navigating away
       if (bubbleEnabled) {
         expandBubble();
       } else {

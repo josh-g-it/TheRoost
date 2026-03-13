@@ -1,7 +1,5 @@
 use std::sync::{Arc, Mutex};
 
-use tauri::Emitter;
-
 use crate::services::ai::conversation;
 use crate::services::ai::encryption;
 use crate::services::cache_db::CacheDbHandle;
@@ -37,6 +35,9 @@ pub struct ConversationTimerState {
     pub avatar_id: Option<String>,
     pub remaining_seconds: u64,
     pub is_paused: bool,
+    /// True when the user is actively viewing the conversation (bubble open or on /assistant).
+    /// Independent of `is_paused` (game sessions). Timer won't count down if either is true.
+    pub is_viewing: bool,
     cancel_tx: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
@@ -47,6 +48,7 @@ impl Default for ConversationTimerState {
             avatar_id: None,
             remaining_seconds: DEFAULT_TIMEOUT_SECONDS,
             is_paused: false,
+            is_viewing: false,
             cancel_tx: None,
         }
     }
@@ -86,6 +88,7 @@ pub fn start_timer(
         state.avatar_id = Some(avatar_id.to_string());
         state.remaining_seconds = DEFAULT_TIMEOUT_SECONDS;
         state.is_paused = true;
+        state.is_viewing = false;
         state.cancel_tx = Some(cancel_tx);
     }
 
@@ -135,14 +138,14 @@ async fn timer_loop(
                 }
             };
 
-            // Only decrement if not paused
-            if !state.is_paused && state.remaining_seconds > 0 {
+            // Only decrement if not paused and not being viewed
+            if !state.is_paused && !state.is_viewing && state.remaining_seconds > 0 {
                 state.remaining_seconds -= 1;
             }
 
             let remaining = state.remaining_seconds;
-            let is_paused = state.is_paused;
-            let expired = remaining == 0 && !is_paused;
+            let is_paused = state.is_paused || state.is_viewing;
+            let expired = remaining == 0 && !state.is_paused && !state.is_viewing;
 
             // Emit on first tick, every TICK_EMIT_INTERVAL ticks, and on expiry
             let should_emit =
@@ -157,7 +160,7 @@ async fn timer_loop(
                 remaining_seconds: remaining,
                 is_paused,
             };
-            let _ = app_handle.emit("conversation-timer-tick", &payload);
+            conversation::emit_safe(&app_handle, "conversation-timer-tick", &payload);
         }
 
         if expired {
@@ -182,7 +185,7 @@ async fn timer_loop(
             let auto_payload = AutoEndedPayload {
                 conversation_id: conversation_id.clone(),
             };
-            let _ = app_handle.emit("conversation-auto-ended", &auto_payload);
+            conversation::emit_safe(&app_handle, "conversation-auto-ended", &auto_payload);
 
             // Only emit conversation-ended if the conversation was actually ended in DB
             if auto_end_succeeded {
@@ -190,7 +193,7 @@ async fn timer_loop(
                     conversation_id: conversation_id.clone(),
                     reason: "timer".to_string(),
                 };
-                let _ = app_handle.emit("ai-conversation-ended", &ended_payload);
+                conversation::emit_safe(&app_handle, "ai-conversation-ended", &ended_payload);
             }
 
             // Clear timer state
@@ -199,6 +202,7 @@ async fn timer_loop(
                 state.avatar_id = None;
                 state.remaining_seconds = DEFAULT_TIMEOUT_SECONDS;
                 state.is_paused = false;
+                state.is_viewing = false;
                 state.cancel_tx = None;
             }
 
@@ -271,6 +275,16 @@ pub fn resume_timer(timer: &ConversationTimerHandle) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Set the viewing flag (called when user opens/closes the bubble or visits/leaves /assistant).
+/// While viewing, the timer does not count down but remaining time is preserved.
+pub fn set_viewing(timer: &ConversationTimerHandle, viewing: bool) -> Result<(), AppError> {
+    let mut state = timer.lock_or_err("ConversationTimer")?;
+    if state.conversation_id.is_some() {
+        state.is_viewing = viewing;
+    }
+    Ok(())
+}
+
 /// Stop the timer entirely (called when the user manually ends a conversation).
 pub fn stop_timer(timer: &ConversationTimerHandle) -> Result<(), AppError> {
     let mut state = timer.lock_or_err("ConversationTimer")?;
@@ -281,6 +295,7 @@ pub fn stop_timer(timer: &ConversationTimerHandle) -> Result<(), AppError> {
     state.avatar_id = None;
     state.remaining_seconds = DEFAULT_TIMEOUT_SECONDS;
     state.is_paused = false;
+    state.is_viewing = false;
     Ok(())
 }
 

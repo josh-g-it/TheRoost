@@ -70,6 +70,8 @@ describe("BackupRestoreSection", () => {
       settingsSizeBytes: 1024 * 50,
       artFileCount: 5,
       artTotalBytes: 1024 * 1024 * 2,
+      spriteFileCount: 0,
+      spriteTotalBytes: 0,
     });
 
     render(<BackupRestoreSection />);
@@ -88,6 +90,8 @@ describe("BackupRestoreSection", () => {
       settingsSizeBytes: 1024 * 50,
       artFileCount: 5,
       artTotalBytes: 1024 * 1024 * 2,
+      spriteFileCount: 0,
+      spriteTotalBytes: 0,
     });
 
     render(<BackupRestoreSection />);

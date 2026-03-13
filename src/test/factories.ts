@@ -11,6 +11,7 @@ import type {
   AiDailyLog,
   AiConversation,
   ResolvedAction,
+  SpriteInfo,
 } from "../types";
 import type { BackupManifest } from "../services/tauri";
 import type { ShelfConfig } from "../types/shelf";
@@ -179,6 +180,8 @@ export function makeAiAvatar(id: string, overrides?: Partial<AiAvatar>): AiAvata
     name: `Avatar ${id}`,
     personalityId: "p1",
     imagePath: null,
+    companionRoleId: null,
+    companionRoleCustom: null,
     isActive: true,
     createdAt: "2026-02-27T12:00:00Z",
     ...overrides,
@@ -310,7 +313,20 @@ export function makeBackupManifest(overrides?: Partial<BackupManifest>): BackupM
     settingsSizeBytes: 2048,
     artFileCount: 5,
     artTotalBytes: 500000,
+    spriteFileCount: 2,
+    spriteTotalBytes: 100000,
     credentialHints: [],
+    ...overrides,
+  };
+}
+
+export function makeSpriteInfo(overrides?: Partial<SpriteInfo>): SpriteInfo {
+  return {
+    filename: "prebuilt-default.png",
+    displayName: "Default",
+    source: "prebuilt",
+    fileSizeBytes: 524288,
+    createdAt: "2026-03-10 12:00:00",
     ...overrides,
   };
 }

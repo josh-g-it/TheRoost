@@ -59,8 +59,10 @@ pub async fn resolve_steam_account(input: String) -> Result<PlayerSummary, AppEr
 }
 
 /// Store the Steam API key in the OS credential manager (for use during first-run setup).
+///
+/// Must be `async` — credential store I/O.
 #[tauri::command]
-pub fn store_steam_api_key(key: String) -> Result<(), AppError> {
+pub async fn store_steam_api_key(key: String) -> Result<(), AppError> {
     if key.trim().is_empty() {
         return Err(AppError::Validation("API key cannot be empty".into()));
     }

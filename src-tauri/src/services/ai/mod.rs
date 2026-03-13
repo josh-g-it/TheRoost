@@ -13,4 +13,5 @@ pub mod memory;
 pub mod orchestrator;
 pub mod pattern_matcher;
 pub mod providers;
+pub mod sprite;
 pub mod types;

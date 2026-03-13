@@ -20,7 +20,6 @@ import {
   useMediaSession,
 } from "./components/overlay/OverlayMediaControls";
 import { OverlayAudioMixer } from "./components/overlay/OverlayAudioMixer";
-import { OverlayAssistant } from "./components/overlay/OverlayAssistant";
 import type { MediaControlsMode } from "./types";
 import { FloatingPanel } from "./components/overlay/FloatingPanel";
 import { OverlayBackdrop } from "./components/overlay/OverlayBackdrop";
@@ -127,12 +126,11 @@ export function OverlayApp() {
   }, [loadData]);
 
   // Re-fetch data when overlay regains focus (e.g. after toggling off/on).
-  // When focus is LOST (e.g. Steam/Discord/NVIDIA overlay steals it), re-claim it
-  // after a short delay — unless we intentionally hid the overlay.
+  // We do NOT reclaim focus when lost — that causes a rapid focus-fight loop
+  // between the overlay and main window that freezes the entire app.
   useEffect(() => {
     const win = getCurrentWindow();
     let isMounted = true;
-    let focusTimer: ReturnType<typeof setTimeout> | null = null;
     let unlistenFn: (() => void) | null = null;
 
     win
@@ -143,14 +141,6 @@ export function OverlayApp() {
           setIsOverlayVisible(true);
           // loadData has its own debounce guard — safe to call on focus
           loadData();
-        } else if (!hidingRef.current) {
-          // Focus was stolen by another overlay — reclaim after a short delay
-          if (focusTimer) clearTimeout(focusTimer);
-          focusTimer = setTimeout(() => {
-            if (!hidingRef.current) {
-              win.setFocus().catch(() => {});
-            }
-          }, 150);
         }
       })
       .then((fn) => {
@@ -160,7 +150,6 @@ export function OverlayApp() {
 
     return () => {
       isMounted = false;
-      if (focusTimer) clearTimeout(focusTimer);
       unlistenFn?.();
     };
   }, [loadData]);
@@ -279,6 +268,21 @@ export function OverlayApp() {
     setIsOverlayVisible(false);
     getCurrentWindow().hide();
   }, []);
+
+  // Global Escape key handler — close overlay.
+  // Uses capture phase so it fires BEFORE focused form elements (textarea, input)
+  // consume the event. Panel-specific Escape handlers (e.g. dropdown close in
+  // OverlayAssistant) also use capture and call stopPropagation to prevent this
+  // from also firing when they handle Escape themselves.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        hideOverlay();
+      }
+    };
+    window.addEventListener("keydown", handler, true); // capture phase
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [hideOverlay]);
 
   // ── Media controls dynamic visibility ─────────────────────────
   const mediaMode: MediaControlsMode =
@@ -544,34 +548,6 @@ export function OverlayApp() {
             otherPanelRects={buildOtherRects("audio-mixer")}
           >
             <OverlayAudioMixer />
-          </FloatingPanel>
-        );
-      })()}
-      {(() => {
-        const astDef = OVERLAY_PANELS.find((p) => p.id === "assistant")!;
-        const astSaved = panelPositions["assistant"];
-        const astVisible = astSaved?.visible ?? true;
-        if (!astVisible) return null;
-        const astPosition = astSaved
-          ? { x: astSaved.x, y: astSaved.y }
-          : astDef.defaultPosition();
-        return (
-          <FloatingPanel
-            key={`assistant-${resetKeys["assistant"] ?? 0}`}
-            panelId="assistant"
-            title="Assistant"
-            defaultPosition={astPosition}
-            pinned={astSaved?.pinned}
-            onPositionChange={panelCallbacks["assistant"].onPositionChange}
-            onClose={panelCallbacks["assistant"].onClose}
-            width={astSaved?.width ?? astDef.defaultWidth}
-            resizable
-            minWidth={300}
-            minHeight={350}
-            defaultHeight={astSaved?.height ?? astDef.defaultHeight}
-            otherPanelRects={buildOtherRects("assistant")}
-          >
-            <OverlayAssistant />
           </FloatingPanel>
         );
       })()}

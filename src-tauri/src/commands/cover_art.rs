@@ -24,18 +24,21 @@ pub async fn fetch_cover_art_batch(db: State<'_, CacheDbHandle>) -> Result<usize
     service.backfill_missing(100).await
 }
 
+/// Must be `async` — credential store access blocks the calling thread.
 #[tauri::command]
-pub fn store_sgdb_api_key(key: String) -> Result<(), AppError> {
+pub async fn store_sgdb_api_key(key: String) -> Result<(), AppError> {
     credential_store::store_sgdb_api_key(&key)
 }
 
+/// Must be `async` — credential store access blocks the calling thread.
 #[tauri::command]
-pub fn get_sgdb_key_status() -> Result<bool, AppError> {
+pub async fn get_sgdb_key_status() -> Result<bool, AppError> {
     Ok(credential_store::load_sgdb_api_key()?.is_some())
 }
 
+/// Must be `async` — credential store access blocks the calling thread.
 #[tauri::command]
-pub fn delete_sgdb_api_key() -> Result<(), AppError> {
+pub async fn delete_sgdb_api_key() -> Result<(), AppError> {
     credential_store::delete_sgdb_api_key()
 }
 
@@ -129,8 +132,10 @@ pub async fn crop_remote_art(
 }
 
 /// Remove custom art for a game+type. Deletes the file and DB row, reverting to default.
+///
+/// Must be `async` — DB lock + file I/O.
 #[tauri::command]
-pub fn remove_custom_art(
+pub async fn remove_custom_art(
     game_id: String,
     image_type: String,
     db: State<'_, CacheDbHandle>,
@@ -144,8 +149,10 @@ pub fn remove_custom_art(
 }
 
 /// Get art info for all 3 types for the Art Management Menu.
+///
+/// Must be `async` — DB lock.
 #[tauri::command]
-pub fn get_game_art_info(
+pub async fn get_game_art_info(
     game_id: String,
     db: State<'_, CacheDbHandle>,
 ) -> Result<Vec<GameArtInfo>, AppError> {
@@ -167,8 +174,10 @@ pub fn get_game_art_info(
 ///
 /// Path is validated to be within the app data directory to prevent
 /// path traversal attacks (01-M4).
+///
+/// Must be `async` — file I/O (reads image bytes from disk).
 #[tauri::command]
-pub fn read_image_base64(
+pub async fn read_image_base64(
     file_path: String,
     app_handle: tauri::AppHandle,
 ) -> Result<String, AppError> {

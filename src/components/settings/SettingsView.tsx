@@ -16,6 +16,7 @@ import { useConfirmDialog } from "../../hooks/useConfirmDialog";
 import { useSettingsStore } from "../../store/settingsSlice";
 import { useAppVersion } from "../../hooks/useAppVersion";
 import { useLibraryStore } from "../../store/librarySlice";
+import { useMetadataStore } from "../../store/metadataSlice";
 import {
   coverArtApi,
   cloudAiApi,
@@ -110,6 +111,10 @@ export function SettingsView() {
   const [showExportedKey, setShowExportedKey] = useState(false);
   const [exportedKey, setExportedKey] = useState("");
   const clipboardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // SteamSpy tag refresh state
+  const [tagRefreshing, setTagRefreshing] = useState(false);
+  const [tagMessage, setTagMessage] = useState<string | null>(null);
 
   // News source filtering state
   const [newsSources, setNewsSources] = useState<string[]>([]);
@@ -676,6 +681,41 @@ export function SettingsView() {
               </div>
               {sgdbMessage && (
                 <span className="settings-view__sgdb-message">{sgdbMessage}</span>
+              )}
+            </div>
+          </section>
+
+          <section className="settings-view__section">
+            <h3 className="settings-view__section-title">Game Tags (SteamSpy)</h3>
+            <p className="settings-view__section-desc">
+              Genre and tag data is fetched from SteamSpy and cached for 7 days. If tags
+              aren&rsquo;t showing in the library, the connection may have failed
+              silently. Use the button below to retry.
+            </p>
+            <div className="settings-view__field-row">
+              <Button
+                size="sm"
+                disabled={tagRefreshing}
+                loading={tagRefreshing}
+                onClick={async () => {
+                  setTagRefreshing(true);
+                  setTagMessage(null);
+                  try {
+                    const games = useLibraryStore.getState().library?.games ?? [];
+                    const gameIds = games.map((g) => g.gameId);
+                    await useMetadataStore.getState().refreshAllMetadata(gameIds);
+                    setTagMessage("Tags refreshed — return to Library to see them");
+                  } catch (e) {
+                    setTagMessage(`Failed: ${getErrorMessage(e)}`);
+                  } finally {
+                    setTagRefreshing(false);
+                  }
+                }}
+              >
+                Refresh Tags
+              </Button>
+              {tagMessage && (
+                <span className="settings-view__sgdb-message">{tagMessage}</span>
               )}
             </div>
           </section>

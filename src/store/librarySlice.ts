@@ -53,7 +53,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       } else {
         const msg = getErrorMessage(steamResult.reason);
         logger.warn("librarySlice", "library", "Steam scan failed", { error: msg });
-        warnings.push(`Steam scan failed: ${msg}`);
+        warnings.push(`Steam scan failed: ${msg}. Showing previously loaded games.`);
+        // Preserve previous Steam games so they don't disappear on API failure
+        const prev = get().library?.games ?? [];
+        games = prev.filter((g) => g.source === "steam");
       }
 
       if (externalResult.status === "fulfilled") {

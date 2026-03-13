@@ -1,5 +1,55 @@
 use serde::{Deserialize, Serialize};
 
+// ── Sprite Types ─────────────────────────────────────────────────
+
+/// Sprite metadata returned by list_sprites (filesystem scan)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpriteInfo {
+    pub filename: String,
+    pub display_name: String,
+    pub source: SpriteSource,
+    pub file_size_bytes: u64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SpriteSource {
+    Prebuilt,
+    Generated,
+    Uploaded,
+}
+
+/// Per-cell crop offsets stored in JSON sidecar
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpriteCropOffsets {
+    #[serde(default = "SpriteCropOffsets::default_version")]
+    pub version: u32,
+    pub cells: Vec<CellOffset>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct CellOffset {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl SpriteCropOffsets {
+    fn default_version() -> u32 {
+        1
+    }
+}
+
+impl Default for SpriteCropOffsets {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            cells: vec![CellOffset { x: 0, y: 0 }; 8],
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiPersonality {
@@ -17,8 +67,21 @@ pub struct AiAvatar {
     pub name: String,
     pub personality_id: String,
     pub image_path: Option<String>,
+    pub companion_role_id: Option<String>,
+    pub companion_role_custom: Option<String>,
     pub is_active: bool,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompanionRolePreset {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub system_prompt_text: String,
+    #[serde(default)]
+    pub is_builtin: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,6 +194,8 @@ mod tests {
             name: "TestBot".into(),
             personality_id: "p1".into(),
             image_path: None,
+            companion_role_id: Some("gaming-companion".into()),
+            companion_role_custom: None,
             is_active: true,
             created_at: "2026-02-27".into(),
         };
@@ -138,9 +203,30 @@ mod tests {
         assert!(json.contains("personalityId"));
         assert!(json.contains("isActive"));
         assert!(json.contains("imagePath"));
+        assert!(json.contains("companionRoleId"));
+        assert!(json.contains("companionRoleCustom"));
         assert!(!json.contains("personality_id"));
+        assert!(!json.contains("companion_role_id"));
         let back: AiAvatar = serde_json::from_str(&json).unwrap();
         assert_eq!(back.name, "TestBot");
+        assert_eq!(back.companion_role_id.as_deref(), Some("gaming-companion"));
+        assert!(back.companion_role_custom.is_none());
+    }
+
+    #[test]
+    fn test_companion_role_preset_serde() {
+        let role = super::CompanionRolePreset {
+            id: "gaming-companion".into(),
+            name: "Gaming Companion".into(),
+            description: "Balanced approach".into(),
+            system_prompt_text: "a gaming companion".into(),
+            is_builtin: true,
+        };
+        let json = serde_json::to_string(&role).unwrap();
+        assert!(json.contains("systemPromptText"));
+        assert!(!json.contains("system_prompt_text"));
+        let back: super::CompanionRolePreset = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.id, "gaming-companion");
     }
 
     #[test]

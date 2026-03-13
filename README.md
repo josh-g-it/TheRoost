@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.12.1-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/version-1.12.5-blue" alt="Version" />
   <img src="https://img.shields.io/badge/platform-Windows-0078D6" alt="Platform" />
   <img src="https://img.shields.io/badge/built_with-Tauri_v2-FFC131" alt="Tauri v2" />
   <img src="https://img.shields.io/badge/license-GPL--3.0-green" alt="License" />
@@ -46,10 +46,13 @@ The Roost is a multi-launcher game library manager for Windows. It brings togeth
 - **Per-source filtering** &mdash; Block unwanted news sources in Settings
 
 ### System Overlay
-- **Global hotkey HUD** (Ctrl+Space) with floating panels for quick commands, game notes, system monitor, media controls, and audio mixer
+- **Global hotkey HUD** (Ctrl+Space) with 5 floating panels: quick commands, game notes, system monitor, media controls, and audio mixer
 
 ### AI Assistant
-- **Persistent assistant bubble** &mdash; Always-accessible chat panel with auto-executing actions
+- **Persistent assistant bubble** &mdash; Draggable, resizable chat panel accessible from any page
+- **Avatar system** &mdash; Customizable AI companions with 8 personality tones and 8 companion roles
+- **Animated sprites** &mdash; 8-expression sprite maps with real-time expression changes (speaking, listening, happy, sad, interested, bored, sleepy)
+- **Sprite generation** &mdash; AI-generated character sprites via Gemini in 5 art styles (anime, pixel, cartoon, painterly, chibi)
 - **Natural language search** &mdash; "installed RPGs sorted by playtime" resolves instantly into library actions
 - **Optional cloud AI** (Gemini Flash) for recommendations, conversational queries, and game journals
 - **40+ actions** for navigation, themes, fonts, icon sets, view modes, sorting, and more
@@ -78,7 +81,7 @@ The Roost is a multi-launcher game library manager for Windows. It brings togeth
 | Frontend | React 18, TypeScript, Vite |
 | State | Zustand |
 | Charts | Recharts |
-| Testing | Vitest + Rust unit tests (1,406 total) |
+| Testing | Vitest + Rust unit tests (1,443 total) |
 
 ## Installation
 

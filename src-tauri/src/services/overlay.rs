@@ -84,7 +84,8 @@ pub fn create_overlay(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>>
     .inner_size(width, height)
     .position(x, y)
     .decorations(false)
-    .transparent(true)
+    // TEMP: disable transparency to test async fixes in isolation
+    // .transparent(true)
     .always_on_top(true)
     .skip_taskbar(true)
     .shadow(false)

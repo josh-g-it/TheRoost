@@ -15,6 +15,8 @@ vi.mock("@tauri-apps/api/event", () => ({
     listenCallbacks[eventName] = callback;
     return Promise.resolve(mockUnlisten);
   }),
+  emit: vi.fn(() => Promise.resolve()),
+  emitTo: vi.fn(() => Promise.resolve()),
 }));
 
 const mockGetActiveAvatar = vi.fn();
@@ -54,6 +56,7 @@ vi.mock("../../services/tauri", () => ({
     stopConversationTimer: vi.fn().mockResolvedValue(undefined),
     resetConversationTimer: vi.fn().mockResolvedValue(undefined),
     getConversationTimerState: vi.fn().mockResolvedValue(null),
+    setConversationTimerViewing: vi.fn().mockResolvedValue(undefined),
     checkOrphanedConversations: (...args: unknown[]) =>
       mockCheckOrphanedConversations(...args),
     getCompactionPendingConversations: (...args: unknown[]) =>
@@ -61,6 +64,11 @@ vi.mock("../../services/tauri", () => ({
     retryCompaction: (...args: unknown[]) => mockRetryCompaction(...args),
     getCompactionRawData: (...args: unknown[]) => mockGetCompactionRawData(...args),
     applyExternalCompaction: (...args: unknown[]) => mockApplyExternalCompaction(...args),
+    listCompanionRoles: vi.fn().mockResolvedValue([]),
+  },
+  spriteApi: {
+    listSprites: vi.fn().mockResolvedValue([]),
+    readSprite: vi.fn().mockRejectedValue(new Error("not found")),
   },
 }));
 
@@ -121,7 +129,7 @@ describe("AssistantView", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Create Your Assistant")).toBeInTheDocument();
+      expect(screen.getByText("Name Your Assistant")).toBeInTheDocument();
     });
   });
 
@@ -144,7 +152,7 @@ describe("AssistantView", () => {
     });
   });
 
-  it("shows avatar name and personality", async () => {
+  it("shows avatar name in chat hero header", async () => {
     mockGetActiveAvatar.mockResolvedValue(
       makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
     );
@@ -157,11 +165,10 @@ describe("AssistantView", () => {
 
     await waitFor(() => {
       expect(screen.getAllByText("Buddy").length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText("Friendly")).toBeInTheDocument();
     });
   });
 
-  it("shows colored avatar circle with initial letter", async () => {
+  it("shows monogram fallback in chat hero when no sprite", async () => {
     mockGetActiveAvatar.mockResolvedValue(
       makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
     );
@@ -174,22 +181,6 @@ describe("AssistantView", () => {
 
     await waitFor(() => {
       expect(screen.getByText("B")).toBeInTheDocument();
-    });
-  });
-
-  it("shows conversation status indicator", async () => {
-    mockGetActiveAvatar.mockResolvedValue(
-      makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
-    );
-
-    render(
-      <ConversationProvider>
-        <AssistantView />
-      </ConversationProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("In conversation")).toBeInTheDocument();
     });
   });
 
@@ -247,8 +238,9 @@ describe("AssistantView", () => {
       </ConversationProvider>,
     );
 
+    // Wait for initial conversation to start
     await waitFor(() => {
-      expect(screen.getByText("In conversation")).toBeInTheDocument();
+      expect(mockStartConversation).toHaveBeenCalledTimes(1);
     });
 
     // Simulate the conversation-ended event with reason: manual
@@ -263,7 +255,7 @@ describe("AssistantView", () => {
     });
   });
 
-  it("shows Idle status when auto-restart after manual end fails", async () => {
+  it("auto-restart after manual end handles failure gracefully", async () => {
     mockGetActiveAvatar.mockResolvedValue(
       makeAiAvatar("a1", { name: "Buddy", personalityId: "p1" }),
     );
@@ -277,8 +269,9 @@ describe("AssistantView", () => {
       </ConversationProvider>,
     );
 
+    // Wait for initial conversation to start
     await waitFor(() => {
-      expect(screen.getByText("In conversation")).toBeInTheDocument();
+      expect(mockStartConversation).toHaveBeenCalledTimes(1);
     });
 
     await act(async () => {
@@ -287,10 +280,10 @@ describe("AssistantView", () => {
       });
     });
 
+    // Restart was attempted but failed
     await waitFor(() => {
-      expect(screen.getByText("Idle")).toBeInTheDocument();
+      expect(mockStartConversation).toHaveBeenCalledTimes(2);
     });
-    expect(screen.queryByText("In conversation")).not.toBeInTheDocument();
   });
 
   it("does NOT auto-restart on timer auto-end", async () => {
@@ -304,8 +297,9 @@ describe("AssistantView", () => {
       </ConversationProvider>,
     );
 
+    // Wait for initial conversation to start
     await waitFor(() => {
-      expect(screen.getByText("In conversation")).toBeInTheDocument();
+      expect(mockStartConversation).toHaveBeenCalledTimes(1);
     });
 
     // Simulate the conversation-ended event with reason: timer
@@ -317,11 +311,6 @@ describe("AssistantView", () => {
 
     // startConversation should have been called only once (initial load)
     expect(mockStartConversation).toHaveBeenCalledTimes(1);
-
-    await waitFor(() => {
-      expect(screen.getByText("Idle")).toBeInTheDocument();
-    });
-    expect(screen.queryByText("In conversation")).not.toBeInTheDocument();
   });
 
   // ── Phase 10: Orphan Recovery Tests ──────────────────────────────
