@@ -9,8 +9,6 @@ use crate::utils::error::AppError;
 const MAX_IMAGE_BYTES: usize = 10 * 1024 * 1024;
 /// Images are resized so the longest side is at most this many pixels.
 const MAX_DIMENSION: u32 = 768;
-/// JPEG quality for re-encoded images (0-100).
-const JPEG_QUALITY: u8 = 85;
 
 /// Result of preparing an image for chat attachment.
 #[derive(Debug, Clone, Serialize, Deserialize)]

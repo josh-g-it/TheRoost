@@ -4149,6 +4149,7 @@ impl CacheDb {
 
     /// Update an existing AI avatar's mutable fields.
     /// Only non-None fields are updated. Returns the updated avatar.
+    #[allow(clippy::too_many_arguments)]
     pub fn update_ai_avatar(
         &self,
         avatar_id: &str,
@@ -5112,6 +5113,7 @@ impl CacheDb {
     /// Store a user message + assistant response pair and update message count.
     /// Wrapped in a transaction for atomicity.
     /// Store a user+assistant message pair. Returns the user message ID (if stored).
+    #[allow(clippy::too_many_arguments)]
     pub fn store_message_pair(
         &self,
         conversation_id: &str,

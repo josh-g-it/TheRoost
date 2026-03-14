@@ -496,6 +496,7 @@ pub async fn delete_companion_role(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn update_avatar(
     avatar_id: String,
     name: Option<String>,
@@ -867,13 +868,10 @@ pub async fn get_conversation_history(
     for row in rows {
         let content = encryption::decrypt_field(&row.content, &key)?;
         // Decrypt attachments JSON if present (encrypted like content)
-        let attachments = match &row.attachments {
-            Some(enc) => match encryption::decrypt_field(enc, &key) {
-                Ok(json) => Some(json),
-                Err(_) => None, // Gracefully skip if decryption fails
-            },
-            None => None,
-        };
+        let attachments = row
+            .attachments
+            .as_ref()
+            .and_then(|enc| encryption::decrypt_field(enc, &key).ok());
         messages.push(AiMessage {
             id: row.id,
             conversation_id: row.conversation_id,
