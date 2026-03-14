@@ -28,8 +28,7 @@ export function useImageAttachment() {
       const paths = Array.isArray(selected) ? selected : [selected];
       preparingRef.current += paths.length;
       setPreparingCount((c) => c + paths.length);
-      for (const path of paths) {
-        const filePath = typeof path === "string" ? path : path.path;
+      for (const filePath of paths) {
         try {
           const prepared = await assistantApi.prepareChatImage(filePath);
           setPendingImages((prev) => {

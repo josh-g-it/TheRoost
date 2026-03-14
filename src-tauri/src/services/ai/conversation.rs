@@ -308,14 +308,10 @@ pub fn assemble_context(
     let most_recent_image_idx: Option<usize> = if new_message_has_images {
         None // Force all history images to use captions
     } else {
-        included_indices
-            .iter()
-            .rev()
-            .copied()
-            .find(|&i| {
-                let (msg, _) = &decrypted[i];
-                msg.role == "user" && msg.attachments.is_some()
-            })
+        included_indices.iter().rev().copied().find(|&i| {
+            let (msg, _) = &decrypted[i];
+            msg.role == "user" && msg.attachments.is_some()
+        })
     };
 
     let messages: Vec<ChatMessage> = included_indices
@@ -330,36 +326,35 @@ pub fn assemble_context(
             };
 
             // Decrypt and attach images for context
-            let (content, chat_attachments) =
-                if msg.role == "user" && msg.attachments.is_some() {
-                    // Try to decrypt attachments JSON
-                    let decrypted_atts: Vec<ImageAttachment> = msg
-                        .attachments
-                        .as_ref()
-                        .and_then(|enc| decrypt_field(enc, key).ok())
-                        .and_then(|json| serde_json::from_str(&json).ok())
-                        .unwrap_or_default();
+            let (content, chat_attachments) = if msg.role == "user" && msg.attachments.is_some() {
+                // Try to decrypt attachments JSON
+                let decrypted_atts: Vec<ImageAttachment> = msg
+                    .attachments
+                    .as_ref()
+                    .and_then(|enc| decrypt_field(enc, key).ok())
+                    .and_then(|json| serde_json::from_str(&json).ok())
+                    .unwrap_or_default();
 
-                    if Some(i) == most_recent_image_idx {
-                        // Most recent: send full image data to the LLM
-                        (msg.content.clone(), decrypted_atts)
-                    } else {
-                        // Older: replace images with caption placeholders in message text
-                        let mut text = msg.content.clone();
-                        for att in &decrypted_atts {
-                            let placeholder = match &att.caption {
-                                Some(cap) if !cap.is_empty() => {
-                                    format!("\n[User shared an image: \"{cap}\"]")
-                                }
-                                _ => "\n[User shared an image]".to_string(),
-                            };
-                            text.push_str(&placeholder);
-                        }
-                        (text, vec![])
-                    }
+                if Some(i) == most_recent_image_idx {
+                    // Most recent: send full image data to the LLM
+                    (msg.content.clone(), decrypted_atts)
                 } else {
-                    (msg.content.clone(), vec![])
-                };
+                    // Older: replace images with caption placeholders in message text
+                    let mut text = msg.content.clone();
+                    for att in &decrypted_atts {
+                        let placeholder = match &att.caption {
+                            Some(cap) if !cap.is_empty() => {
+                                format!("\n[User shared an image: \"{cap}\"]")
+                            }
+                            _ => "\n[User shared an image]".to_string(),
+                        };
+                        text.push_str(&placeholder);
+                    }
+                    (text, vec![])
+                }
+            } else {
+                (msg.content.clone(), vec![])
+            };
 
             ChatMessage {
                 role,
@@ -449,7 +444,14 @@ pub async fn send_message_and_collect(
     // Step 1: Build context (under lock)
     let (mut system_prompt, mut messages) = {
         let db_guard = db.lock_or_err("DB")?;
-        assemble_context(&db_guard, conv_id, avatar_id, key, settings, !attachments.is_empty())?
+        assemble_context(
+            &db_guard,
+            conv_id,
+            avatar_id,
+            key,
+            settings,
+            !attachments.is_empty(),
+        )?
     }; // lock dropped
 
     // Append page context
@@ -1007,7 +1009,8 @@ mod tests {
 
         // Insert a user message
         let enc = crate::services::ai::encryption::encrypt_field("hello", &TEST_KEY).unwrap();
-        db.insert_ai_message(&conv.id, "user", &enc, 2, None).unwrap();
+        db.insert_ai_message(&conv.id, "user", &enc, 2, None)
+            .unwrap();
 
         let settings = AppSettings::default();
         let (system_prompt, _messages) =
@@ -1028,10 +1031,12 @@ mod tests {
         let enc2 = encrypt_field("second", &TEST_KEY).unwrap();
         let enc3 = encrypt_field("third", &TEST_KEY).unwrap();
 
-        db.insert_ai_message(&conv.id, "user", &enc1, 1, None).unwrap();
+        db.insert_ai_message(&conv.id, "user", &enc1, 1, None)
+            .unwrap();
         db.insert_ai_message(&conv.id, "assistant", &enc2, 1, None)
             .unwrap();
-        db.insert_ai_message(&conv.id, "user", &enc3, 1, None).unwrap();
+        db.insert_ai_message(&conv.id, "user", &enc3, 1, None)
+            .unwrap();
 
         let settings = AppSettings::default();
         let (_prompt, messages) =
@@ -1058,7 +1063,8 @@ mod tests {
         for i in 0..60 {
             let role = if i % 2 == 0 { "user" } else { "assistant" };
             let enc = encrypt_field(&big_text, &TEST_KEY).unwrap();
-            db.insert_ai_message(&conv.id, role, &enc, 333, None).unwrap();
+            db.insert_ai_message(&conv.id, role, &enc, 333, None)
+                .unwrap();
         }
 
         let settings = AppSettings::default();
@@ -1088,7 +1094,8 @@ mod tests {
 
         // Insert a user message so assemble_context has something to work with
         let enc = encrypt_field("hello", &TEST_KEY).unwrap();
-        db.insert_ai_message(&conv.id, "user", &enc, 2, None).unwrap();
+        db.insert_ai_message(&conv.id, "user", &enc, 2, None)
+            .unwrap();
 
         let settings = AppSettings::default();
         let (system_prompt, _messages) =
@@ -1106,7 +1113,8 @@ mod tests {
         let conv = db.create_ai_conversation(&avatar_id).unwrap();
 
         let enc = encrypt_field("hello", &TEST_KEY).unwrap();
-        db.insert_ai_message(&conv.id, "user", &enc, 2, None).unwrap();
+        db.insert_ai_message(&conv.id, "user", &enc, 2, None)
+            .unwrap();
 
         let settings = AppSettings::default();
         let (system_prompt, _messages) =
@@ -1125,7 +1133,8 @@ mod tests {
         // Insert only 2 messages
         let enc1 = encrypt_field("hello", &TEST_KEY).unwrap();
         let enc2 = encrypt_field("hi there!", &TEST_KEY).unwrap();
-        db.insert_ai_message(&conv.id, "user", &enc1, 2, None).unwrap();
+        db.insert_ai_message(&conv.id, "user", &enc1, 2, None)
+            .unwrap();
         db.insert_ai_message(&conv.id, "assistant", &enc2, 3, None)
             .unwrap();
 
@@ -1375,7 +1384,8 @@ mod tests {
             let role = if i % 2 == 0 { "user" } else { "assistant" };
             let large_msg = "x".repeat(1000); // 1000 chars each
             let enc = encrypt_field(&large_msg, &TEST_KEY).unwrap();
-            db.insert_ai_message(&conv.id, role, &enc, 333, None).unwrap();
+            db.insert_ai_message(&conv.id, role, &enc, 333, None)
+                .unwrap();
         }
 
         let settings = AppSettings::default();

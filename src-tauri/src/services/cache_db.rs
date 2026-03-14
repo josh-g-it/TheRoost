@@ -8379,11 +8379,15 @@ mod tests {
             .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
             .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
-        let id1 = db.insert_ai_message(&conv.id, "user", "msg1", 10, None).unwrap();
+        let id1 = db
+            .insert_ai_message(&conv.id, "user", "msg1", 10, None)
+            .unwrap();
         let id2 = db
             .insert_ai_message(&conv.id, "assistant", "msg2", 20, None)
             .unwrap();
-        let id3 = db.insert_ai_message(&conv.id, "user", "msg3", 10, None).unwrap();
+        let id3 = db
+            .insert_ai_message(&conv.id, "user", "msg3", 10, None)
+            .unwrap();
         // Delete only first two
         db.delete_ai_messages_by_ids(&[id1, id2]).unwrap();
         let remaining = db.get_ai_messages_raw(&conv.id).unwrap();
@@ -8439,7 +8443,8 @@ mod tests {
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
         // Insert some messages first
-        db.insert_ai_message(&conv.id, "user", "msg1", 10, None).unwrap();
+        db.insert_ai_message(&conv.id, "user", "msg1", 10, None)
+            .unwrap();
         db.insert_ai_message(&conv.id, "assistant", "msg2", 20, None)
             .unwrap();
 
@@ -8515,10 +8520,12 @@ mod tests {
         let conv2 = db.create_ai_conversation(&avatar.id).unwrap();
 
         // Insert messages in both conversations
-        db.insert_ai_message(&conv1.id, "user", "msg1", 5, None).unwrap();
+        db.insert_ai_message(&conv1.id, "user", "msg1", 5, None)
+            .unwrap();
         db.insert_ai_message(&conv1.id, "assistant", "msg2", 5, None)
             .unwrap();
-        db.insert_ai_message(&conv2.id, "user", "msg3", 5, None).unwrap();
+        db.insert_ai_message(&conv2.id, "user", "msg3", 5, None)
+            .unwrap();
 
         // Set message_count on conv1 so we can verify it gets reset
         db.update_ai_conversation_message_count(&conv1.id, 2)
@@ -8606,7 +8613,8 @@ mod tests {
             .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
-        db.insert_ai_message(&conv.id, "user", "hi", 2, None).unwrap();
+        db.insert_ai_message(&conv.id, "user", "hi", 2, None)
+            .unwrap();
 
         assert!(db.has_user_messages(&conv.id).unwrap());
     }
@@ -8661,7 +8669,8 @@ mod tests {
         let journal_enc = crate::services::ai::encryption::encrypt_field("journal", &key).unwrap();
         // Insert a message so compaction has something to process
         let msg_enc = crate::services::ai::encryption::encrypt_field("hello", &key).unwrap();
-        db.insert_ai_message(&conv.id, "user", &msg_enc, 2, None).unwrap();
+        db.insert_ai_message(&conv.id, "user", &msg_enc, 2, None)
+            .unwrap();
         db.complete_compaction(&conv.id, &avatar.id, &summary_enc, &journal_enc, &[], &[])
             .unwrap();
 
@@ -8681,7 +8690,8 @@ mod tests {
         // Insert a message
         let key = [0u8; 32];
         let msg_enc = crate::services::ai::encryption::encrypt_field("hello", &key).unwrap();
-        db.insert_ai_message(&conv.id, "user", &msg_enc, 2, None).unwrap();
+        db.insert_ai_message(&conv.id, "user", &msg_enc, 2, None)
+            .unwrap();
 
         // End the conversation (but don't compact — simulates compaction failure)
         db.end_ai_conversation(&conv.id).unwrap();
@@ -8747,7 +8757,8 @@ mod tests {
         let key = [0u8; 32];
         let msg1 = crate::services::ai::encryption::encrypt_field("hello", &key).unwrap();
         let msg2 = crate::services::ai::encryption::encrypt_field("world", &key).unwrap();
-        db.insert_ai_message(&conv.id, "user", &msg1, 2, None).unwrap();
+        db.insert_ai_message(&conv.id, "user", &msg1, 2, None)
+            .unwrap();
         db.insert_ai_message(&conv.id, "assistant", &msg2, 2, None)
             .unwrap();
 
