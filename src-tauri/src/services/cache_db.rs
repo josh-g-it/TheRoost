@@ -277,6 +277,8 @@ pub struct AiMessageRow {
     pub role: String,
     pub content: String,
     pub created_at: String,
+    /// Encrypted JSON array of image attachments, or None.
+    pub attachments: Option<String>,
     pub token_estimate: u32,
 }
 
@@ -398,6 +400,12 @@ impl CacheDb {
         }
         if current < 26 {
             self.apply_v26()?;
+        }
+        if current < 27 {
+            self.apply_v27()?;
+        }
+        if current < 28 {
+            self.apply_v28()?;
         }
 
         // v1.12.5: Add companion role columns + new personality tones (idempotent)
@@ -1333,6 +1341,32 @@ impl CacheDb {
 
             INSERT OR REPLACE INTO schema_version (version, applied_at)
                 VALUES (26, datetime('now'));",
+        )?;
+        Ok(())
+    }
+
+    /// v27: Add nullable `attachments` column to `ai_messages` for image attachments.
+    /// Stores encrypted JSON array of `[{mimeType, data, caption?}]`.
+    fn apply_v27(&self) -> Result<(), AppError> {
+        self.conn.execute_batch(
+            "ALTER TABLE ai_messages ADD COLUMN attachments TEXT DEFAULT NULL;
+
+            INSERT OR REPLACE INTO schema_version (version, applied_at)
+                VALUES (27, datetime('now'));",
+        )?;
+        Ok(())
+    }
+
+    /// v28: Add cross-avatar memory sharing columns to `ai_avatars`.
+    /// `cross_avatar_memory_access`: whether this avatar receives cross-avatar memories (default 1 = true)
+    /// `cross_avatar_memory_private`: whether this avatar's memories are hidden from others (default 0 = false)
+    fn apply_v28(&self) -> Result<(), AppError> {
+        self.conn.execute_batch(
+            "ALTER TABLE ai_avatars ADD COLUMN cross_avatar_memory_access INTEGER DEFAULT 1;
+             ALTER TABLE ai_avatars ADD COLUMN cross_avatar_memory_private INTEGER DEFAULT 0;
+
+            INSERT OR REPLACE INTO schema_version (version, applied_at)
+                VALUES (28, datetime('now'));",
         )?;
         Ok(())
     }
@@ -3999,7 +4033,8 @@ impl CacheDb {
     pub fn list_ai_avatars(&self) -> Result<Vec<AiAvatar>, AppError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, personality_id, image_path, companion_role_id,
-                    companion_role_custom, is_active, created_at
+                    companion_role_custom, is_active, created_at,
+                    cross_avatar_memory_access, cross_avatar_memory_private
              FROM ai_avatars
              ORDER BY is_active DESC, created_at ASC",
         )?;
@@ -4014,6 +4049,8 @@ impl CacheDb {
                     companion_role_custom: row.get(5)?,
                     is_active: row.get::<_, i32>(6)? != 0,
                     created_at: row.get(7)?,
+                    cross_avatar_memory_access: row.get::<_, i32>(8).unwrap_or(1) != 0,
+                    cross_avatar_memory_private: row.get::<_, i32>(9).unwrap_or(0) != 0,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -4024,7 +4061,8 @@ impl CacheDb {
     pub fn get_active_ai_avatar(&self) -> Result<Option<AiAvatar>, AppError> {
         let result = self.conn.query_row(
             "SELECT id, name, personality_id, image_path, companion_role_id,
-                    companion_role_custom, is_active, created_at
+                    companion_role_custom, is_active, created_at,
+                    cross_avatar_memory_access, cross_avatar_memory_private
              FROM ai_avatars WHERE is_active = 1",
             [],
             |row| {
@@ -4037,6 +4075,8 @@ impl CacheDb {
                     companion_role_custom: row.get(5)?,
                     is_active: true,
                     created_at: row.get(7)?,
+                    cross_avatar_memory_access: row.get::<_, i32>(8).unwrap_or(1) != 0,
+                    cross_avatar_memory_private: row.get::<_, i32>(9).unwrap_or(0) != 0,
                 })
             },
         );
@@ -4102,6 +4142,8 @@ impl CacheDb {
             companion_role_custom: companion_role_custom.map(|s| s.to_string()),
             is_active: false,
             created_at,
+            cross_avatar_memory_access: true,
+            cross_avatar_memory_private: false,
         })
     }
 
@@ -4115,6 +4157,8 @@ impl CacheDb {
         image_path: Option<Option<&str>>,
         companion_role_id: Option<Option<&str>>,
         companion_role_custom: Option<Option<&str>>,
+        cross_avatar_memory_access: Option<bool>,
+        cross_avatar_memory_private: Option<bool>,
     ) -> Result<AiAvatar, AppError> {
         // Build dynamic SET clauses
         let mut sets: Vec<String> = Vec::new();
@@ -4139,6 +4183,14 @@ impl CacheDb {
         if let Some(rc) = companion_role_custom {
             sets.push(format!("companion_role_custom = ?{}", sets.len() + 1));
             param_values.push(Box::new(rc.map(|s| s.to_string())));
+        }
+        if let Some(access) = cross_avatar_memory_access {
+            sets.push(format!("cross_avatar_memory_access = ?{}", sets.len() + 1));
+            param_values.push(Box::new(access as i32));
+        }
+        if let Some(private) = cross_avatar_memory_private {
+            sets.push(format!("cross_avatar_memory_private = ?{}", sets.len() + 1));
+            param_values.push(Box::new(private as i32));
         }
 
         if sets.is_empty() {
@@ -4172,7 +4224,8 @@ impl CacheDb {
     pub fn get_ai_avatar_by_id(&self, avatar_id: &str) -> Result<AiAvatar, AppError> {
         let result = self.conn.query_row(
             "SELECT id, name, personality_id, image_path, companion_role_id,
-                    companion_role_custom, is_active, created_at
+                    companion_role_custom, is_active, created_at,
+                    cross_avatar_memory_access, cross_avatar_memory_private
              FROM ai_avatars WHERE id = ?1",
             params![avatar_id],
             |row| {
@@ -4185,6 +4238,8 @@ impl CacheDb {
                     companion_role_custom: row.get(5)?,
                     is_active: row.get::<_, i32>(6)? != 0,
                     created_at: row.get(7)?,
+                    cross_avatar_memory_access: row.get::<_, i32>(8).unwrap_or(1) != 0,
+                    cross_avatar_memory_private: row.get::<_, i32>(9).unwrap_or(0) != 0,
                 })
             },
         );
@@ -4320,6 +4375,7 @@ impl CacheDb {
              FROM ai_memories m
              JOIN ai_avatars a ON m.avatar_id = a.id
              WHERE m.avatar_id != ?1 AND m.active = 1 AND m.importance >= 6 AND m.is_system = 0
+               AND COALESCE(a.cross_avatar_memory_private, 0) = 0
              ORDER BY m.importance DESC
              LIMIT ?2",
         )?;
@@ -4591,10 +4647,11 @@ impl CacheDb {
         summary_encrypted: &str,
     ) -> Result<String, AppError> {
         let id = Uuid::new_v4().to_string();
+        let created_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
         self.conn.execute(
             "INSERT INTO ai_daily_log (id, avatar_id, conversation_id, log_date, summary, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))",
-            params![id, avatar_id, conversation_id, log_date, summary_encrypted],
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id, avatar_id, conversation_id, log_date, summary_encrypted, created_at],
         )?;
         Ok(id)
     }
@@ -4637,6 +4694,17 @@ impl CacheDb {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(AppError::Database(e)),
         }
+    }
+
+    /// Check whether an avatar has any ended (completed) conversations.
+    /// Returns `true` if this avatar has never finished a conversation — i.e. it's brand new.
+    pub fn is_avatar_first_conversation(&self, avatar_id: &str) -> Result<bool, AppError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM ai_conversations WHERE avatar_id = ?1 AND ended_at IS NOT NULL",
+            params![avatar_id],
+            |row| row.get(0),
+        )?;
+        Ok(count == 0)
     }
 
     /// Create a new conversation with a generated UUID.
@@ -4709,12 +4777,13 @@ impl CacheDb {
         role: &str,
         content_encrypted: &str,
         token_estimate: u32,
+        attachments_encrypted: Option<&str>,
     ) -> Result<String, AppError> {
         let id = Uuid::new_v4().to_string();
         self.conn.execute(
-            "INSERT INTO ai_messages (id, conversation_id, role, content, created_at, token_estimate)
-             VALUES (?1, ?2, ?3, ?4, datetime('now'), ?5)",
-            params![id, conversation_id, role, content_encrypted, token_estimate],
+            "INSERT INTO ai_messages (id, conversation_id, role, content, created_at, token_estimate, attachments)
+             VALUES (?1, ?2, ?3, ?4, datetime('now'), ?5, ?6)",
+            params![id, conversation_id, role, content_encrypted, token_estimate, attachments_encrypted],
         )?;
         Ok(id)
     }
@@ -4725,7 +4794,7 @@ impl CacheDb {
         conversation_id: &str,
     ) -> Result<Vec<AiMessageRow>, AppError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, conversation_id, role, content, created_at, token_estimate
+            "SELECT id, conversation_id, role, content, created_at, token_estimate, attachments
              FROM ai_messages
              WHERE conversation_id = ?1
              ORDER BY created_at ASC",
@@ -4738,11 +4807,25 @@ impl CacheDb {
                     role: row.get(2)?,
                     content: row.get(3)?,
                     created_at: row.get(4)?,
+                    attachments: row.get(6)?,
                     token_estimate: row.get(5)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
+    }
+
+    /// Update the attachments JSON for a specific message (e.g. to add captions).
+    pub fn update_message_attachments(
+        &self,
+        message_id: &str,
+        attachments_encrypted: &str,
+    ) -> Result<(), AppError> {
+        self.conn.execute(
+            "UPDATE ai_messages SET attachments = ?2 WHERE id = ?1",
+            params![message_id, attachments_encrypted],
+        )?;
+        Ok(())
     }
 
     /// Update message_count for a conversation.
@@ -4981,13 +5064,15 @@ impl CacheDb {
     ) -> Result<(), AppError> {
         let tx = self.conn.unchecked_transaction()?;
 
-        // Insert journal entry
-        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        // Insert journal entry — use local time so displayed timestamps match the user's clock
+        let now_local = chrono::Local::now();
+        let today = now_local.format("%Y-%m-%d").to_string();
+        let created_at = now_local.format("%Y-%m-%d %H:%M:%S").to_string();
         let journal_id = Uuid::new_v4().to_string();
         tx.execute(
             "INSERT INTO ai_daily_log (id, avatar_id, conversation_id, log_date, summary, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))",
-            params![journal_id, avatar_id, conv_id, today, journal_entry_encrypted],
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![journal_id, avatar_id, conv_id, today, journal_entry_encrypted, created_at],
         )?;
 
         // Insert new memories
@@ -5026,6 +5111,7 @@ impl CacheDb {
 
     /// Store a user message + assistant response pair and update message count.
     /// Wrapped in a transaction for atomicity.
+    /// Store a user+assistant message pair. Returns the user message ID (if stored).
     pub fn store_message_pair(
         &self,
         conversation_id: &str,
@@ -5034,17 +5120,21 @@ impl CacheDb {
         assistant_content_encrypted: &str,
         assistant_token_estimate: u32,
         skip_user_message: bool,
-    ) -> Result<(), AppError> {
+        user_attachments_encrypted: Option<&str>,
+    ) -> Result<Option<String>, AppError> {
         let tx = self.conn.unchecked_transaction()?;
 
-        if !skip_user_message {
-            let user_id = Uuid::new_v4().to_string();
+        let user_id = if !skip_user_message {
+            let id = Uuid::new_v4().to_string();
             tx.execute(
-                "INSERT INTO ai_messages (id, conversation_id, role, content, created_at, token_estimate)
-                 VALUES (?1, ?2, 'user', ?3, datetime('now'), ?4)",
-                params![user_id, conversation_id, user_content_encrypted, user_token_estimate],
+                "INSERT INTO ai_messages (id, conversation_id, role, content, created_at, token_estimate, attachments)
+                 VALUES (?1, ?2, 'user', ?3, datetime('now'), ?4, ?5)",
+                params![id, conversation_id, user_content_encrypted, user_token_estimate, user_attachments_encrypted],
             )?;
-        }
+            Some(id)
+        } else {
+            None
+        };
 
         let asst_id = Uuid::new_v4().to_string();
         tx.execute(
@@ -5065,7 +5155,7 @@ impl CacheDb {
         )?;
 
         tx.commit()?;
-        Ok(())
+        Ok(user_id)
     }
 
     /// Create a conversation with a specific timestamp. Test-only helper.
@@ -5246,7 +5336,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 26);
+        assert_eq!(version, 28);
     }
 
     #[test]
@@ -5298,7 +5388,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 26);
+        assert_eq!(version, 28);
     }
 
     #[test]
@@ -8289,11 +8379,11 @@ mod tests {
             .create_ai_avatar("Bot", &personalities[0].id, None, None, None)
             .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
-        let id1 = db.insert_ai_message(&conv.id, "user", "msg1", 10).unwrap();
+        let id1 = db.insert_ai_message(&conv.id, "user", "msg1", 10, None).unwrap();
         let id2 = db
-            .insert_ai_message(&conv.id, "assistant", "msg2", 20)
+            .insert_ai_message(&conv.id, "assistant", "msg2", 20, None)
             .unwrap();
-        let id3 = db.insert_ai_message(&conv.id, "user", "msg3", 10).unwrap();
+        let id3 = db.insert_ai_message(&conv.id, "user", "msg3", 10, None).unwrap();
         // Delete only first two
         db.delete_ai_messages_by_ids(&[id1, id2]).unwrap();
         let remaining = db.get_ai_messages_raw(&conv.id).unwrap();
@@ -8328,7 +8418,7 @@ mod tests {
             .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
-        db.store_message_pair(&conv.id, "user_enc", 10, "asst_enc", 20, false)
+        db.store_message_pair(&conv.id, "user_enc", 10, "asst_enc", 20, false, None)
             .unwrap();
 
         let msgs = db.get_ai_messages_raw(&conv.id).unwrap();
@@ -8349,8 +8439,8 @@ mod tests {
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
         // Insert some messages first
-        db.insert_ai_message(&conv.id, "user", "msg1", 10).unwrap();
-        db.insert_ai_message(&conv.id, "assistant", "msg2", 20)
+        db.insert_ai_message(&conv.id, "user", "msg1", 10, None).unwrap();
+        db.insert_ai_message(&conv.id, "assistant", "msg2", 20, None)
             .unwrap();
 
         // Insert a memory to supersede
@@ -8401,7 +8491,7 @@ mod tests {
             .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
-        db.store_message_pair(&conv.id, "user_enc", 10, "asst_enc", 20, true)
+        db.store_message_pair(&conv.id, "user_enc", 10, "asst_enc", 20, true, None)
             .unwrap();
 
         let msgs = db.get_ai_messages_raw(&conv.id).unwrap();
@@ -8425,10 +8515,10 @@ mod tests {
         let conv2 = db.create_ai_conversation(&avatar.id).unwrap();
 
         // Insert messages in both conversations
-        db.insert_ai_message(&conv1.id, "user", "msg1", 5).unwrap();
-        db.insert_ai_message(&conv1.id, "assistant", "msg2", 5)
+        db.insert_ai_message(&conv1.id, "user", "msg1", 5, None).unwrap();
+        db.insert_ai_message(&conv1.id, "assistant", "msg2", 5, None)
             .unwrap();
-        db.insert_ai_message(&conv2.id, "user", "msg3", 5).unwrap();
+        db.insert_ai_message(&conv2.id, "user", "msg3", 5, None).unwrap();
 
         // Set message_count on conv1 so we can verify it gets reset
         db.update_ai_conversation_message_count(&conv1.id, 2)
@@ -8501,7 +8591,7 @@ mod tests {
             .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
-        db.insert_ai_message(&conv.id, "assistant", "hello", 5)
+        db.insert_ai_message(&conv.id, "assistant", "hello", 5, None)
             .unwrap();
 
         assert!(!db.has_user_messages(&conv.id).unwrap());
@@ -8516,7 +8606,7 @@ mod tests {
             .unwrap();
         let conv = db.create_ai_conversation(&avatar.id).unwrap();
 
-        db.insert_ai_message(&conv.id, "user", "hi", 2).unwrap();
+        db.insert_ai_message(&conv.id, "user", "hi", 2, None).unwrap();
 
         assert!(db.has_user_messages(&conv.id).unwrap());
     }
@@ -8571,7 +8661,7 @@ mod tests {
         let journal_enc = crate::services::ai::encryption::encrypt_field("journal", &key).unwrap();
         // Insert a message so compaction has something to process
         let msg_enc = crate::services::ai::encryption::encrypt_field("hello", &key).unwrap();
-        db.insert_ai_message(&conv.id, "user", &msg_enc, 2).unwrap();
+        db.insert_ai_message(&conv.id, "user", &msg_enc, 2, None).unwrap();
         db.complete_compaction(&conv.id, &avatar.id, &summary_enc, &journal_enc, &[], &[])
             .unwrap();
 
@@ -8591,7 +8681,7 @@ mod tests {
         // Insert a message
         let key = [0u8; 32];
         let msg_enc = crate::services::ai::encryption::encrypt_field("hello", &key).unwrap();
-        db.insert_ai_message(&conv.id, "user", &msg_enc, 2).unwrap();
+        db.insert_ai_message(&conv.id, "user", &msg_enc, 2, None).unwrap();
 
         // End the conversation (but don't compact — simulates compaction failure)
         db.end_ai_conversation(&conv.id).unwrap();
@@ -8629,13 +8719,13 @@ mod tests {
 
         let conv1 = db.create_ai_conversation(&avatar.id).unwrap();
         let msg_enc = crate::services::ai::encryption::encrypt_field("msg1", &key).unwrap();
-        db.insert_ai_message(&conv1.id, "user", &msg_enc, 2)
+        db.insert_ai_message(&conv1.id, "user", &msg_enc, 2, None)
             .unwrap();
         db.end_ai_conversation(&conv1.id).unwrap();
 
         let conv2 = db.create_ai_conversation(&avatar.id).unwrap();
         let msg_enc2 = crate::services::ai::encryption::encrypt_field("msg2", &key).unwrap();
-        db.insert_ai_message(&conv2.id, "user", &msg_enc2, 2)
+        db.insert_ai_message(&conv2.id, "user", &msg_enc2, 2, None)
             .unwrap();
         db.end_ai_conversation(&conv2.id).unwrap();
 
@@ -8657,8 +8747,8 @@ mod tests {
         let key = [0u8; 32];
         let msg1 = crate::services::ai::encryption::encrypt_field("hello", &key).unwrap();
         let msg2 = crate::services::ai::encryption::encrypt_field("world", &key).unwrap();
-        db.insert_ai_message(&conv.id, "user", &msg1, 2).unwrap();
-        db.insert_ai_message(&conv.id, "assistant", &msg2, 2)
+        db.insert_ai_message(&conv.id, "user", &msg1, 2, None).unwrap();
+        db.insert_ai_message(&conv.id, "assistant", &msg2, 2, None)
             .unwrap();
 
         let (returned_avatar_id, messages) = db.get_compaction_conversation_data(&conv.id).unwrap();

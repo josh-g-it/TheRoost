@@ -54,6 +54,7 @@ export type IconName =
   // AI
   | "assistant"
   | "sparkle"
+  | "mic"
   // Shelf display modes
   | "shelf-collapsed"
   | "shelf-extended"
@@ -114,6 +115,7 @@ import {
   RiVolumeUpLine,
   RiVolumeMuteLine,
   RiSparklingLine,
+  RiMic2Line,
   RiNewspaperLine,
   RiHardDriveLine,
   RiRobot2Line,
@@ -165,6 +167,7 @@ const defaultSet: IconSet = {
   news: RiNewspaperLine,
   assistant: RiRobot2Line,
   sparkle: RiSparklingLine,
+  mic: RiMic2Line,
   "shelf-collapsed": RiLayoutRowLine,
   "shelf-extended": RiLayoutGridLine,
   "shelf-expanded": RiLayoutMasonryLine,
@@ -219,6 +222,7 @@ import {
   LuVolume2,
   LuVolumeX,
   LuSparkles,
+  LuMic,
   LuNewspaper,
   LuHardDrive,
   LuBot,
@@ -273,6 +277,7 @@ const minimalSet: IconSet = {
   news: LuNewspaper,
   assistant: LuBot,
   sparkle: LuSparkles,
+  mic: LuMic,
   "shelf-collapsed": LuRows3,
   "shelf-extended": LuGrid2X2,
   "shelf-expanded": LuLayoutList,
@@ -328,6 +333,7 @@ import {
   HiOutlineSpeakerWave,
   HiOutlineSpeakerXMark,
   HiOutlineSparkles,
+  HiOutlineMicrophone,
   HiOutlineNewspaper,
   HiOutlineCircleStack,
   HiOutlineChatBubbleLeftRight,
@@ -379,6 +385,7 @@ const heroicSet: IconSet = {
   news: HiOutlineNewspaper,
   assistant: HiOutlineChatBubbleLeftRight,
   sparkle: HiOutlineSparkles,
+  mic: HiOutlineMicrophone,
   "shelf-collapsed": HiOutlineRectangleGroup,
   "shelf-extended": HiOutlineTableCells,
   "shelf-expanded": HiOutlineQueueList,
@@ -434,6 +441,7 @@ import {
   IoVolumeHighOutline,
   IoVolumeMuteOutline,
   IoSparklesOutline,
+  IoMicOutline,
   IoNewspaperOutline,
   IoServerOutline,
   IoChatbubblesOutline,
@@ -485,6 +493,7 @@ const playfulSet: IconSet = {
   news: IoNewspaperOutline,
   assistant: IoChatbubblesOutline,
   sparkle: IoSparklesOutline,
+  mic: IoMicOutline,
   "shelf-collapsed": IoReorderThreeOutline,
   "shelf-extended": IoAppsOutline,
   "shelf-expanded": IoReorderFourOutline,
@@ -540,6 +549,7 @@ import {
   FaVolumeHigh,
   FaVolumeXmark,
   FaWandMagicSparkles,
+  FaMicrophone,
   FaRegNewspaper,
   FaHardDrive,
   FaRobot,
@@ -591,6 +601,7 @@ const classicSet: IconSet = {
   news: FaRegNewspaper,
   assistant: FaRobot,
   sparkle: FaWandMagicSparkles,
+  mic: FaMicrophone,
   "shelf-collapsed": FaGripLines,
   "shelf-extended": FaTableCellsLarge,
   "shelf-expanded": FaTableList,
@@ -646,6 +657,7 @@ import {
   GiSpeaker,
   GiSpeakerOff,
   GiSparkles,
+  GiTalk,
   GiNewspaper,
   GiLockedChest,
   GiRobotGolem,
@@ -697,6 +709,7 @@ const fantasySet: IconSet = {
   news: GiNewspaper,
   assistant: GiRobotGolem,
   sparkle: GiSparkles,
+  mic: GiTalk,
   "shelf-collapsed": GiBookshelf,
   "shelf-extended": GiCardRandom,
   "shelf-expanded": GiStack,

@@ -1,8 +1,8 @@
 # The Roost — Technical Overview (Engineer)
 
 > **Audience**: AI assistants, senior developers, contributors
-> **Last updated**: 2026-03-06
-> **Version**: 1.12.0 (Conversational AI Assistant — two-tier AI with Rust pattern matcher + Gemini 3 Flash, memory vault, daily journals, avatars & personalities)
+> **Last updated**: 2026-03-13
+> **Version**: 1.12.6 (Image attachments, cross-avatar memory privacy, custom title bar, visual polish)
 
 ---
 
@@ -17,7 +17,7 @@
 | Framework | Tauri v2 (Rust) + React 18 + TypeScript + Vite |
 | State | Zustand (20 slices) |
 | Routing | React Router v6 data router (`createBrowserRouter`) |
-| Database | SQLite via rusqlite (bundled), WAL mode, schema v26 |
+| Database | SQLite via rusqlite (bundled), WAL mode, schema v28 |
 | Platform | Windows 11 (registry, credential manager, WASAPI, SMTC, NVML, PDH) |
 | Launch | `npm run tauri dev` |
 

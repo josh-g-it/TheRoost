@@ -13,7 +13,7 @@ use super::credential_store;
 use crate::utils::error::AppError;
 
 /// Current schema version the app expects (must match cache_db migrations).
-const CURRENT_SCHEMA_VERSION: u32 = 26;
+const CURRENT_SCHEMA_VERSION: u32 = 28;
 
 /// Block restore if backup schema is more than this many versions ahead.
 /// Kept tight (2) to avoid loading a DB with columns/tables the app can't handle.

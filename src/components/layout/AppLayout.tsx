@@ -102,9 +102,11 @@ export function AppLayout() {
           />
         )}
         <main className="app-layout__content" data-rail-mode={railMode}>
-          <UpdateBanner />
-          <BackgroundTaskBanner />
           <Outlet />
+          <div className="app-layout__banners">
+            <UpdateBanner />
+            <BackgroundTaskBanner />
+          </div>
         </main>
       </div>
     </ConversationProvider>

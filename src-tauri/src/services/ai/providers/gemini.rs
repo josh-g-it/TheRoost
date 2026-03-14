@@ -6,7 +6,9 @@ use std::time::Duration;
 use futures::StreamExt;
 
 use super::gemini_config::GEMINI_CONFIG;
-use crate::services::ai::cloud_provider::{ChatMessage, ChatRole, CloudProviderApi, StreamChunk};
+use crate::services::ai::cloud_provider::{
+    ChatMessage, ChatRole, CloudProviderApi, ImageAttachment, StreamChunk,
+};
 use crate::utils::error::AppError;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
@@ -176,14 +178,24 @@ fn gemini_role(role: &ChatRole) -> &'static str {
 }
 
 /// Build the Gemini `contents` array from chat messages, filtering out System messages.
+/// When a message has image attachments, emits `inlineData` parts alongside the text part.
 fn build_contents(messages: &[ChatMessage]) -> Vec<serde_json::Value> {
     messages
         .iter()
         .filter(|m| m.role != ChatRole::System)
         .map(|m| {
+            let mut parts = vec![serde_json::json!({ "text": &m.content })];
+            for att in &m.attachments {
+                parts.push(serde_json::json!({
+                    "inlineData": {
+                        "mimeType": &att.mime_type,
+                        "data": &att.data,
+                    }
+                }));
+            }
             serde_json::json!({
                 "role": gemini_role(&m.role),
-                "parts": [{ "text": &m.content }]
+                "parts": parts
             })
         })
         .collect()
@@ -687,6 +699,102 @@ pub(crate) fn sanitize_cloud_error(err: reqwest::Error, endpoint: &str) -> AppEr
     }
 }
 
+/// Generate detailed captions for image attachments via a lightweight Gemini call.
+/// Returns one caption per image (same order as input). Non-fatal: errors are
+/// propagated but callers should treat them as non-blocking.
+pub async fn caption_images(
+    attachments: &[ImageAttachment],
+    api_key: &str,
+) -> Result<Vec<String>, AppError> {
+    if attachments.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // Build multimodal parts: images + a text prompt
+    let mut parts = Vec::with_capacity(attachments.len() + 1);
+    for att in attachments {
+        parts.push(serde_json::json!({
+            "inlineData": {
+                "mimeType": &att.mime_type,
+                "data": &att.data,
+            }
+        }));
+    }
+    let prompt = if attachments.len() == 1 {
+        "Write a detailed description of this image in 2–3 sentences. \
+         Describe the key visual elements, any text visible, characters or people shown \
+         (their appearance, clothing, expressions), the layout/composition, colors, \
+         and the overall context of what the image depicts. \
+         Return only the description, nothing else."
+            .to_string()
+    } else {
+        format!(
+            "For each of the {} images above, write a detailed description in 2–3 sentences. \
+             Describe the key visual elements, any text visible, characters or people shown \
+             (their appearance, clothing, expressions), the layout/composition, colors, \
+             and the overall context of what the image depicts. \
+             Separate each description with the delimiter ===IMAGE=== on its own line. \
+             No numbering, no extra text.",
+            attachments.len()
+        )
+    };
+    parts.push(serde_json::json!({ "text": prompt }));
+
+    let body = serde_json::json!({
+        "contents": [{
+            "parts": parts
+        }],
+        "generationConfig": {
+            "maxOutputTokens": 1024,
+            "temperature": 0.2,
+            "thinkingConfig": { "thinkingBudget": 0 }
+        }
+    });
+
+    let resp = client()
+        .post(generate_content_url())
+        .query(&[("key", api_key)])
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| sanitize_cloud_error(e, "captionImages"))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(AppError::StoreApi(format!(
+            "Caption request failed (HTTP {status})"
+        )));
+    }
+
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| sanitize_cloud_error(e, "captionImages"))?;
+
+    let text = json
+        .get("candidates")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("content"))
+        .and_then(|c| c.get("parts"))
+        .and_then(|p| p.get(0))
+        .and_then(|p| p.get("text"))
+        .and_then(|t| t.as_str())
+        .unwrap_or("");
+
+    // Parse captions — multi-image uses ===IMAGE=== delimiter, single uses full text
+    let mut captions: Vec<String> = if attachments.len() == 1 {
+        vec![text.trim().to_string()]
+    } else {
+        text.split("===IMAGE===")
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    };
+    captions.resize(attachments.len(), String::new());
+
+    Ok(captions)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -792,16 +900,19 @@ mod tests {
                 role: ChatRole::System,
                 content: "You are a helper".to_string(),
                 timestamp: "2026-01-01T00:00:00Z".to_string(),
+                attachments: vec![],
             },
             ChatMessage {
                 role: ChatRole::User,
                 content: "Hello".to_string(),
                 timestamp: "2026-01-01T00:00:01Z".to_string(),
+                attachments: vec![],
             },
             ChatMessage {
                 role: ChatRole::Assistant,
                 content: "Hi there".to_string(),
                 timestamp: "2026-01-01T00:00:02Z".to_string(),
+                attachments: vec![],
             },
         ];
 
@@ -954,11 +1065,13 @@ mod tests {
                 role: ChatRole::System,
                 content: "system 1".to_string(),
                 timestamp: "t1".to_string(),
+                attachments: vec![],
             },
             ChatMessage {
                 role: ChatRole::System,
                 content: "system 2".to_string(),
                 timestamp: "t2".to_string(),
+                attachments: vec![],
             },
         ];
         let contents = build_contents(&messages);
@@ -971,6 +1084,7 @@ mod tests {
             role: ChatRole::User,
             content: "What games have I played?".to_string(),
             timestamp: "2026-01-01T00:00:00Z".to_string(),
+            attachments: vec![],
         }];
         let contents = build_contents(&messages);
         assert_eq!(contents.len(), 1);

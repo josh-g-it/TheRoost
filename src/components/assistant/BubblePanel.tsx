@@ -26,6 +26,9 @@ const DRAG_THRESHOLD = 3;
 /** Bottom-left default spacing from viewport edge. */
 const DEFAULT_BOTTOM_SPACING = 12;
 
+/** Edge identifiers for resize. */
+type ResizeEdge = "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se";
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -57,6 +60,8 @@ interface BubblePanelProps {
   /** Ref to the aicon button for returning focus on collapse. */
   aiconRef?: React.RefObject<HTMLButtonElement>;
 }
+
+const EDGES: ResizeEdge[] = ["n", "s", "e", "w", "nw", "ne", "sw", "se"];
 
 export const BubblePanel = memo(function BubblePanel({
   expanded,
@@ -100,8 +105,6 @@ export const BubblePanel = memo(function BubblePanel({
   const location = useLocation();
 
   // ── Panel geometry ref ──
-  // Local ref survives across renders and async settings saves.
-  // Initialized from settings on first mount, updated on drag/resize end.
   const defaults = SCALE_DEFAULTS[uiScale] ?? SCALE_DEFAULTS.comfortable;
   const geoRef = useRef<{ w: number; h: number; x: number; y: number } | null>(null);
   if (geoRef.current === null) {
@@ -114,17 +117,19 @@ export const BubblePanel = memo(function BubblePanel({
     geoRef.current = { w, h, x: clamped.x, y: clamped.y };
   }
 
-  // Expose current geometry for inline style (initial render)
   const geo = geoRef.current;
 
   // ── Resize / drag state ──
   const panelRef = useRef<HTMLDivElement>(null);
   const [isResizing, setIsResizing] = useState(false);
-  const resizeStartRef = useRef<{
-    x: number;
-    y: number;
-    w: number;
-    h: number;
+  const resizeRef = useRef<{
+    edge: ResizeEdge;
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+    origW: number;
+    origH: number;
   } | null>(null);
 
   const [isDragging, setIsDragging] = useState(false);
@@ -172,21 +177,18 @@ export const BubblePanel = memo(function BubblePanel({
   }, [isVisible, setTimerViewing]);
 
   // ── Clamp to viewport on window resize ──
+  // Use geoRef (the user's intended position) as the source, NOT the DOM.
+  // This way, when the window shrinks and the panel is clamped inward, the
+  // intended position is preserved and restored when the window grows back.
   useEffect(() => {
     if (!shouldRender) return;
     const handleWindowResize = () => {
       const panel = panelRef.current;
       const g = geoRef.current;
       if (!panel || !g) return;
-      const clamped = clampToViewport(
-        panel.offsetLeft,
-        panel.offsetTop,
-        panel.offsetWidth,
-        panel.offsetHeight,
-      );
+      const clamped = clampToViewport(g.x, g.y, g.w, g.h);
       panel.style.left = `${clamped.x}px`;
       panel.style.top = `${clamped.y}px`;
-      geoRef.current = { ...g, x: clamped.x, y: clamped.y };
     };
     window.addEventListener("resize", handleWindowResize);
     return () => window.removeEventListener("resize", handleWindowResize);
@@ -206,12 +208,6 @@ export const BubblePanel = memo(function BubblePanel({
   }, [isVisible, animateIn]);
 
   // ── Focus management: return focus to aicon on collapse ──
-  useEffect(() => {
-    if (!isVisible && prevExpandedRef.current === false && aiconRef?.current) {
-      // Only return focus if the bubble was previously showing
-    }
-  }, [isVisible, aiconRef]);
-
   const wasVisibleRef = useRef(false);
   useEffect(() => {
     if (isVisible) {
@@ -222,7 +218,7 @@ export const BubblePanel = memo(function BubblePanel({
     }
   }, [isVisible, aiconRef]);
 
-  // ── Drag handlers (header) ──
+  // ── Drag handlers ──
   const handleDragStart = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
     const panel = panelRef.current;
@@ -236,6 +232,23 @@ export const BubblePanel = memo(function BubblePanel({
       top: panel.offsetTop,
     };
   }, []);
+
+  /** Drag handler for the body area — skips if the target is interactive. */
+  const handleBodyDragStart = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      // Don't drag when clicking on interactive elements or message content
+      if (
+        target.closest(
+          "textarea, button, a, .assistant-chat__message, .assistant-chat__input-bar",
+        )
+      )
+        return;
+      handleDragStart(e);
+    },
+    [handleDragStart],
+  );
 
   const handleDragMove = useCallback((e: React.PointerEvent) => {
     const start = dragStartRef.current;
@@ -279,65 +292,91 @@ export const BubblePanel = memo(function BubblePanel({
     setIsDragging(false);
   }, []);
 
-  // ── Resize handlers (bottom-right corner, grow right+down) ──
-  const handleResizeStart = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    setIsResizing(true);
-    const g = geoRef.current!;
-    resizeStartRef.current = { x: e.clientX, y: e.clientY, w: g.w, h: g.h };
-  }, []);
+  // ── Edge resize handlers ──
+  const handleEdgeResizeStart = useCallback(
+    (edge: ResizeEdge) => (e: React.PointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      setIsResizing(true);
+      const g = geoRef.current!;
+      const panel = panelRef.current!;
+      resizeRef.current = {
+        edge,
+        startX: e.clientX,
+        startY: e.clientY,
+        origX: panel.offsetLeft,
+        origY: panel.offsetTop,
+        origW: g.w,
+        origH: g.h,
+      };
+    },
+    [],
+  );
 
-  const handleResizeMove = useCallback(
+  const handleEdgeResizeMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!isResizing || !resizeStartRef.current || !panelRef.current) return;
-      const dx = e.clientX - resizeStartRef.current.x;
-      const dy = e.clientY - resizeStartRef.current.y;
-      // Clamp size to both min/max and available viewport space
-      const panelLeft = panelRef.current.offsetLeft;
-      const panelTop = panelRef.current.offsetTop;
-      const maxW = Math.min(MAX_WIDTH, window.innerWidth - panelLeft);
-      const maxH = Math.min(MAX_HEIGHT, window.innerHeight - panelTop);
-      const newW = clamp(resizeStartRef.current.w + dx, MIN_WIDTH, maxW);
-      const newH = clamp(resizeStartRef.current.h + dy, MIN_HEIGHT, maxH);
+      const r = resizeRef.current;
+      if (!isResizing || !r || !panelRef.current) return;
+      const dx = e.clientX - r.startX;
+      const dy = e.clientY - r.startY;
+
+      let newW = r.origW;
+      let newH = r.origH;
+      let newX = r.origX;
+      let newY = r.origY;
+
+      if (r.edge.includes("e")) {
+        newW = clamp(r.origW + dx, MIN_WIDTH, MAX_WIDTH);
+      }
+      if (r.edge.includes("w")) {
+        const dw = clamp(r.origW - dx, MIN_WIDTH, MAX_WIDTH) - r.origW;
+        newW = r.origW + dw;
+        newX = r.origX - dw;
+      }
+      if (r.edge.includes("s")) {
+        newH = clamp(r.origH + dy, MIN_HEIGHT, MAX_HEIGHT);
+      }
+      if (r.edge === "n" || r.edge === "nw" || r.edge === "ne") {
+        const dh = clamp(r.origH - dy, MIN_HEIGHT, MAX_HEIGHT) - r.origH;
+        newH = r.origH + dh;
+        newY = r.origY - dh;
+      }
+
       panelRef.current.style.width = `${newW}px`;
       panelRef.current.style.height = `${newH}px`;
+      panelRef.current.style.left = `${newX}px`;
+      panelRef.current.style.top = `${newY}px`;
     },
     [isResizing],
   );
 
-  const handleResizeEnd = useCallback(
+  const handleEdgeResizeEnd = useCallback(
     (e: React.PointerEvent) => {
-      if (!isResizing || !resizeStartRef.current) return;
+      if (!isResizing || !resizeRef.current || !panelRef.current) return;
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
       setIsResizing(false);
-      const dx = e.clientX - resizeStartRef.current.x;
-      const dy = e.clientY - resizeStartRef.current.y;
-      const panelLeft = panelRef.current?.offsetLeft ?? 0;
-      const panelTop = panelRef.current?.offsetTop ?? 0;
-      const maxW = Math.min(MAX_WIDTH, window.innerWidth - panelLeft);
-      const maxH = Math.min(MAX_HEIGHT, window.innerHeight - panelTop);
-      const newW = clamp(resizeStartRef.current.w + dx, MIN_WIDTH, maxW);
-      const newH = clamp(resizeStartRef.current.h + dy, MIN_HEIGHT, maxH);
-      resizeStartRef.current = null;
-      geoRef.current = { ...geoRef.current!, w: newW, h: newH };
+
+      const newW = panelRef.current.offsetWidth;
+      const newH = panelRef.current.offsetHeight;
+      const newX = panelRef.current.offsetLeft;
+      const newY = panelRef.current.offsetTop;
+
+      resizeRef.current = null;
+      geoRef.current = { w: newW, h: newH, x: newX, y: newY };
       const s = useSettingsStore.getState().settings;
       if (s) {
         useSettingsStore.getState().saveSettings({
           ...s,
           assistantBubbleWidth: newW,
           assistantBubbleHeight: newH,
+          assistantBubbleX: newX,
+          assistantBubbleY: newY,
         });
       }
     },
     [isResizing],
   );
-
-  const handleEndConversation = useCallback(() => {
-    handleConversationEnding();
-    endActiveConversation();
-  }, [handleConversationEnding, endActiveConversation]);
 
   if (!shouldRender || !activeAvatar) return null;
 
@@ -354,9 +393,21 @@ export const BubblePanel = memo(function BubblePanel({
       role="complementary"
       aria-label={`Assistant chat with ${activeAvatar.name}`}
     >
-      {/* ── Header (drag handle) — centered hero layout ── */}
+      {/* ── Edge resize zones (invisible hit areas) ── */}
+      {EDGES.map((edge) => (
+        <div
+          key={edge}
+          className={`bubble-panel__edge bubble-panel__edge--${edge}`}
+          onPointerDown={handleEdgeResizeStart(edge)}
+          onPointerMove={handleEdgeResizeMove}
+          onPointerUp={handleEdgeResizeEnd}
+          aria-hidden="true"
+        />
+      ))}
+
+      {/* ── Floating sprite (top-center, draggable) ── */}
       <div
-        className="bubble-panel__header"
+        className="bubble-panel__hero-sprite"
         onPointerDown={handleDragStart}
         onPointerMove={handleDragMove}
         onPointerUp={handleDragEnd}
@@ -364,27 +415,29 @@ export const BubblePanel = memo(function BubblePanel({
         <SpriteRenderer
           spriteDataUrl={spriteDataUrl}
           expression={expression}
-          size={72}
+          size={128}
           fallbackText={activeAvatar.name}
-          circular
-          className="bubble-panel__sprite"
         />
-        <span className="bubble-panel__name">{activeAvatar.name}</span>
-        <button
-          className="bubble-panel__close-btn"
-          onClick={onToggle}
-          title="Hide bubble"
-          aria-label="Hide assistant bubble"
-        >
-          <AppIcon name="close" size={14} />
-        </button>
       </div>
 
-      {/* ── Body ── */}
-      <div className="bubble-panel__body">
+      {/* ── Close button (top-right of panel) ── */}
+      <button
+        className="bubble-panel__close-btn"
+        onClick={onToggle}
+        title="Hide bubble"
+        aria-label="Hide assistant bubble"
+      >
+        <AppIcon name="close" size={14} />
+      </button>
+
+      {/* ── Body — ChatCore with name labels and end button in input bar ── */}
+      <div
+        className="bubble-panel__body"
+        onPointerDown={handleBodyDragStart}
+        onPointerMove={handleDragMove}
+        onPointerUp={handleDragEnd}
+      >
         <ChatCore
-          compact
-          hideEndButton
           conversationId={conversationId}
           messages={messages}
           isStreaming={isStreaming}
@@ -409,30 +462,9 @@ export const BubblePanel = memo(function BubblePanel({
           onExpressionStreamEnd={onStreamEnd}
           onExpressionUserTyping={onUserTyping}
           onExpressionUserSentMessage={onUserSentMessage}
+          avatarName={activeAvatar.name}
         />
       </div>
-
-      {/* ── Footer: end conversation link ── */}
-      {conversationId && !isConversationCompacting && (
-        <div className="bubble-panel__footer">
-          <button
-            className="bubble-panel__end-btn"
-            onClick={handleEndConversation}
-            disabled={isStreaming}
-          >
-            End Conversation
-          </button>
-        </div>
-      )}
-
-      {/* ── Resize handle (bottom-right corner) ── */}
-      <div
-        className="bubble-panel__resize-handle"
-        onPointerDown={handleResizeStart}
-        onPointerMove={handleResizeMove}
-        onPointerUp={handleResizeEnd}
-        aria-hidden="true"
-      />
     </div>
   );
 });

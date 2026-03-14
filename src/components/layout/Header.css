@@ -1,18 +1,22 @@
 .header {
   height: var(--header-height);
-  padding: 0 var(--space-lg);
+  padding: 0 0 0 var(--space-lg);
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--color-border-subtle);
   background: var(--color-bg-secondary);
   flex-shrink: 0;
+  /* Allow dragging the entire header bar to move the window */
+  -webkit-app-region: drag;
+  app-region: drag;
 }
 
 .header__left {
   display: flex;
   align-items: baseline;
   gap: var(--space-sm);
+  pointer-events: none;
 }
 
 .header__title {
@@ -30,4 +34,45 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* ── Window Controls (minimize / maximize / close) ─────────── */
+.header__window-controls {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.header__win-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.header__win-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.header__win-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+.header__win-btn--close:hover {
+  background: #e81123;
+  color: #fff;
 }

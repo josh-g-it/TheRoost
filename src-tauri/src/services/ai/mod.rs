@@ -9,6 +9,7 @@ pub mod conversation;
 pub mod conversation_timer;
 pub mod encryption;
 pub mod gemini_provider;
+pub mod image_util;
 pub mod memory;
 pub mod orchestrator;
 pub mod pattern_matcher;

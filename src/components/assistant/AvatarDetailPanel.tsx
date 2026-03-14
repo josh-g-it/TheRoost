@@ -237,6 +237,33 @@ export const AvatarDetailPanel = memo(function AvatarDetailPanel({
     }
   }, [avatar.id, onAvatarDataWiped]);
 
+  // ── Memory sharing toggles ─────────────────────────────────────
+  const handleMemoryAccessToggle = useCallback(async () => {
+    try {
+      const updated = await assistantApi.updateAvatar(avatar.id, {
+        crossAvatarMemoryAccess: !avatar.crossAvatarMemoryAccess,
+      });
+      onAvatarUpdated(updated);
+    } catch (err) {
+      logger.error("AvatarDetailPanel", "api", "Failed to update memory access", {
+        error: getErrorMessage(err),
+      });
+    }
+  }, [avatar.id, avatar.crossAvatarMemoryAccess, onAvatarUpdated]);
+
+  const handleMemoryPrivateToggle = useCallback(async () => {
+    try {
+      const updated = await assistantApi.updateAvatar(avatar.id, {
+        crossAvatarMemoryPrivate: !avatar.crossAvatarMemoryPrivate,
+      });
+      onAvatarUpdated(updated);
+    } catch (err) {
+      logger.error("AvatarDetailPanel", "api", "Failed to update memory privacy", {
+        error: getErrorMessage(err),
+      });
+    }
+  }, [avatar.id, avatar.crossAvatarMemoryPrivate, onAvatarUpdated]);
+
   // ── Computed values ────────────────────────────────────────────
   const roleSelectValue = showCustomRole
     ? CUSTOM_ROLE_OPTION
@@ -402,6 +429,39 @@ export const AvatarDetailPanel = memo(function AvatarDetailPanel({
           <span>{daysActive}d</span>
         </div>
       )}
+
+      {/* Cross-Avatar Memory */}
+      <div className="avatar-detail__section">
+        <h4 className="avatar-detail__section-title">Shared Memory</h4>
+        <label className="avatar-detail__toggle-row">
+          <input
+            type="checkbox"
+            className="avatar-detail__toggle"
+            checked={avatar.crossAvatarMemoryAccess}
+            onChange={handleMemoryAccessToggle}
+          />
+          <span className="avatar-detail__toggle-info">
+            <span className="avatar-detail__toggle-label">Access shared memories</span>
+            <span className="avatar-detail__toggle-desc">
+              See important memories from other avatars
+            </span>
+          </span>
+        </label>
+        <label className="avatar-detail__toggle-row">
+          <input
+            type="checkbox"
+            className="avatar-detail__toggle"
+            checked={avatar.crossAvatarMemoryPrivate}
+            onChange={handleMemoryPrivateToggle}
+          />
+          <span className="avatar-detail__toggle-info">
+            <span className="avatar-detail__toggle-label">Keep memories private</span>
+            <span className="avatar-detail__toggle-desc">
+              Hide this avatar's memories from other avatars
+            </span>
+          </span>
+        </label>
+      </div>
 
       {/* Danger Zone */}
       <div className="avatar-detail__danger-zone">

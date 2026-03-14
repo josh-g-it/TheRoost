@@ -4,29 +4,115 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut}
 const OVERLAY_LABEL: &str = "overlay";
 
 /// Parse a shortcut string like "Ctrl+Space" into a global shortcut.
+///
+/// Supports arbitrary modifier+key combos in the format "Mod1+Mod2+Key".
+/// Known modifiers: Ctrl, Shift, Alt, Super. Key names map to `Code` variants.
 pub fn parse_shortcut(s: &str) -> Option<Shortcut> {
-    match s {
-        "Ctrl+Space" => Some(Shortcut::new(Some(Modifiers::CONTROL), Code::Space)),
-        "Ctrl+K" => Some(Shortcut::new(Some(Modifiers::CONTROL), Code::KeyK)),
-        "Ctrl+J" => Some(Shortcut::new(Some(Modifiers::CONTROL), Code::KeyJ)),
-        "Ctrl+Shift+Space" => Some(Shortcut::new(
-            Some(Modifiers::CONTROL | Modifiers::SHIFT),
-            Code::Space,
-        )),
-        _ => None,
+    let parts: Vec<&str> = s.split('+').collect();
+    if parts.is_empty() {
+        return None;
     }
+
+    let mut mods = Modifiers::empty();
+    for part in &parts[..parts.len() - 1] {
+        match part.to_lowercase().as_str() {
+            "ctrl" | "control" => mods |= Modifiers::CONTROL,
+            "shift" => mods |= Modifiers::SHIFT,
+            "alt" => mods |= Modifiers::ALT,
+            "super" | "win" | "meta" => mods |= Modifiers::SUPER,
+            _ => return None, // unknown modifier
+        }
+    }
+
+    let key_str = parts.last()?;
+    let code = match key_str.to_lowercase().as_str() {
+        "space" => Code::Space,
+        "`" | "backquote" => Code::Backquote,
+        "a" => Code::KeyA,
+        "b" => Code::KeyB,
+        "c" => Code::KeyC,
+        "d" => Code::KeyD,
+        "e" => Code::KeyE,
+        "f" => Code::KeyF,
+        "g" => Code::KeyG,
+        "h" => Code::KeyH,
+        "i" => Code::KeyI,
+        "j" => Code::KeyJ,
+        "k" => Code::KeyK,
+        "l" => Code::KeyL,
+        "m" => Code::KeyM,
+        "n" => Code::KeyN,
+        "o" => Code::KeyO,
+        "p" => Code::KeyP,
+        "q" => Code::KeyQ,
+        "r" => Code::KeyR,
+        "s" => Code::KeyS,
+        "t" => Code::KeyT,
+        "u" => Code::KeyU,
+        "v" => Code::KeyV,
+        "w" => Code::KeyW,
+        "x" => Code::KeyX,
+        "y" => Code::KeyY,
+        "z" => Code::KeyZ,
+        "0" => Code::Digit0,
+        "1" => Code::Digit1,
+        "2" => Code::Digit2,
+        "3" => Code::Digit3,
+        "4" => Code::Digit4,
+        "5" => Code::Digit5,
+        "6" => Code::Digit6,
+        "7" => Code::Digit7,
+        "8" => Code::Digit8,
+        "9" => Code::Digit9,
+        "f1" => Code::F1,
+        "f2" => Code::F2,
+        "f3" => Code::F3,
+        "f4" => Code::F4,
+        "f5" => Code::F5,
+        "f6" => Code::F6,
+        "f7" => Code::F7,
+        "f8" => Code::F8,
+        "f9" => Code::F9,
+        "f10" => Code::F10,
+        "f11" => Code::F11,
+        "f12" => Code::F12,
+        "escape" | "esc" => Code::Escape,
+        "tab" => Code::Tab,
+        "enter" | "return" => Code::Enter,
+        "backspace" => Code::Backspace,
+        "delete" => Code::Delete,
+        "insert" => Code::Insert,
+        "home" => Code::Home,
+        "end" => Code::End,
+        "pageup" => Code::PageUp,
+        "pagedown" => Code::PageDown,
+        "arrowup" | "up" => Code::ArrowUp,
+        "arrowdown" | "down" => Code::ArrowDown,
+        "arrowleft" | "left" => Code::ArrowLeft,
+        "arrowright" | "right" => Code::ArrowRight,
+        "-" | "minus" => Code::Minus,
+        "=" | "equal" => Code::Equal,
+        "[" | "bracketleft" => Code::BracketLeft,
+        "]" | "bracketright" => Code::BracketRight,
+        "\\" | "backslash" => Code::Backslash,
+        ";" | "semicolon" => Code::Semicolon,
+        "'" | "quote" => Code::Quote,
+        "," | "comma" => Code::Comma,
+        "." | "period" => Code::Period,
+        "/" | "slash" => Code::Slash,
+        _ => return None,
+    };
+
+    let mod_opt = if mods.is_empty() { None } else { Some(mods) };
+    Some(Shortcut::new(mod_opt, code))
 }
 
 /// Register the overlay shortcut, unregistering any previously registered shortcut first.
 pub fn register_shortcut(app: &AppHandle, shortcut_str: &str) {
     let gs = app.global_shortcut();
 
-    // Unregister all known shortcuts to avoid conflicts
-    for candidate in &["Ctrl+Space", "Ctrl+K", "Ctrl+J", "Ctrl+Shift+Space"] {
-        if let Some(sc) = parse_shortcut(candidate) {
-            let _ = gs.unregister(sc);
-        }
-    }
+    // Unregister all shortcuts to avoid conflicts
+    let _ = gs.unregister_all();
 
     // Register the requested one
     if let Some(sc) = parse_shortcut(shortcut_str) {
@@ -84,8 +170,7 @@ pub fn create_overlay(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>>
     .inner_size(width, height)
     .position(x, y)
     .decorations(false)
-    // TEMP: disable transparency to test async fixes in isolation
-    // .transparent(true)
+    .transparent(true)
     .always_on_top(true)
     .skip_taskbar(true)
     .shadow(false)

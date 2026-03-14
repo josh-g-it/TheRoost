@@ -51,10 +51,21 @@
   margin-bottom: 0.5rem;
 }
 
-.journal-entry__date {
+.journal-entry__date-header {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--color-text-primary);
+  padding: 0.25rem 0;
+  margin-top: 0.5rem;
+}
+
+.journal-entry__date-header:first-child {
+  margin-top: 0;
+}
+
+.journal-entry__time {
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
 }
 
 .journal-entry__delete {

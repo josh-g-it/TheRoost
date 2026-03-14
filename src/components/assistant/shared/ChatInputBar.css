@@ -1,7 +1,7 @@
 /* ── Input Bar ───────────────────────────────────────────────── */
 .assistant-chat__input-bar {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--color-border-subtle);
@@ -16,6 +16,17 @@
 .assistant-chat__input-bar--disabled {
   opacity: 0.5;
   pointer-events: none;
+}
+
+/* ── Input Row (textarea + buttons) ──────────────────────────── */
+.assistant-chat__input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.assistant-chat--compact .assistant-chat__input-row {
+  gap: 0.35rem;
 }
 
 .assistant-chat__input {
@@ -44,7 +55,8 @@
 }
 
 .assistant-chat__send-btn,
-.assistant-chat__mic-btn {
+.assistant-chat__mic-btn,
+.assistant-chat__attach-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -73,18 +85,96 @@
   cursor: not-allowed;
 }
 
-.assistant-chat__mic-btn {
+.assistant-chat__mic-btn,
+.assistant-chat__attach-btn {
   background: none;
   color: var(--color-text-tertiary);
 }
 
-.assistant-chat__mic-btn:hover {
+.assistant-chat__mic-btn:hover,
+.assistant-chat__attach-btn:hover:not(:disabled) {
   color: var(--color-text-primary);
   background: var(--color-bg-hover);
 }
 
+.assistant-chat__attach-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 .assistant-chat__mic-btn--active {
   color: var(--color-danger, #ef4444);
+}
+
+/* ── Image Thumbnail Strip ───────────────────────────────────── */
+.assistant-chat__image-strip {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.15rem 0;
+}
+
+.assistant-chat__image-thumb {
+  position: relative;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+}
+
+.assistant-chat__image-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.assistant-chat__image-thumb__remove {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.assistant-chat__image-thumb:hover .assistant-chat__image-thumb__remove {
+  opacity: 1;
+}
+
+/* ── Loading placeholder for images being prepared ─────────── */
+.assistant-chat__image-thumb--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-hover);
+}
+
+.assistant-chat__image-thumb__spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-border-subtle);
+  border-top-color: var(--color-accent-primary);
+  border-radius: 50%;
+  animation: image-thumb-spin 0.7s linear infinite;
+}
+
+@keyframes image-thumb-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── End Conversation Button ────────────────────────────────── */

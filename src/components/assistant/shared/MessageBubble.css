@@ -99,3 +99,18 @@
 .assistant-chat__message--assistant li {
   margin: 0.15em 0;
 }
+
+/* ── Image Attachments in Message Bubbles ────────────────────── */
+.message-bubble__images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+
+.message-bubble__image {
+  max-width: 200px;
+  max-height: 160px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+}

@@ -23,6 +23,8 @@ export interface SpriteRendererProps {
   cropOffsets?: Array<{ x: number; y: number }>;
   /** Click handler */
   onClick?: () => void;
+  /** Suppress the bump animation on expression changes */
+  disableBump?: boolean;
 }
 
 /** Get the expression index in the grid (0-7) */
@@ -44,6 +46,7 @@ export const SpriteRenderer = React.memo(function SpriteRenderer({
   className = "",
   cropOffsets,
   onClick,
+  disableBump = false,
 }: SpriteRendererProps) {
   const [animating, setAnimating] = useState(false);
   const prevExpressionRef = useRef(expression);
@@ -51,7 +54,7 @@ export const SpriteRenderer = React.memo(function SpriteRenderer({
 
   // Trigger bump animation on expression change
   useEffect(() => {
-    if (prevExpressionRef.current !== expression && spriteDataUrl) {
+    if (prevExpressionRef.current !== expression && spriteDataUrl && !disableBump) {
       setAnimating(true);
       if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
       animTimeoutRef.current = setTimeout(() => setAnimating(false), 200);

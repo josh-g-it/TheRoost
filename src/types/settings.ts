@@ -57,14 +57,12 @@ export interface AppSettings {
   aiPostSessionReviewEnabled?: boolean;
   aiConversationAutoEndEnabled?: boolean;
   aiMaxTokensMain?: number;
-  aiMaxTokensOverlay?: number;
   assistantBubbleEnabled?: boolean;
   assistantBubbleExpanded?: boolean;
   assistantBubbleWidth?: number | null;
   assistantBubbleHeight?: number | null;
   assistantBubbleX?: number | null;
   assistantBubbleY?: number | null;
-  assistantActionDelay?: number;
   newsBlockedSources?: string[];
   customStylePresets?: Array<{ id: string; label: string; prompt: string }>;
 }

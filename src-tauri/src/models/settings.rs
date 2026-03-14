@@ -42,9 +42,6 @@ fn default_cloud_ai_daily_limit() -> u32 {
 fn default_ai_max_tokens_main() -> u32 {
     8192
 }
-fn default_ai_max_tokens_overlay() -> u32 {
-    2048
-}
 fn default_command_center_slots() -> Vec<String> {
     vec![
         "nav:library".to_string(),
@@ -63,6 +60,8 @@ pub struct CardDisplayOptions {
     pub show_playtime: bool,
     pub show_installed_badge: bool,
     pub show_tags: bool,
+    #[serde(default)]
+    pub show_rating_badge: bool,
     #[serde(default = "default_grid_size")]
     pub grid_size: String,
     #[serde(default = "default_list_density")]
@@ -78,6 +77,7 @@ impl Default for CardDisplayOptions {
             show_playtime: true,
             show_installed_badge: true,
             show_tags: true,
+            show_rating_badge: false,
             grid_size: default_grid_size(),
             list_density: default_list_density(),
             list_columns: Vec::new(),
@@ -160,8 +160,6 @@ pub struct AppSettings {
     pub ai_conversation_auto_end_enabled: bool,
     #[serde(default = "default_ai_max_tokens_main")]
     pub ai_max_tokens_main: u32,
-    #[serde(default = "default_ai_max_tokens_overlay")]
-    pub ai_max_tokens_overlay: u32,
     #[serde(default = "default_true")]
     pub assistant_bubble_enabled: bool,
     #[serde(default)]
@@ -174,8 +172,6 @@ pub struct AppSettings {
     pub assistant_bubble_x: Option<i32>,
     #[serde(default)]
     pub assistant_bubble_y: Option<i32>,
-    #[serde(default)]
-    pub assistant_action_delay: u32,
     #[serde(default)]
     pub news_blocked_sources: Vec<String>,
     #[serde(default)]
@@ -221,14 +217,12 @@ impl Default for AppSettings {
             ai_post_session_review_enabled: false,
             ai_conversation_auto_end_enabled: true,
             ai_max_tokens_main: default_ai_max_tokens_main(),
-            ai_max_tokens_overlay: default_ai_max_tokens_overlay(),
             assistant_bubble_enabled: true,
             assistant_bubble_expanded: false,
             assistant_bubble_width: None,
             assistant_bubble_height: None,
             assistant_bubble_x: None,
             assistant_bubble_y: None,
-            assistant_action_delay: 0,
             news_blocked_sources: Vec::new(),
             custom_style_presets: Vec::new(),
         }

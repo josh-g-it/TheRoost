@@ -76,5 +76,5 @@ impl CloudConfig {
 }
 
 fn today_iso() -> String {
-    chrono::Utc::now().format("%Y-%m-%d").to_string()
+    chrono::Local::now().format("%Y-%m-%d").to_string()
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useBlocker } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { Header } from "../layout/Header";
@@ -17,6 +17,7 @@ import { useSettingsStore } from "../../store/settingsSlice";
 import { useAppVersion } from "../../hooks/useAppVersion";
 import { useLibraryStore } from "../../store/librarySlice";
 import { useMetadataStore } from "../../store/metadataSlice";
+import { useUIStore } from "../../store/uiSlice";
 import {
   coverArtApi,
   cloudAiApi,
@@ -29,7 +30,6 @@ import { getErrorMessage } from "../../utils/errors";
 import { logger } from "../../utils/logger";
 import type {
   AppSettings,
-  CommandCenterShortcut,
   RailMode,
   MediaControlsMode,
   CloudAiUsage,
@@ -37,7 +37,47 @@ import type {
 } from "../../types";
 import type { ThemeId } from "../../hooks/useTheme";
 import type { IconSetId, FontFamilyId, UIScaleId } from "../../types/theme";
-import { SHORTCUT_OPTIONS } from "../../types";
+// Map a KeyboardEvent.key to our shortcut token format
+const KEY_DISPLAY_MAP: Record<string, string> = {
+  Control: "Ctrl",
+  Shift: "Shift",
+  Alt: "Alt",
+  Meta: "Win",
+  " ": "Space",
+  ArrowUp: "Up",
+  ArrowDown: "Down",
+  ArrowLeft: "Left",
+  ArrowRight: "Right",
+  "`": "`",
+  Escape: "Escape",
+  Tab: "Tab",
+  Enter: "Enter",
+  Backspace: "Backspace",
+  Delete: "Delete",
+  Insert: "Insert",
+  Home: "Home",
+  End: "End",
+  PageUp: "PageUp",
+  PageDown: "PageDown",
+};
+
+// Canonical order: modifiers first (Ctrl, Shift, Alt, Win), then regular keys
+const MODIFIER_ORDER = ["Ctrl", "Shift", "Alt", "Win"];
+
+function normalizeKeyName(key: string): string {
+  return KEY_DISPLAY_MAP[key] ?? (key.length === 1 ? key.toUpperCase() : key);
+}
+
+function buildShortcutString(keys: Set<string>): string {
+  const mods = MODIFIER_ORDER.filter((m) => keys.has(m));
+  const rest = [...keys].filter((k) => !MODIFIER_ORDER.includes(k)).sort();
+  return [...mods, ...rest].join("+");
+}
+
+// Format a shortcut string for display: "Ctrl+Shift+Space" → "Ctrl + Shift + Space"
+function formatShortcut(s: string): string {
+  return s.split("+").join(" + ");
+}
 import "./SettingsView.css";
 
 const SAVE_NOTIFICATION_MS = 2000;
@@ -69,6 +109,38 @@ export function SettingsView() {
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTabId>("general");
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Shortcut key recorder state
+  const [recordingShortcut, setRecordingShortcut] = useState(false);
+  const [pendingShortcut, setPendingShortcut] = useState<string | null>(null);
+  const heldKeysRef = useRef<Set<string>>(new Set());
+
+  const handleShortcutKeyDown = useCallback((e: KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const name = normalizeKeyName(e.key);
+    heldKeysRef.current.add(name);
+    setPendingShortcut(buildShortcutString(heldKeysRef.current));
+  }, []);
+
+  const handleShortcutKeyUp = useCallback((e: KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const name = normalizeKeyName(e.key);
+    heldKeysRef.current.delete(name);
+  }, []);
+
+  useEffect(() => {
+    if (recordingShortcut) {
+      heldKeysRef.current.clear();
+      window.addEventListener("keydown", handleShortcutKeyDown, true);
+      window.addEventListener("keyup", handleShortcutKeyUp, true);
+      return () => {
+        window.removeEventListener("keydown", handleShortcutKeyDown, true);
+        window.removeEventListener("keyup", handleShortcutKeyUp, true);
+      };
+    }
+  }, [recordingShortcut, handleShortcutKeyDown, handleShortcutKeyUp]);
 
   // SteamGridDB key state (managed independently — stored in Credential Manager)
   const [sgdbKey, setSgdbKey] = useState("");
@@ -184,6 +256,9 @@ export function SettingsView() {
     };
   }, []);
 
+  // Subscribe to UIStore cardDisplay so dirty detection catches checkbox toggles
+  const liveCardDisplay = useUIStore((s) => s.cardDisplay);
+
   const isDirty =
     form !== null &&
     settings !== null &&
@@ -203,8 +278,14 @@ export function SettingsView() {
       form.aiConversationAutoEndEnabled !== settings.aiConversationAutoEndEnabled ||
       form.aiPostSessionReviewEnabled !== settings.aiPostSessionReviewEnabled ||
       form.aiMaxTokensMain !== settings.aiMaxTokensMain ||
-      form.aiMaxTokensOverlay !== settings.aiMaxTokensOverlay ||
       form.mediaControlsMode !== settings.mediaControlsMode ||
+      liveCardDisplay.showGenreTags !== (settings.cardDisplay?.showGenreTags ?? true) ||
+      liveCardDisplay.showPlaytime !== (settings.cardDisplay?.showPlaytime ?? true) ||
+      liveCardDisplay.showInstalledBadge !==
+        (settings.cardDisplay?.showInstalledBadge ?? true) ||
+      liveCardDisplay.showTags !== (settings.cardDisplay?.showTags ?? true) ||
+      liveCardDisplay.showRatingBadge !==
+        (settings.cardDisplay?.showRatingBadge ?? false) ||
       JSON.stringify(form.cloudAiIncludedGames ?? []) !==
         JSON.stringify(settings.cloudAiIncludedGames ?? []) ||
       JSON.stringify(form.cloudAiExcludedGames ?? []) !==
@@ -232,10 +313,13 @@ export function SettingsView() {
       fontFamily: String(f.fontFamily || "system"),
       uiScale: String(f.uiScale || "comfortable"),
       cardDisplay: {
-        showGenreTags: f.cardDisplay?.showGenreTags === true,
-        showPlaytime: f.cardDisplay?.showPlaytime === true,
-        showInstalledBadge: f.cardDisplay?.showInstalledBadge === true,
-        showTags: f.cardDisplay?.showTags === true,
+        // Read live state from UIStore so checkbox toggles are always captured
+        ...useUIStore.getState().cardDisplay,
+        showGenreTags: useUIStore.getState().cardDisplay.showGenreTags === true,
+        showPlaytime: useUIStore.getState().cardDisplay.showPlaytime === true,
+        showInstalledBadge: useUIStore.getState().cardDisplay.showInstalledBadge === true,
+        showTags: useUIStore.getState().cardDisplay.showTags === true,
+        showRatingBadge: useUIStore.getState().cardDisplay.showRatingBadge === true,
         gridSize: String(f.cardDisplay?.gridSize || "medium"),
         listDensity: String(f.cardDisplay?.listDensity || "default"),
         listColumns: Array.isArray(f.cardDisplay?.listColumns)
@@ -271,7 +355,6 @@ export function SettingsView() {
       aiPostSessionReviewEnabled: f.aiPostSessionReviewEnabled === true,
       aiConversationAutoEndEnabled: f.aiConversationAutoEndEnabled !== false, // defaults true
       aiMaxTokensMain: Number(f.aiMaxTokensMain) || 8192,
-      aiMaxTokensOverlay: Number(f.aiMaxTokensOverlay) || 2048,
     };
     // JSON roundtrip ensures a perfectly clean plain object for Tauri invoke
     return JSON.parse(JSON.stringify(payload)) as AppSettings;
@@ -726,7 +809,7 @@ export function SettingsView() {
           className={`settings-view__tab-panel ${activeTab === "assistant" ? "settings-view__tab-panel--active" : ""}`}
         >
           <section className="settings-view__section">
-            <h3 className="settings-view__section-title">Cloud AI (Experimental)</h3>
+            <h3 className="settings-view__section-title">Cloud AI</h3>
             <p className="settings-view__section-desc">
               Enable cloud-powered AI for smarter search suggestions in the command
               palette. The AI can understand natural language queries like &ldquo;what
@@ -801,12 +884,6 @@ export function SettingsView() {
                     }}
                   >
                     <option value="gemini">Gemini 3 Flash</option>
-                    <option value="openai" disabled>
-                      OpenAI (Coming soon)
-                    </option>
-                    <option value="claude" disabled>
-                      Claude (Coming soon)
-                    </option>
                   </select>
                 </div>
 
@@ -935,9 +1012,7 @@ export function SettingsView() {
                 )}
 
                 <div className="settings-view__field-row">
-                  <label className="settings-view__label">
-                    Max response length (main)
-                  </label>
+                  <label className="settings-view__label">Max response length</label>
                   <input
                     type="number"
                     className="settings-view__number-input"
@@ -953,35 +1028,65 @@ export function SettingsView() {
                     }}
                   />
                   <span className="settings-view__hint">
-                    Max output tokens for the main assistant window
+                    Max output tokens for assistant responses
                   </span>
                 </div>
 
                 <div className="settings-view__field-row">
-                  <label className="settings-view__label">
-                    Max response length (overlay)
+                  <label className="settings-view__checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={form.aiConversationAutoEndEnabled ?? true}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          aiConversationAutoEndEnabled: e.target.checked,
+                        })
+                      }
+                    />
+                    Auto-end conversations after inactivity
                   </label>
-                  <input
-                    type="number"
-                    className="settings-view__number-input"
-                    min={256}
-                    max={32768}
-                    value={form.aiMaxTokensOverlay ?? 2048}
-                    onChange={(e) => {
-                      const val = Math.max(
-                        256,
-                        Math.min(32768, Number(e.target.value) || 2048),
-                      );
-                      setForm({ ...form, aiMaxTokensOverlay: val });
-                    }}
-                  />
-                  <span className="settings-view__hint">
-                    Max output tokens for the overlay assistant
-                  </span>
                 </div>
+                <p className="settings-view__field-hint">
+                  Automatically end conversations after 1 hour of inactivity. When
+                  disabled, conversations stay open until manually ended.
+                </p>
 
                 <div className="settings-view__field-row">
-                  <label className="settings-view__label">Context scope</label>
+                  <label className="settings-view__checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={form.aiPostSessionReviewEnabled ?? false}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          aiPostSessionReviewEnabled: e.target.checked,
+                        })
+                      }
+                    />
+                    Ask me to review games after playing
+                  </label>
+                </div>
+                <p className="settings-view__field-hint">
+                  After a gaming session of 30+ minutes, sends a notification prompting
+                  you to share your thoughts. Only triggers for games you haven't reviewed
+                  yet.
+                </p>
+              </>
+            )}
+          </section>
+
+          <section className="settings-view__section">
+            <h3 className="settings-view__section-title">Library Visibility</h3>
+            <p className="settings-view__section-desc">
+              Controls which games are included in the context sent to the AI provider.
+              Reducing scope lowers token usage and cost.
+            </p>
+
+            {form.cloudAiEnabled && (
+              <>
+                <div className="settings-view__field-row">
+                  <label className="settings-view__label">Scope</label>
                   <select
                     className="settings-view__select"
                     value={form.cloudAiContextScope ?? "all"}
@@ -994,10 +1099,6 @@ export function SettingsView() {
                     <option value="recent">Played in last year</option>
                   </select>
                 </div>
-                <p className="settings-view__field-hint">
-                  Controls which games are included in the context sent to the AI
-                  provider. Reducing scope lowers token usage and cost.
-                </p>
 
                 {/* Always Include / Exclude game lists */}
                 <div className="settings-view__field-row">
@@ -1141,46 +1242,6 @@ export function SettingsView() {
                     ))}
                   </div>
                 )}
-                <div className="settings-view__field-row">
-                  <label className="settings-view__checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={form.aiConversationAutoEndEnabled ?? true}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          aiConversationAutoEndEnabled: e.target.checked,
-                        })
-                      }
-                    />
-                    Auto-end conversations after inactivity
-                  </label>
-                </div>
-                <p className="settings-view__field-hint">
-                  Automatically end conversations after 1 hour of inactivity. When
-                  disabled, conversations stay open until manually ended.
-                </p>
-
-                <div className="settings-view__field-row">
-                  <label className="settings-view__checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={form.aiPostSessionReviewEnabled ?? false}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          aiPostSessionReviewEnabled: e.target.checked,
-                        })
-                      }
-                    />
-                    Ask me to review games after playing
-                  </label>
-                </div>
-                <p className="settings-view__field-hint">
-                  After a gaming session of 30+ minutes, sends a notification prompting
-                  you to share your thoughts. Only triggers for games you haven't reviewed
-                  yet.
-                </p>
               </>
             )}
           </section>
@@ -1431,22 +1492,51 @@ export function SettingsView() {
 
             <div className="settings-view__field-row">
               <label className="settings-view__label">Overlay Shortcut</label>
-              <select
-                className="settings-view__select"
-                value={form.commandCenterShortcut}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    commandCenterShortcut: e.target.value as CommandCenterShortcut,
-                  })
-                }
-              >
-                {SHORTCUT_OPTIONS.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              <div className="settings-view__shortcut-recorder">
+                <span className="settings-view__shortcut-display">
+                  {recordingShortcut
+                    ? pendingShortcut
+                      ? formatShortcut(pendingShortcut)
+                      : "Press a key combo..."
+                    : formatShortcut(form.commandCenterShortcut)}
+                </span>
+                {recordingShortcut ? (
+                  <>
+                    <button
+                      className="settings-view__shortcut-btn settings-view__shortcut-btn--confirm"
+                      disabled={!pendingShortcut}
+                      onClick={() => {
+                        if (pendingShortcut) {
+                          setForm({ ...form, commandCenterShortcut: pendingShortcut });
+                        }
+                        setRecordingShortcut(false);
+                        setPendingShortcut(null);
+                      }}
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      className="settings-view__shortcut-btn"
+                      onClick={() => {
+                        setRecordingShortcut(false);
+                        setPendingShortcut(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="settings-view__shortcut-btn"
+                    onClick={() => {
+                      setPendingShortcut(null);
+                      setRecordingShortcut(true);
+                    }}
+                  >
+                    Change
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="settings-view__field-row">
@@ -1465,7 +1555,7 @@ export function SettingsView() {
             </div>
 
             <div className="settings-view__field-row">
-              <label className="settings-view__label">Media Controls</label>
+              <label className="settings-view__label">Media Controls (In Overlay)</label>
               <select
                 className="settings-view__select"
                 value={form.mediaControlsMode ?? "dynamic"}

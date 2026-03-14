@@ -5,6 +5,18 @@ use serde::{Deserialize, Serialize};
 
 use crate::utils::error::AppError;
 
+/// An image attached to a chat message.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageAttachment {
+    pub mime_type: String,
+    /// Base64-encoded image data.
+    pub data: String,
+    /// Short caption generated after sending (for smart placeholders in older messages).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caption: Option<String>,
+}
+
 /// A message in a multi-turn conversation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,6 +24,8 @@ pub struct ChatMessage {
     pub role: ChatRole,
     pub content: String,
     pub timestamp: String,
+    #[serde(default)]
+    pub attachments: Vec<ImageAttachment>,
 }
 
 /// Role in a conversation.
@@ -90,6 +104,7 @@ mod tests {
             role: ChatRole::User,
             content: "hello".to_string(),
             timestamp: "2026-01-01T00:00:00Z".to_string(),
+            attachments: vec![],
         };
         let json = serde_json::to_value(&msg).unwrap();
         assert!(json.get("role").is_some());

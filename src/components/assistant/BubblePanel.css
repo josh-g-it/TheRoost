@@ -7,7 +7,7 @@
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg, 0 8px 32px rgba(0, 0, 0, 0.25));
-  overflow: hidden;
+  overflow: visible;
 
   /* Enter/exit animation — starts hidden */
   opacity: 0;
@@ -36,54 +36,108 @@
   opacity: 1;
 }
 
-/* ── Header — sprite left, name right ── */
-.bubble-panel__header {
-  position: relative;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--color-border-subtle);
-  flex-shrink: 0;
+/* ── Edge resize zones (invisible hit areas around all edges) ── */
+.bubble-panel__edge {
+  position: absolute;
+  z-index: 3;
+}
+
+.bubble-panel__edge--n {
+  top: -4px;
+  left: 8px;
+  right: 8px;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.bubble-panel__edge--s {
+  bottom: -4px;
+  left: 8px;
+  right: 8px;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.bubble-panel__edge--w {
+  left: -4px;
+  top: 8px;
+  bottom: 8px;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.bubble-panel__edge--e {
+  right: -4px;
+  top: 8px;
+  bottom: 8px;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.bubble-panel__edge--nw {
+  top: -4px;
+  left: -4px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+}
+
+.bubble-panel__edge--ne {
+  top: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  cursor: nesw-resize;
+}
+
+.bubble-panel__edge--sw {
+  bottom: -4px;
+  left: -4px;
+  width: 12px;
+  height: 12px;
+  cursor: nesw-resize;
+}
+
+.bubble-panel__edge--se {
+  bottom: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+}
+
+/* ── Floating sprite (top-center, no pill) — draggable ── */
+.bubble-panel__hero-sprite {
+  position: absolute;
+  top: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
   cursor: grab;
-  user-select: none;
   touch-action: none;
 }
 
-.bubble-panel--dragging .bubble-panel__header {
+.bubble-panel--dragging .bubble-panel__hero-sprite {
   cursor: grabbing;
 }
 
-.bubble-panel__sprite {
-  pointer-events: none;
-  flex-shrink: 0;
+.bubble-panel__hero-sprite .sprite-renderer {
+  border-radius: var(--radius-lg, 12px);
 }
 
-.bubble-panel__name {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  pointer-events: none;
-}
-
-/* Close button — top-right overlay */
+/* Close button — top-right of panel */
 .bubble-panel__close-btn {
   position: absolute;
   top: var(--space-xs);
   right: var(--space-xs);
+  z-index: 11;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 24px;
   height: 24px;
-  background: none;
-  border: none;
+  background: color-mix(in srgb, var(--color-bg-secondary) 80%, transparent);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
   color: var(--color-text-tertiary);
   cursor: pointer;
@@ -103,70 +157,41 @@
 }
 
 .bubble-panel__body {
+  position: relative;
+  z-index: 2;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  border-radius: inherit;
 }
 
-/* ── Footer — subtle end conversation ── */
-.bubble-panel__footer {
-  display: flex;
-  justify-content: center;
-  padding: var(--space-xs) var(--space-md);
-  border-top: 1px solid var(--color-border-subtle);
-  flex-shrink: 0;
+/* Push message list down below the floating sprite */
+.bubble-panel__body .assistant-chat__messages {
+  padding-top: 9rem;
+  cursor: grab;
+  touch-action: none;
 }
 
-.bubble-panel__end-btn {
-  background: none;
-  border: none;
-  color: var(--color-text-tertiary);
-  font-size: 0.7rem;
-  cursor: pointer;
-  padding: 2px var(--space-sm);
-  border-radius: var(--radius-sm);
-  transition:
-    color var(--transition-fast),
-    background var(--transition-fast);
+.bubble-panel--dragging .bubble-panel__body .assistant-chat__messages {
+  cursor: grabbing;
 }
 
-.bubble-panel__end-btn:hover:not(:disabled) {
-  color: var(--color-danger, #ef4444);
-  background: color-mix(in srgb, var(--color-danger, #ef4444) 8%, transparent);
+/* Text cursor over message bubbles so text selection feels natural */
+.bubble-panel__body .assistant-chat__message {
+  cursor: text;
 }
 
-.bubble-panel__end-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
+/* ── Name labels under assistant messages in bubble ── */
+.bubble-panel__body .assistant-chat__message-row--assistant {
+  flex-direction: column;
+  align-items: flex-start;
 }
 
-/* ── Resize handle (bottom-right corner) ── */
-.bubble-panel__resize-handle {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 16px;
-  height: 16px;
-  cursor: nwse-resize;
-  z-index: 2;
-}
-
-/* Visual grip indicator */
-.bubble-panel__resize-handle::after {
-  content: "";
-  position: absolute;
-  bottom: 3px;
-  right: 3px;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid var(--color-text-tertiary);
-  border-bottom: 2px solid var(--color-text-tertiary);
-  opacity: 0.4;
-  transition: opacity var(--transition-fast);
-}
-
-.bubble-panel__resize-handle:hover::after,
-.bubble-panel--resizing .bubble-panel__resize-handle::after {
-  opacity: 0.8;
+.bubble-panel__body .assistant-chat__msg-label {
+  order: 1;
+  align-self: flex-start;
+  padding-bottom: 0;
+  padding-top: 0.15rem;
 }

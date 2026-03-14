@@ -1,6 +1,6 @@
 use crate::models::assistant::{AiMemory, AiMessage, CompactionResult};
 use crate::models::settings::AppSettings;
-use crate::services::ai::cloud_provider::{ChatMessage, ChatRole, StreamChunk};
+use crate::services::ai::cloud_provider::{ChatMessage, ChatRole, ImageAttachment, StreamChunk};
 use crate::services::ai::context_builder;
 use crate::services::ai::encryption::{decrypt_field, encrypt_field};
 use crate::services::ai::memory;
@@ -45,7 +45,7 @@ struct StreamChunkPayload {
 }
 
 const CHARS_PER_TOKEN: usize = 3;
-const TOKEN_BUDGET_LAYER4: usize = 4000; // ~12000 chars
+const TOKEN_BUDGET_LAYER4: usize = 12000; // ~36000 chars — tripled for image context headroom
 #[allow(dead_code)]
 const MID_SESSION_THRESHOLD: usize = 20;
 /// Maximum messages (user + assistant) per conversation before auto-ending.
@@ -184,6 +184,7 @@ pub fn assemble_context(
     avatar_id: &str,
     key: &[u8; 32],
     settings: &AppSettings,
+    new_message_has_images: bool,
 ) -> Result<(String, Vec<ChatMessage>), AppError> {
     // Layer 1: System prompt with personality + companion role
     let avatar = db
@@ -217,7 +218,11 @@ pub fn assemble_context(
     // Extract keywords from recent user messages for relevance ranking
     let recent_keywords = extract_recent_keywords(db, conv_id, key);
     let vault_mems = memory::load_vault_memories_ranked(db, avatar_id, key, 50, &recent_keywords)?;
-    let cross_mems = memory::load_cross_avatar_memories(db, avatar_id, key, 20)?;
+    let cross_mems = if avatar.cross_avatar_memory_access {
+        memory::load_cross_avatar_memories(db, avatar_id, key, 20)?
+    } else {
+        vec![]
+    };
     let journal = memory::load_recent_journal(db, avatar_id, key, 7)?;
     let memory_ctx =
         memory::format_memory_context(&system_mems, &vault_mems, &cross_mems, &journal);
@@ -262,6 +267,7 @@ pub fn assemble_context(
                 content,
                 created_at: row.created_at.clone(),
                 token_estimate: row.token_estimate,
+                attachments: row.attachments.clone(),
             },
             token_est,
         ));
@@ -293,19 +299,73 @@ pub fn assemble_context(
     }
 
     included_indices.sort();
+
+    // Find the most recent user message with image attachments (among included messages).
+    // Only this message will carry full inline image data to the LLM — older messages
+    // get smart text placeholders derived from captions.
+    // If the new (not-yet-appended) message has images, ALL history images use captions
+    // because the new message will be the actual most-recent image bearer.
+    let most_recent_image_idx: Option<usize> = if new_message_has_images {
+        None // Force all history images to use captions
+    } else {
+        included_indices
+            .iter()
+            .rev()
+            .copied()
+            .find(|&i| {
+                let (msg, _) = &decrypted[i];
+                msg.role == "user" && msg.attachments.is_some()
+            })
+    };
+
     let messages: Vec<ChatMessage> = included_indices
         .iter()
         .map(|&i| {
             let (msg, _) = &decrypted[i];
+            let role = match msg.role.as_str() {
+                "user" => ChatRole::User,
+                "assistant" => ChatRole::Assistant,
+                "system" => ChatRole::System,
+                _ => ChatRole::User,
+            };
+
+            // Decrypt and attach images for context
+            let (content, chat_attachments) =
+                if msg.role == "user" && msg.attachments.is_some() {
+                    // Try to decrypt attachments JSON
+                    let decrypted_atts: Vec<ImageAttachment> = msg
+                        .attachments
+                        .as_ref()
+                        .and_then(|enc| decrypt_field(enc, key).ok())
+                        .and_then(|json| serde_json::from_str(&json).ok())
+                        .unwrap_or_default();
+
+                    if Some(i) == most_recent_image_idx {
+                        // Most recent: send full image data to the LLM
+                        (msg.content.clone(), decrypted_atts)
+                    } else {
+                        // Older: replace images with caption placeholders in message text
+                        let mut text = msg.content.clone();
+                        for att in &decrypted_atts {
+                            let placeholder = match &att.caption {
+                                Some(cap) if !cap.is_empty() => {
+                                    format!("\n[User shared an image: \"{cap}\"]")
+                                }
+                                _ => "\n[User shared an image]".to_string(),
+                            };
+                            text.push_str(&placeholder);
+                        }
+                        (text, vec![])
+                    }
+                } else {
+                    (msg.content.clone(), vec![])
+                };
+
             ChatMessage {
-                role: match msg.role.as_str() {
-                    "user" => ChatRole::User,
-                    "assistant" => ChatRole::Assistant,
-                    "system" => ChatRole::System,
-                    _ => ChatRole::User,
-                },
-                content: msg.content.clone(),
+                role,
+                content,
                 timestamp: msg.created_at.clone(),
+                attachments: chat_attachments,
             }
         })
         .collect();
@@ -334,6 +394,7 @@ pub async fn send_message_and_collect(
     action_feedback: Option<&str>,
     max_output_tokens: Option<u32>,
     page_context: Option<&str>,
+    attachments: &[ImageAttachment],
 ) -> Result<String, AppError> {
     tracing::debug!(
         conv_id,
@@ -388,7 +449,7 @@ pub async fn send_message_and_collect(
     // Step 1: Build context (under lock)
     let (mut system_prompt, mut messages) = {
         let db_guard = db.lock_or_err("DB")?;
-        assemble_context(&db_guard, conv_id, avatar_id, key, settings)?
+        assemble_context(&db_guard, conv_id, avatar_id, key, settings, !attachments.is_empty())?
     }; // lock dropped
 
     // Append page context
@@ -406,14 +467,16 @@ pub async fn send_message_and_collect(
             role: ChatRole::User,
             content: feedback.to_string(),
             timestamp: chrono::Utc::now().to_rfc3339(),
+            attachments: vec![],
         });
     }
 
-    // Add the new user message
+    // Add the new user message (with image attachments if any)
     messages.push(ChatMessage {
         role: ChatRole::User,
         content: user_message.to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
+        attachments: attachments.to_vec(),
     });
 
     // Load API key (keyring I/O, no lock)
@@ -481,7 +544,16 @@ pub async fn send_message_and_collect(
     let user_tokens = (user_message.len() / CHARS_PER_TOKEN) as u32;
     let asst_tokens = (full_response.len() / CHARS_PER_TOKEN) as u32;
 
-    {
+    // Encrypt image attachments JSON if present
+    let attachments_encrypted = if !attachments.is_empty() {
+        let json = serde_json::to_string(attachments)
+            .map_err(|e| AppError::StoreApi(format!("Failed to serialize attachments: {e}")))?;
+        Some(encrypt_field(&json, key)?)
+    } else {
+        None
+    };
+
+    let user_msg_id = {
         let db_guard = db.lock_or_err("DB")?;
         db_guard.store_message_pair(
             conv_id,
@@ -490,8 +562,65 @@ pub async fn send_message_and_collect(
             &asst_enc,
             asst_tokens,
             skip_user_persist,
-        )?;
-    } // DB lock dropped
+            attachments_encrypted.as_deref(),
+        )?
+    }; // DB lock dropped
+
+    // Fire-and-forget: caption images in the background so older messages get smart placeholders.
+    if !attachments.is_empty() {
+        if let Some(msg_id) = user_msg_id {
+            let db_clone = db.clone();
+            let key_copy: [u8; 32] = *key;
+            let attachments_owned: Vec<ImageAttachment> = attachments.to_vec();
+            let provider_name = settings.cloud_ai_provider.clone();
+            tokio::spawn(async move {
+                // Load API key for the background captioning call
+                let api_key = match credential_store::load_cloud_key(&provider_name) {
+                    Ok(Some(k)) => k,
+                    _ => {
+                        tracing::warn!("Skipping image captioning: no API key available");
+                        return;
+                    }
+                };
+                match providers::gemini::caption_images(&attachments_owned, &api_key).await {
+                    Ok(captions) => {
+                        // Merge captions into attachments and update DB
+                        let mut updated = attachments_owned;
+                        for (att, cap) in updated.iter_mut().zip(captions.into_iter()) {
+                            if !cap.is_empty() {
+                                att.caption = Some(cap);
+                            }
+                        }
+                        let json = match serde_json::to_string(&updated) {
+                            Ok(j) => j,
+                            Err(e) => {
+                                tracing::warn!(error = %e, "Failed to serialize captioned attachments");
+                                return;
+                            }
+                        };
+                        let encrypted = match encrypt_field(&json, &key_copy) {
+                            Ok(e) => e,
+                            Err(e) => {
+                                tracing::warn!(error = %e, "Failed to encrypt captioned attachments");
+                                return;
+                            }
+                        };
+                        if let Ok(guard) = db_clone.lock() {
+                            let db: &CacheDb = &guard;
+                            if let Err(e) = db.update_message_attachments(&msg_id, &encrypted) {
+                                tracing::warn!(error = %e, "Failed to update message attachments with captions");
+                            } else {
+                                tracing::debug!(msg_id, "Image captions stored successfully");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Background image captioning failed (non-fatal)");
+                    }
+                }
+            });
+        }
+    }
 
     tracing::debug!(
         conv_id,
@@ -529,6 +658,7 @@ pub async fn end_conversation(
                 content,
                 created_at: row.created_at,
                 token_estimate: row.token_estimate,
+                attachments: row.attachments.clone(),
             });
         }
         decrypted
@@ -544,7 +674,7 @@ pub async fn end_conversation(
     let vault_context = format_vault_for_compaction(&vault_for_compaction);
     let id_map = build_compaction_id_map(&vault_for_compaction);
     let compaction_prompt = build_compaction_prompt(&vault_context);
-    let transcript = format_conversation_transcript(&all_messages_decrypted);
+    let transcript = format_conversation_transcript(&all_messages_decrypted, key);
 
     let api_key = credential_store::load_cloud_key(&settings.cloud_ai_provider)?
         .ok_or_else(|| AppError::Credential("No cloud API key configured".into()))?;
@@ -635,8 +765,8 @@ pub fn build_compaction_prompt_public(vault_context: &str) -> String {
 }
 
 /// Public wrapper for format_conversation_transcript (used by compaction raw data export).
-pub fn format_transcript_public(messages: &[AiMessage]) -> String {
-    format_conversation_transcript(messages)
+pub fn format_transcript_public(messages: &[AiMessage], key: &[u8; 32]) -> String {
+    format_conversation_transcript(messages, key)
 }
 
 // ── Internal Helpers ────────────────────────────────────────────────
@@ -721,7 +851,8 @@ fn build_compaction_id_map(vault: &[AiMemory]) -> HashMap<String, String> {
 }
 
 /// Format conversation messages as a transcript for compaction.
-fn format_conversation_transcript(messages: &[AiMessage]) -> String {
+/// Image attachments are included as caption text (not raw image data).
+fn format_conversation_transcript(messages: &[AiMessage], key: &[u8; 32]) -> String {
     let mut out = String::new();
     for msg in messages {
         if msg.role == "system" {
@@ -732,7 +863,25 @@ fn format_conversation_transcript(messages: &[AiMessage]) -> String {
         } else {
             "Assistant"
         };
-        out.push_str(&format!("{}: {}\n\n", role_label, msg.content));
+        out.push_str(&format!("{}: {}", role_label, msg.content));
+
+        // Append image captions from attachments (if any)
+        if let Some(ref enc_atts) = msg.attachments {
+            if let Ok(json) = decrypt_field(enc_atts, key) {
+                if let Ok(atts) = serde_json::from_str::<Vec<ImageAttachment>>(&json) {
+                    for att in &atts {
+                        match &att.caption {
+                            Some(cap) if !cap.is_empty() => {
+                                out.push_str(&format!("\n[Attached image: \"{cap}\"]"));
+                            }
+                            _ => out.push_str("\n[Attached image]"),
+                        }
+                    }
+                }
+            }
+        }
+
+        out.push_str("\n\n");
     }
     out
 }
@@ -858,11 +1007,11 @@ mod tests {
 
         // Insert a user message
         let enc = crate::services::ai::encryption::encrypt_field("hello", &TEST_KEY).unwrap();
-        db.insert_ai_message(&conv.id, "user", &enc, 2).unwrap();
+        db.insert_ai_message(&conv.id, "user", &enc, 2, None).unwrap();
 
         let settings = AppSettings::default();
         let (system_prompt, _messages) =
-            assemble_context(&db, &conv.id, &avatar_id, &TEST_KEY, &settings).unwrap();
+            assemble_context(&db, &conv.id, &avatar_id, &TEST_KEY, &settings, false).unwrap();
 
         // Should contain personality text from the first built-in personality
         assert!(system_prompt.contains("gaming companion"));
@@ -879,14 +1028,14 @@ mod tests {
         let enc2 = encrypt_field("second", &TEST_KEY).unwrap();
         let enc3 = encrypt_field("third", &TEST_KEY).unwrap();
 
-        db.insert_ai_message(&conv.id, "user", &enc1, 1).unwrap();
-        db.insert_ai_message(&conv.id, "assistant", &enc2, 1)
+        db.insert_ai_message(&conv.id, "user", &enc1, 1, None).unwrap();
+        db.insert_ai_message(&conv.id, "assistant", &enc2, 1, None)
             .unwrap();
-        db.insert_ai_message(&conv.id, "user", &enc3, 1).unwrap();
+        db.insert_ai_message(&conv.id, "user", &enc3, 1, None).unwrap();
 
         let settings = AppSettings::default();
         let (_prompt, messages) =
-            assemble_context(&db, &conv.id, &avatar_id, &TEST_KEY, &settings).unwrap();
+            assemble_context(&db, &conv.id, &avatar_id, &TEST_KEY, &settings, false).unwrap();
 
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[0].content, "first");
@@ -903,21 +1052,21 @@ mod tests {
         let avatar_id = setup_avatar(&db);
         let conv = db.create_ai_conversation(&avatar_id).unwrap();
 
-        // Insert 30 large messages (each ~1000 chars = ~250 tokens)
-        // Budget is 4000 tokens = 16000 chars, so ~16 messages should fit
+        // Insert 60 large messages (each ~1000 chars = ~333 tokens)
+        // Budget is 12000 tokens = 36000 chars, so ~36 messages should fit
         let big_text = "x".repeat(1000);
-        for i in 0..30 {
+        for i in 0..60 {
             let role = if i % 2 == 0 { "user" } else { "assistant" };
             let enc = encrypt_field(&big_text, &TEST_KEY).unwrap();
-            db.insert_ai_message(&conv.id, role, &enc, 250).unwrap();
+            db.insert_ai_message(&conv.id, role, &enc, 333, None).unwrap();
         }
 
         let settings = AppSettings::default();
         let (_prompt, messages) =
-            assemble_context(&db, &conv.id, &avatar_id, &TEST_KEY, &settings).unwrap();
+            assemble_context(&db, &conv.id, &avatar_id, &TEST_KEY, &settings, false).unwrap();
 
-        // Should not include all 30 messages
-        assert!(messages.len() < 30);
+        // Should not include all 60 messages
+        assert!(messages.len() < 60);
         // Should include at least some messages
         assert!(!messages.is_empty());
         // Total chars should be within budget
@@ -939,11 +1088,11 @@ mod tests {
 
         // Insert a user message so assemble_context has something to work with
         let enc = encrypt_field("hello", &TEST_KEY).unwrap();
-        db.insert_ai_message(&conv.id, "user", &enc, 2).unwrap();
+        db.insert_ai_message(&conv.id, "user", &enc, 2, None).unwrap();
 
         let settings = AppSettings::default();
         let (system_prompt, _messages) =
-            assemble_context(&db, &conv.id, &avatar_id, &TEST_KEY, &settings).unwrap();
+            assemble_context(&db, &conv.id, &avatar_id, &TEST_KEY, &settings, false).unwrap();
 
         assert!(system_prompt.contains("Current Activity"));
         assert!(system_prompt.contains("Team Fortress 2"));
@@ -957,11 +1106,11 @@ mod tests {
         let conv = db.create_ai_conversation(&avatar_id).unwrap();
 
         let enc = encrypt_field("hello", &TEST_KEY).unwrap();
-        db.insert_ai_message(&conv.id, "user", &enc, 2).unwrap();
+        db.insert_ai_message(&conv.id, "user", &enc, 2, None).unwrap();
 
         let settings = AppSettings::default();
         let (system_prompt, _messages) =
-            assemble_context(&db, &conv.id, &avatar_id, &TEST_KEY, &settings).unwrap();
+            assemble_context(&db, &conv.id, &avatar_id, &TEST_KEY, &settings, false).unwrap();
 
         assert!(!system_prompt.contains("Current Activity"));
     }
@@ -976,8 +1125,8 @@ mod tests {
         // Insert only 2 messages
         let enc1 = encrypt_field("hello", &TEST_KEY).unwrap();
         let enc2 = encrypt_field("hi there!", &TEST_KEY).unwrap();
-        db.insert_ai_message(&conv.id, "user", &enc1, 2).unwrap();
-        db.insert_ai_message(&conv.id, "assistant", &enc2, 3)
+        db.insert_ai_message(&conv.id, "user", &enc1, 2, None).unwrap();
+        db.insert_ai_message(&conv.id, "assistant", &enc2, 3, None)
             .unwrap();
 
         // Directly test the eligibility check logic
@@ -1060,6 +1209,7 @@ mod tests {
                 content: "What should I play?".into(),
                 created_at: "2026-02-27 10:00:00".into(),
                 token_estimate: 5,
+                attachments: None,
             },
             AiMessage {
                 id: "m2".into(),
@@ -1068,6 +1218,7 @@ mod tests {
                 content: "Try Elden Ring!".into(),
                 created_at: "2026-02-27 10:00:01".into(),
                 token_estimate: 4,
+                attachments: None,
             },
             AiMessage {
                 id: "m3".into(),
@@ -1076,10 +1227,11 @@ mod tests {
                 content: "Summary of earlier messages".into(),
                 created_at: "2026-02-27 09:00:00".into(),
                 token_estimate: 5,
+                attachments: None,
             },
         ];
 
-        let transcript = format_conversation_transcript(&messages);
+        let transcript = format_conversation_transcript(&messages, &TEST_KEY);
         assert!(transcript.contains("User: What should I play?"));
         assert!(transcript.contains("Assistant: Try Elden Ring!"));
         // System messages should be excluded
@@ -1215,30 +1367,30 @@ mod tests {
             &TEST_KEY,
         )
         .unwrap();
-        db.insert_ai_message(&conv.id, "system", &sys_enc, 50)
+        db.insert_ai_message(&conv.id, "system", &sys_enc, 50, None)
             .unwrap();
 
         // Insert many large user/assistant messages to exceed token budget
-        for i in 0..30 {
+        for i in 0..60 {
             let role = if i % 2 == 0 { "user" } else { "assistant" };
             let large_msg = "x".repeat(1000); // 1000 chars each
             let enc = encrypt_field(&large_msg, &TEST_KEY).unwrap();
-            db.insert_ai_message(&conv.id, role, &enc, 250).unwrap();
+            db.insert_ai_message(&conv.id, role, &enc, 333, None).unwrap();
         }
 
         let settings = AppSettings::default();
         let (_, messages) =
-            assemble_context(&db, &conv.id, &avatar_id, &TEST_KEY, &settings).unwrap();
+            assemble_context(&db, &conv.id, &avatar_id, &TEST_KEY, &settings, false).unwrap();
 
         // System message should always be included
         assert!(messages.iter().any(|m| m.role == ChatRole::System));
-        // Should have some but not all 30 user/assistant messages (budget exceeded)
+        // Should have some but not all 60 user/assistant messages (budget exceeded)
         let non_system = messages
             .iter()
             .filter(|m| m.role != ChatRole::System)
             .count();
         assert!(non_system > 0);
-        assert!(non_system < 30);
+        assert!(non_system < 60);
     }
 
     // ── Phase 10: Public Wrapper Tests ──────────────────────────────
@@ -1280,9 +1432,10 @@ mod tests {
             content: "Hello".into(),
             created_at: "2026-02-27 10:00:00".into(),
             token_estimate: 1,
+            attachments: None,
         }];
-        let internal = format_conversation_transcript(&messages);
-        let public = format_transcript_public(&messages);
+        let internal = format_conversation_transcript(&messages, &TEST_KEY);
+        let public = format_transcript_public(&messages, &TEST_KEY);
         assert_eq!(internal, public);
     }
 

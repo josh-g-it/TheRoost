@@ -478,6 +478,8 @@ export const steamInstallApi = {
 export const assistantApi = {
   startConversation: (avatarId: string) =>
     invoke<string>("start_conversation", { avatarId }),
+  isAvatarFirstConversation: (avatarId: string) =>
+    invoke<boolean>("is_avatar_first_conversation", { avatarId }),
   getActiveConversationId: (avatarId: string) =>
     invoke<string | null>("get_active_conversation_id", { avatarId }),
   sendMessage: (
@@ -488,6 +490,7 @@ export const assistantApi = {
     actionFeedback?: string,
     maxOutputTokens?: number,
     pageContext?: string,
+    imageAttachments?: string,
   ) =>
     invoke<string>("send_message", {
       conversationId,
@@ -497,6 +500,12 @@ export const assistantApi = {
       actionFeedback,
       maxOutputTokens,
       pageContext,
+      imageAttachments,
+    }),
+  prepareChatImage: (filePath?: string, clipboardBase64?: string) =>
+    invoke<{ mimeType: string; data: string; previewUrl: string }>("prepare_chat_image", {
+      filePath,
+      clipboardBase64,
     }),
   abandonConversation: (conversationId: string) =>
     invoke<void>("abandon_conversation", { conversationId }),
@@ -554,6 +563,8 @@ export const assistantApi = {
       imagePath?: string | null;
       companionRoleId?: string | null;
       companionRoleCustom?: string | null;
+      crossAvatarMemoryAccess?: boolean;
+      crossAvatarMemoryPrivate?: boolean;
     },
   ) => invoke<AiAvatar>("update_avatar", { avatarId, ...fields }),
   listCompanionRoles: () => invoke<CompanionRolePreset[]>("list_companion_roles"),

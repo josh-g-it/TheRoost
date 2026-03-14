@@ -119,7 +119,7 @@ export function AssistantView() {
 
   return (
     <div className="assistant-view">
-      <Header title="Assistant" subtitle={activeAvatar.name} />
+      <Header title="Assistant" />
       <div className="assistant-view__body">
         <div className="assistant-view__content">
           {/* Compaction retry banner */}
@@ -175,7 +175,7 @@ export function AssistantView() {
                   <SpriteRenderer
                     spriteDataUrl={spriteDataUrl}
                     expression={expression}
-                    size={128}
+                    size={160}
                     fallbackText={activeAvatar.name}
                   />
                   <span

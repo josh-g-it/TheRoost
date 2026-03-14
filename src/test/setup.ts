@@ -41,6 +41,17 @@ vi.mock("@tauri-apps/api/event", () => ({
   emitTo: vi.fn(() => Promise.resolve()),
 }));
 
+// Mock Tauri window API — needed for custom title bar (Header component)
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: vi.fn(() => ({
+    minimize: vi.fn(),
+    toggleMaximize: vi.fn(),
+    close: vi.fn(),
+    isMaximized: vi.fn(() => Promise.resolve(false)),
+    onResized: vi.fn(() => Promise.resolve(() => {})),
+  })),
+}));
+
 // Mock Tauri API for tests — prevents errors when components call invoke()
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn((command: string) => {

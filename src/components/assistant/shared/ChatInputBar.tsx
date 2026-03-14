@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useSpeechRecognition } from "../../../hooks/useSpeechRecognition";
+import type { PreparedImage } from "../../../types";
 import { AppIcon } from "../../common/AppIcon";
 import "./ChatInputBar.css";
 
@@ -12,6 +13,11 @@ export const ChatInputBar = memo(function ChatInputBar({
   onInput,
   onEndConversation,
   showEndButton,
+  pendingImages,
+  onAttachImage,
+  onRemoveImage,
+  onPasteImage,
+  preparingCount,
 }: {
   onSend: (text: string) => void;
   isStreaming: boolean;
@@ -22,6 +28,16 @@ export const ChatInputBar = memo(function ChatInputBar({
   onEndConversation?: () => void;
   /** Whether to show the end conversation button. */
   showEndButton?: boolean;
+  /** Currently staged image attachments. */
+  pendingImages?: PreparedImage[];
+  /** Open file picker to attach images. */
+  onAttachImage?: () => void;
+  /** Remove a pending image by index. */
+  onRemoveImage?: (index: number) => void;
+  /** Handle a pasted image file from clipboard. */
+  onPasteImage?: (file: File) => void;
+  /** Number of images currently being processed (resize/compress in Rust). */
+  preparingCount?: number;
 }) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -59,7 +75,17 @@ export const ChatInputBar = memo(function ChatInputBar({
     }
   }, [isListening, transcript]);
 
-  const disabled = isStreaming || !cloudAiEnabled;
+  const isPreparing = (preparingCount ?? 0) > 0;
+  const disabled = isStreaming || !cloudAiEnabled || isPreparing;
+
+  // Re-focus the textarea when streaming ends (disabled → enabled transition).
+  const prevDisabledRef = useRef(disabled);
+  useEffect(() => {
+    if (prevDisabledRef.current && !disabled) {
+      inputRef.current?.focus();
+    }
+    prevDisabledRef.current = disabled;
+  }, [disabled]);
 
   const handleSend = useCallback(() => {
     const text = inputRef.current?.value.trim() ?? "";
@@ -68,6 +94,7 @@ export const ChatInputBar = memo(function ChatInputBar({
     if (inputRef.current) {
       inputRef.current.value = "";
       inputRef.current.style.height = "auto";
+      inputRef.current.focus();
     }
   }, [disabled, onSend]);
 
@@ -80,6 +107,26 @@ export const ChatInputBar = memo(function ChatInputBar({
     },
     [handleSend],
   );
+
+  // Ref-sync paste handler to avoid memo invalidation
+  const onPasteImageRef = useRef(onPasteImage);
+  onPasteImageRef.current = onPasteImage;
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    if (!onPasteImageRef.current) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          onPasteImageRef.current(file);
+          return;
+        }
+      }
+    }
+  }, []);
 
   const handleMicToggle = useCallback(() => {
     if (isListening) stopListening();
@@ -101,51 +148,101 @@ export const ChatInputBar = memo(function ChatInputBar({
     setShowEndConfirm(false);
   }, []);
 
+  const hasImages = (pendingImages && pendingImages.length > 0) || isPreparing;
+  const imagesFull = pendingImages && pendingImages.length >= 5;
+
   return (
     <div
       className={`assistant-chat__input-bar ${!cloudAiEnabled ? "assistant-chat__input-bar--disabled" : ""}`}
     >
-      {showEndButton && onEndConversation && (
-        <button
-          className="assistant-chat__end-conv-btn"
-          onClick={handleEndClick}
-          disabled={isStreaming}
-          title="End conversation"
-          aria-label="End conversation"
-        >
-          <AppIcon name="close" size={14} />
-        </button>
+      {/* Thumbnail strip for pending images */}
+      {hasImages && (
+        <div className="assistant-chat__image-strip">
+          {pendingImages?.map((img, idx) => (
+            <div key={idx} className="assistant-chat__image-thumb">
+              <img src={img.previewUrl} alt={`Attachment ${idx + 1}`} />
+              <button
+                className="assistant-chat__image-thumb__remove"
+                onClick={() => onRemoveImage?.(idx)}
+                aria-label={`Remove image ${idx + 1}`}
+              >
+                <AppIcon name="close" size={10} />
+              </button>
+            </div>
+          ))}
+          {isPreparing &&
+            Array.from({ length: preparingCount ?? 0 }).map((_, idx) => (
+              <div
+                key={`loading-${idx}`}
+                className="assistant-chat__image-thumb assistant-chat__image-thumb--loading"
+              >
+                <div className="assistant-chat__image-thumb__spinner" />
+              </div>
+            ))}
+        </div>
       )}
-      <textarea
-        ref={inputRef}
-        className="assistant-chat__input"
-        rows={1}
-        placeholder={cloudAiEnabled ? "Type a message..." : "Cloud AI is disabled"}
-        defaultValue=""
-        onKeyDown={handleKeyDown}
-        disabled={disabled}
-        maxLength={10000}
-        aria-label="Chat message input"
-      />
-      {isSupported && cloudAiEnabled && (
+
+      <div className="assistant-chat__input-row">
+        {showEndButton && onEndConversation && (
+          <button
+            className="assistant-chat__end-conv-btn"
+            onClick={handleEndClick}
+            disabled={isStreaming}
+            title="End conversation"
+            aria-label="End conversation"
+          >
+            <AppIcon name="close" size={14} />
+          </button>
+        )}
+        <textarea
+          ref={inputRef}
+          className="assistant-chat__input"
+          rows={1}
+          placeholder={cloudAiEnabled ? "Type a message..." : "Cloud AI is disabled"}
+          defaultValue=""
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          disabled={disabled}
+          maxLength={10000}
+          aria-label="Chat message input"
+        />
+        {onAttachImage && cloudAiEnabled && (
+          <button
+            className="assistant-chat__attach-btn"
+            onClick={onAttachImage}
+            disabled={disabled || !!imagesFull}
+            title={imagesFull ? "Maximum 5 images" : "Attach image"}
+            aria-label="Attach image"
+          >
+            <AppIcon name="plus" size={16} />
+          </button>
+        )}
+        {isSupported && cloudAiEnabled && (
+          <button
+            className={`assistant-chat__mic-btn ${isListening ? "assistant-chat__mic-btn--active" : ""}`}
+            onClick={handleMicToggle}
+            title={isListening ? "Stop listening" : "Voice input"}
+            aria-label={isListening ? "Stop voice input" : "Start voice input"}
+          >
+            <AppIcon name={isListening ? "pause" : "mic"} size={16} />
+          </button>
+        )}
         <button
-          className={`assistant-chat__mic-btn ${isListening ? "assistant-chat__mic-btn--active" : ""}`}
-          onClick={handleMicToggle}
-          title={isListening ? "Stop listening" : "Voice input"}
-          aria-label={isListening ? "Stop voice input" : "Start voice input"}
+          className="assistant-chat__send-btn"
+          onClick={handleSend}
+          disabled={disabled}
+          title={
+            isPreparing
+              ? "Preparing images..."
+              : cloudAiEnabled
+                ? "Send message"
+                : "Cloud AI is disabled"
+          }
+          aria-label="Send message"
         >
-          <AppIcon name={isListening ? "pause" : "music"} size={16} />
+          <AppIcon name="chevron-right" size={16} />
         </button>
-      )}
-      <button
-        className="assistant-chat__send-btn"
-        onClick={handleSend}
-        disabled={disabled}
-        title={cloudAiEnabled ? "Send message" : "Cloud AI is disabled"}
-        aria-label="Send message"
-      >
-        <AppIcon name="chevron-right" size={16} />
-      </button>
+      </div>
 
       {/* End conversation confirmation popup */}
       {showEndConfirm && (

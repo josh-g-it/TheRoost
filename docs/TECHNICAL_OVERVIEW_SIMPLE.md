@@ -1,7 +1,7 @@
 # The Roost — Technical Overview (Simple)
 
 > **Audience**: Non-technical readers, project stakeholders, curious users
-> **Last updated**: 2026-03-06 (v1.12.0 — Conversational AI Assistant)
+> **Last updated**: 2026-03-13 (v1.12.6 — Image attachments, cross-avatar memory, visual polish)
 
 ---
 
@@ -104,6 +104,8 @@ A conversational AI assistant that knows your gaming library and can help you ma
 - **Memory**: The assistant remembers things about your preferences across conversations — like your favorite genres or games you're excited about. You can view, edit, or remove these memories anytime.
 - **Daily journals**: Automatic summaries of your gaming sessions, written in a narrative style. Browse them by date to see what you played and for how long.
 - **Avatars & personalities**: Customize your assistant's persona. Choose an avatar (name + personality) that changes how the assistant talks to you — from casual and playful to formal and analytical.
+- **Image attachments**: Share screenshots or game art in your messages. Images are resized, compressed, and captioned automatically.
+- **Cross-avatar memory**: Per-avatar controls for sharing memories between companions or keeping them private.
 - **First-run wizard**: A guided setup that walks you through connecting your Gemini API key and picking your assistant's persona.
 - **Privacy**: Your conversations and journals are encrypted on your device. API keys are stored in Windows Credential Manager, never in plain text.
 - **Works everywhere**: The assistant is available on its own page, in Settings, and as a panel in the system overlay — so you can chat while gaming.
@@ -259,8 +261,8 @@ TheRoost/
 
 ## What's Coming Next
 
-- **Persistent Assistant Bubble**: A floating assistant shortcut always available in the app, with auto-execution of safe actions.
-- **AI Avatar System**: Visual AI avatars with generated artwork, sprite maps, and expression mapping.
+- **Memory Compaction**: Automatic summarization of older conversations to reduce AI token usage.
+- **AI Tool Use**: Let the assistant take more complex multi-step actions on your behalf.
 - **Friends Integration**: See what your friends are playing.
 - **Controller & Couch Support**: Gamepad navigation for big-screen use.
 

@@ -116,7 +116,7 @@ const defaultSettings: AppSettings = {
     leaderboardTopN: 10,
   },
   commandCenterSlots: [],
-  commandCenterShortcut: "Ctrl+Space",
+  commandCenterShortcut: "`+Space",
   railMode: "dynamic",
   minimizeToTray: true,
   devSettingsEnabled: false,

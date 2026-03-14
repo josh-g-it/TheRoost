@@ -9,6 +9,7 @@ use crate::models::assistant::{
 use crate::services::ai::action_resolver;
 use crate::services::ai::action_validator::{self, RawAiAction};
 use crate::services::ai::cloud_config::CloudConfigHandle;
+use crate::services::ai::cloud_provider::ImageAttachment;
 use crate::services::ai::cloud_resolver::CloudResolver;
 use crate::services::ai::context_builder;
 use crate::services::ai::conversation;
@@ -16,6 +17,7 @@ use crate::services::ai::conversation_timer::{
     self, ConversationEndedPayload, ConversationTimerHandle, TimerTickPayload,
 };
 use crate::services::ai::encryption;
+use crate::services::ai::image_util::{self, PreparedImage};
 use crate::services::ai::memory;
 use crate::services::ai::orchestrator::AiOrchestrator;
 use crate::services::ai::pattern_matcher::PatternMatcher;
@@ -501,6 +503,8 @@ pub async fn update_avatar(
     image_path: Option<Option<String>>,
     companion_role_id: Option<Option<String>>,
     companion_role_custom: Option<Option<String>>,
+    cross_avatar_memory_access: Option<bool>,
+    cross_avatar_memory_private: Option<bool>,
     db: State<'_, CacheDbHandle>,
 ) -> Result<AiAvatar, AppError> {
     // Validate name if provided
@@ -531,6 +535,8 @@ pub async fn update_avatar(
         image_path.as_ref().map(|o| o.as_deref()),
         companion_role_id.as_ref().map(|o| o.as_deref()),
         companion_role_custom.as_ref().map(|o| o.as_deref()),
+        cross_avatar_memory_access,
+        cross_avatar_memory_private,
     )
 }
 
@@ -651,6 +657,16 @@ pub async fn start_conversation(
     conversation::start_or_resume(&db_guard, &avatar_id)
 }
 
+/// Check if an avatar has never completed a conversation (i.e. brand new).
+#[tauri::command]
+pub async fn is_avatar_first_conversation(
+    avatar_id: String,
+    db: State<'_, CacheDbHandle>,
+) -> Result<bool, AppError> {
+    let db_guard = db.lock_or_err("DB")?;
+    db_guard.is_avatar_first_conversation(&avatar_id)
+}
+
 /// Get the active (un-ended) conversation ID for an avatar, if any.
 /// Used by the overlay to synchronize its local state with the Rust-side truth.
 #[tauri::command]
@@ -678,6 +694,7 @@ pub async fn send_message(
     action_feedback: Option<String>,
     max_output_tokens: Option<u32>,
     page_context: Option<String>,
+    image_attachments: Option<String>,
     db: State<'_, CacheDbHandle>,
     cloud: State<'_, CloudConfigHandle>,
     app_handle: tauri::AppHandle,
@@ -691,6 +708,20 @@ pub async fn send_message(
             "Message exceeds maximum length of 10,000 characters".into(),
         ));
     }
+
+    // Parse and validate image attachments (up to 5)
+    let attachments: Vec<ImageAttachment> = if let Some(json) = &image_attachments {
+        let parsed: Vec<ImageAttachment> = serde_json::from_str(json)
+            .map_err(|e| AppError::Validation(format!("Invalid image attachments JSON: {e}")))?;
+        if parsed.len() > 5 {
+            return Err(AppError::Validation(
+                "Maximum 5 image attachments per message".into(),
+            ));
+        }
+        parsed
+    } else {
+        vec![]
+    };
 
     let skip_user_persist = hidden.unwrap_or(false);
 
@@ -723,6 +754,7 @@ pub async fn send_message(
         action_feedback.as_deref(),
         max_output_tokens,
         page_context.as_deref(),
+        &attachments,
     )
     .await?;
 
@@ -834,6 +866,14 @@ pub async fn get_conversation_history(
     let mut messages = Vec::with_capacity(rows.len());
     for row in rows {
         let content = encryption::decrypt_field(&row.content, &key)?;
+        // Decrypt attachments JSON if present (encrypted like content)
+        let attachments = match &row.attachments {
+            Some(enc) => match encryption::decrypt_field(enc, &key) {
+                Ok(json) => Some(json),
+                Err(_) => None, // Gracefully skip if decryption fails
+            },
+            None => None,
+        };
         messages.push(AiMessage {
             id: row.id,
             conversation_id: row.conversation_id,
@@ -841,6 +881,7 @@ pub async fn get_conversation_history(
             content,
             created_at: row.created_at,
             token_estimate: row.token_estimate,
+            attachments,
         });
     }
     Ok(messages)
@@ -1059,13 +1100,14 @@ pub async fn get_compaction_raw_data(
             content,
             created_at: row.created_at.clone(),
             token_estimate: row.token_estimate,
+            attachments: row.attachments.clone(),
         });
     }
 
     // Format as compaction prompt + transcript
     let vault_context = conversation::format_vault_for_compaction_public(&vault_mems);
     let compaction_prompt = conversation::build_compaction_prompt_public(&vault_context);
-    let transcript = conversation::format_transcript_public(&decrypted_msgs);
+    let transcript = conversation::format_transcript_public(&decrypted_msgs, &key);
 
     Ok(format!(
         "=== SYSTEM PROMPT ===\n{}\n\n=== CONVERSATION ===\n{}",
@@ -1257,6 +1299,8 @@ pub async fn set_active_sprite(
         None,
         None,
         Some(filename.as_deref()),
+        None,
+        None,
         None,
         None,
     )?;
@@ -1461,4 +1505,27 @@ pub async fn relay_event(
         .emit(&event, &payload)
         .map_err(|e| AppError::StoreApi(format!("Failed to relay event '{event}': {e}")))?;
     Ok(())
+}
+
+// ── Image attachment commands ────────────────────────────────────────────────
+
+/// Prepare an image for chat attachment: validate, resize to 768px, JPEG 85%.
+/// Accepts either a file path or raw base64 clipboard data.
+#[tauri::command]
+pub async fn prepare_chat_image(
+    file_path: Option<String>,
+    clipboard_base64: Option<String>,
+) -> Result<PreparedImage, AppError> {
+    if let Some(path) = file_path {
+        image_util::prepare_image(&path)
+    } else if let Some(b64) = clipboard_base64 {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&b64)
+            .map_err(|e| AppError::Validation(format!("Invalid base64 clipboard data: {e}")))?;
+        image_util::prepare_image_from_bytes(&bytes)
+    } else {
+        Err(AppError::Validation(
+            "Either file_path or clipboard_base64 must be provided".into(),
+        ))
+    }
 }

@@ -15,6 +15,8 @@ export interface AiAvatar {
   companionRoleCustom: string | null;
   isActive: boolean;
   createdAt: string;
+  crossAvatarMemoryAccess: boolean;
+  crossAvatarMemoryPrivate: boolean;
 }
 
 export interface AvatarStats {
@@ -42,6 +44,22 @@ export interface AiConversation {
   compacted: number;
 }
 
+/** An image attached to a chat message. */
+export interface ImageAttachment {
+  mimeType: string;
+  /** Base64-encoded image data. */
+  data: string;
+  /** Short caption generated after sending (for smart placeholders in older messages). */
+  caption?: string;
+}
+
+/** Result of preparing an image for chat attachment. */
+export interface PreparedImage {
+  mimeType: string;
+  data: string;
+  previewUrl: string;
+}
+
 export interface AiMessage {
   id: string;
   conversationId: string;
@@ -49,6 +67,8 @@ export interface AiMessage {
   content: string;
   createdAt: string;
   tokenEstimate: number;
+  /** Encrypted JSON of ImageAttachment[] — decrypted on the Rust side for display. */
+  attachments?: ImageAttachment[];
 }
 
 export interface AiMemory {

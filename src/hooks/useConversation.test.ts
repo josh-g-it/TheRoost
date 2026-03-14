@@ -81,6 +81,7 @@ describe("useConversation", () => {
       undefined,
       undefined,
       "Page: Unknown",
+      undefined,
     );
     expect(result.current.messages).toHaveLength(2);
     expect(result.current.messages[0].role).toBe("user");
@@ -201,6 +202,7 @@ describe("useConversation", () => {
       undefined,
       undefined,
       "Page: Unknown",
+      undefined,
     );
   });
 
@@ -499,6 +501,7 @@ describe("useConversation", () => {
       undefined,
       undefined,
       undefined,
+      undefined,
     );
     // Hidden messages should not add a user message to local state
     expect(result.current.messages).toHaveLength(0);
@@ -526,6 +529,7 @@ describe("useConversation", () => {
       feedback,
       undefined,
       "Page: Unknown",
+      undefined,
     );
     expect(result.current.messages).toHaveLength(2);
     expect(result.current.messages[0].content).toBe("Sort by name instead");
@@ -549,6 +553,7 @@ describe("useConversation", () => {
       undefined,
       4096,
       "Page: Unknown",
+      undefined,
     );
   });
 

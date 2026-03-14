@@ -25,6 +25,11 @@ use tracing_subscriber::util::SubscriberInitExt;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_denylist(&["overlay"])
+                .build(),
+        )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
@@ -186,6 +191,7 @@ pub fn run() {
             ai::export_encryption_key,
             ai::wipe_ai_memory,
             ai::start_conversation,
+            ai::is_avatar_first_conversation,
             ai::get_active_conversation_id,
             ai::send_message,
             ai::abandon_conversation,
@@ -217,6 +223,7 @@ pub fn run() {
             ai::import_sprite_from_path,
             ai::generate_sprite,
             ai::set_conversation_timer_viewing,
+            ai::prepare_chat_image,
             ai::relay_event,
             updater::check_for_update,
             updater::install_update,

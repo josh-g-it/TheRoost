@@ -31,7 +31,7 @@
 
 /* ── Logo / Header ────────────────────────────────────────────── */
 .icon-rail__header {
-  height: 56px;
+  height: var(--header-height);
   display: flex;
   align-items: center;
   /* 36px = logo icon width; centers logo in collapsed rail, stays put when expanded */
@@ -41,6 +41,9 @@
   gap: 0;
   overflow: hidden;
   white-space: nowrap;
+  /* Allow dragging from rail header area too */
+  -webkit-app-region: drag;
+  app-region: drag;
 }
 
 .icon-rail:hover .icon-rail__header,
@@ -60,6 +63,8 @@
   overflow: hidden;
   flex: 0 0 auto;
   min-width: 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .icon-rail:hover .icon-rail__logo-btn,
@@ -234,60 +239,6 @@
   flex-direction: column;
   padding: var(--space-xs) 0;
   border-top: 1px solid var(--color-border-subtle);
-}
-
-.icon-rail__assistant-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  height: 26px;
-  padding: 2px var(--space-sm);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-tertiary);
-  text-decoration: none;
-  white-space: nowrap;
-  overflow: hidden;
-  border-radius: var(--radius-sm);
-  transition:
-    gap var(--transition-fast),
-    color var(--transition-fast),
-    background var(--transition-fast);
-}
-
-.icon-rail:hover .icon-rail__assistant-link,
-.icon-rail--expanded .icon-rail__assistant-link {
-  gap: var(--space-xs);
-}
-
-/* Hide the text label when rail is collapsed (icon stays visible) */
-.icon-rail__assistant-link span {
-  opacity: 0;
-  width: 0;
-  overflow: hidden;
-  transition: opacity var(--transition-fast);
-}
-
-.icon-rail:hover .icon-rail__assistant-link span,
-.icon-rail--expanded .icon-rail__assistant-link span {
-  opacity: 1;
-  width: auto;
-}
-
-.icon-rail--collapsed .icon-rail__assistant-link span,
-.icon-rail--collapsed:hover .icon-rail__assistant-link span {
-  opacity: 0;
-  width: 0;
-}
-
-.icon-rail__assistant-link:hover {
-  color: var(--color-accent-primary);
-  background: var(--color-bg-hover);
-}
-
-.icon-rail__assistant-link:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: -2px;
 }
 
 /* ── Footer ────────────────────────────────────────────────────── */

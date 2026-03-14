@@ -37,7 +37,7 @@ function makeSettings(overrides: Partial<AppSettings> = {}): AppSettings {
     },
     profileChartOptions: { bucketPreset: "default", genreTopN: 8, devPubTopN: 10 },
     commandCenterSlots: [],
-    commandCenterShortcut: { key: "Space", modifiers: ["Control"] },
+    commandCenterShortcut: "`+Space",
     railMode: "icons-and-labels",
     minimizeToTray: false,
     devSettingsEnabled: false,

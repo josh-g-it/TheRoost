@@ -60,9 +60,6 @@ export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineO
   // Ref for synchronous access to completed results (survives React batching)
   const feedbackResultsRef = useRef<ActionResult[]>([]);
 
-  // Delay timer ref for cleanup
-  const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // Build PaletteContext for executor calls
   const buildContext = useCallback((): PaletteContext => {
     const settings = useSettingsStore.getState().settings;
@@ -151,59 +148,24 @@ export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineO
       return;
     }
 
-    const delay = useSettingsStore.getState().settings?.assistantActionDelay ?? 0;
-
-    if (delay > 0) {
-      // With delay: execute one T1 action, then enter "delaying" status
-      const result = executeTier1 ? executeTier1(action) : executeAction(action);
-      const hasMore = currentIndex + 1 < actions.length;
-
-      if (hasMore) {
-        setState((prev) => ({
-          ...prev,
-          currentIndex: prev.currentIndex + 1,
-          results: [...prev.results, result],
-          status: "delaying",
-        }));
-        delayTimerRef.current = setTimeout(() => {
-          delayTimerRef.current = null;
-          setState((prev) => ({ ...prev, status: "running" }));
-        }, delay);
-      } else {
-        // Last action — advance immediately (completed on next effect cycle)
-        setState((prev) => ({
-          ...prev,
-          currentIndex: prev.currentIndex + 1,
-          results: [...prev.results, result],
-        }));
-      }
-    } else {
-      // No delay: batch-execute all consecutive T1 actions synchronously
-      let idx = currentIndex;
-      const batchResults: ActionResult[] = [];
-      while (idx < actions.length && actions[idx].tier === 1) {
-        batchResults.push(
-          executeTier1 ? executeTier1(actions[idx]) : executeAction(actions[idx]),
-        );
-        idx++;
-      }
-      logger.info("useActionPipeline", "ai", "Batch T1 executed", {
-        count: batchResults.length,
-        next: idx < actions.length ? `T${actions[idx].tier} at index ${idx}` : "end",
-      });
-      setState((prev) => ({
-        ...prev,
-        currentIndex: idx,
-        results: [...prev.results, ...batchResults],
-      }));
+    // Batch-execute all consecutive T1 actions synchronously
+    let idx = currentIndex;
+    const batchResults: ActionResult[] = [];
+    while (idx < actions.length && actions[idx].tier === 1) {
+      batchResults.push(
+        executeTier1 ? executeTier1(actions[idx]) : executeAction(actions[idx]),
+      );
+      idx++;
     }
-
-    return () => {
-      if (delayTimerRef.current) {
-        clearTimeout(delayTimerRef.current);
-        delayTimerRef.current = null;
-      }
-    };
+    logger.info("useActionPipeline", "ai", "Batch T1 executed", {
+      count: batchResults.length,
+      next: idx < actions.length ? `T${actions[idx].tier} at index ${idx}` : "end",
+    });
+    setState((prev) => ({
+      ...prev,
+      currentIndex: idx,
+      results: [...prev.results, ...batchResults],
+    }));
   }, [state, executeAction, executeTier1]);
 
   // v1.12.1: Actions execute in AI-specified order (no T2-before-T1 reordering).
@@ -211,10 +173,6 @@ export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineO
   // T1 navigation actions, eliminating the v1.12.0 unmount concern.
   const setActions = useCallback((actions: ResolvedAction[]) => {
     feedbackResultsRef.current = [];
-    if (delayTimerRef.current) {
-      clearTimeout(delayTimerRef.current);
-      delayTimerRef.current = null;
-    }
     if (actions.length === 0) {
       setState({ ...INITIAL_STATE, status: "completed" });
       return;
@@ -234,42 +192,18 @@ export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineO
     (action: ResolvedAction, precomputedResult?: ActionResult) => {
       const result = precomputedResult ?? executeAction(action);
       const confirmedResult = { ...result, confirmed: true };
-      const delay = useSettingsStore.getState().settings?.assistantActionDelay ?? 0;
 
-      setState((prev) => {
-        const nextIndex = prev.currentIndex + 1;
-        const hasMore = nextIndex < prev.actions.length;
-
-        if (delay > 0 && hasMore) {
-          // Enter delaying state after T2 confirmation
-          delayTimerRef.current = setTimeout(() => {
-            delayTimerRef.current = null;
-            setState((p) => ({ ...p, status: "running" }));
-          }, delay);
-          return {
-            ...prev,
-            status: "delaying" as PipelineStatus,
-            currentIndex: nextIndex,
-            results: [...prev.results, confirmedResult],
-          };
-        }
-
-        return {
-          ...prev,
-          status: "running",
-          currentIndex: nextIndex,
-          results: [...prev.results, confirmedResult],
-        };
-      });
+      setState((prev) => ({
+        ...prev,
+        status: "running",
+        currentIndex: prev.currentIndex + 1,
+        results: [...prev.results, confirmedResult],
+      }));
     },
     [executeAction],
   );
 
   const denyTier2 = useCallback(() => {
-    if (delayTimerRef.current) {
-      clearTimeout(delayTimerRef.current);
-      delayTimerRef.current = null;
-    }
     setState((prev) => {
       const currentAction = prev.actions[prev.currentIndex];
       const deniedResult: ActionResult = {
@@ -296,10 +230,6 @@ export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineO
   }, []);
 
   const cancelAll = useCallback(() => {
-    if (delayTimerRef.current) {
-      clearTimeout(delayTimerRef.current);
-      delayTimerRef.current = null;
-    }
     setState((prev) => {
       if (
         prev.status === "idle" ||
@@ -331,10 +261,6 @@ export function useActionPipeline({ navigate, executeTier1 }: UseActionPipelineO
   }, []);
 
   const reset = useCallback(() => {
-    if (delayTimerRef.current) {
-      clearTimeout(delayTimerRef.current);
-      delayTimerRef.current = null;
-    }
     feedbackResultsRef.current = [];
     setState(INITIAL_STATE);
   }, []);

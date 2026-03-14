@@ -10,6 +10,21 @@
   flex-direction: column;
   overflow: hidden;
   margin-left: var(--rail-width);
+  position: relative;
+}
+
+/* Notification banners float below the header, overlaying page content */
+.app-layout__banners {
+  position: absolute;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+  z-index: 15;
+  pointer-events: none;
+}
+
+.app-layout__banners > * {
+  pointer-events: auto;
 }
 
 /* When rail is always expanded, content needs more margin */

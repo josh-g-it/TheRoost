@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.12.5-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/version-1.12.6-blue" alt="Version" />
   <img src="https://img.shields.io/badge/platform-Windows-0078D6" alt="Platform" />
   <img src="https://img.shields.io/badge/built_with-Tauri_v2-FFC131" alt="Tauri v2" />
   <img src="https://img.shields.io/badge/license-GPL--3.0-green" alt="License" />
@@ -54,6 +54,8 @@ The Roost is a multi-launcher game library manager for Windows. It brings togeth
 - **Animated sprites** &mdash; 8-expression sprite maps with real-time expression changes (speaking, listening, happy, sad, interested, bored, sleepy)
 - **Sprite generation** &mdash; AI-generated character sprites via Gemini in 5 art styles (anime, pixel, cartoon, painterly, chibi)
 - **Natural language search** &mdash; "installed RPGs sorted by playtime" resolves instantly into library actions
+- **Image attachments** &mdash; Share screenshots or game art in chat with automatic resize/compression and AI-generated captions
+- **Cross-avatar memory** &mdash; Per-avatar toggles for sharing memories across companions or keeping them private
 - **Optional cloud AI** (Gemini Flash) for recommendations, conversational queries, and game journals
 - **40+ actions** for navigation, themes, fonts, icon sets, view modes, sorting, and more
 - **Memory vault** &mdash; AI remembers your preferences and past conversations across sessions
@@ -81,7 +83,7 @@ The Roost is a multi-launcher game library manager for Windows. It brings togeth
 | Frontend | React 18, TypeScript, Vite |
 | State | Zustand |
 | Charts | Recharts |
-| Testing | Vitest + Rust unit tests (1,443 total) |
+| Testing | Vitest + Rust unit tests (1,508 total) |
 
 ## Installation
 

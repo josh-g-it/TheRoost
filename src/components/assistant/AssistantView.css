@@ -12,7 +12,7 @@
   overflow: hidden;
 }
 
-/* ── Chat Hero Pill (floating, translucent) ─────────────────── */
+/* ── Chat Hero (floating sprite + name, centered) ──────────── */
 .assistant-view__chat-hero {
   position: absolute;
   top: 0.75rem;
@@ -20,21 +20,14 @@
   transform: translateX(-50%);
   z-index: 10;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 3rem;
-  padding: 0.65rem 0.65rem;
-  min-width: min(65%, 400px);
-  justify-content: center;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-bg-secondary) 75%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid color-mix(in srgb, var(--color-border-subtle) 60%, transparent);
+  gap: 0.35rem;
   pointer-events: none;
 }
 
 .assistant-view__chat-hero .sprite-renderer {
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-lg, 12px);
 }
 
 .assistant-view__chat-hero-name {
@@ -43,12 +36,22 @@
   color: var(--color-text-primary);
   line-height: 1.2;
   word-break: break-word;
+  text-align: center;
+  padding: 0.15rem 0.6rem;
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(
+    in srgb,
+    var(--color-accent-primary) 20%,
+    var(--color-bg-secondary)
+  );
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
-/* Add top padding to message list so it starts below the floating pill,
+/* Add top padding to message list so it starts below the floating sprite,
    and horizontal padding to narrow the conversation column */
 .assistant-view__tab-content .assistant-chat__messages {
-  padding-top: 10rem;
+  padding-top: 14rem;
   padding-left: 200px;
   padding-right: 200px;
 }

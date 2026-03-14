@@ -16,6 +16,7 @@ const navItems: { path: string; label: string; icon: IconName }[] = [
   { path: "/library", label: "Library", icon: "library" },
   { path: "/activity", label: "Activity", icon: "activity" },
   { path: "/profile", label: "Profile", icon: "profile" },
+  { path: "/assistant", label: "Assistant", icon: "assistant" },
   { path: "/notes", label: "Notes", icon: "notes" },
   { path: "/news", label: "News", icon: "news" },
   { path: "/storage", label: "Storage", icon: "storage" },
@@ -117,10 +118,6 @@ export function IconRail({
           onToggleBubble={onToggleBubble}
           bubbleExpanded={bubbleExpanded}
         />
-        <NavLink to="/assistant" className="icon-rail__assistant-link">
-          <AppIcon name="assistant" size={12} />
-          <span>Full View</span>
-        </NavLink>
       </div>
 
       <div className="icon-rail__footer">

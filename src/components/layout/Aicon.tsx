@@ -57,6 +57,7 @@ export const Aicon = React.memo(
             fallbackText={activeAvatar.name}
             circular
             className="aicon__sprite"
+            disableBump
           />
         ) : (
           <span
@@ -67,7 +68,7 @@ export const Aicon = React.memo(
           </span>
         )}
         {hasUnread && <span className="aicon__dot" aria-label="Unread messages" />}
-        <span className="aicon__label">Assistant</span>
+        <span className="aicon__label">{activeAvatar?.name ?? "Assistant"}</span>
       </button>
     );
   }),

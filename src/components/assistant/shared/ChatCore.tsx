@@ -4,6 +4,7 @@ import {
   useActionPipeline,
   serializeActionFeedback,
 } from "../../../hooks/useActionPipeline";
+import { useImageAttachment } from "../../../hooks/useImageAttachment";
 import {
   ratingsApi,
   notesApi,
@@ -16,6 +17,7 @@ import { stripActions } from "../../../utils/actionParser";
 import { logger } from "../../../utils/logger";
 import type {
   AiMessage,
+  ImageAttachment,
   ResolvedAction,
   ActionResult,
   Expression,
@@ -89,7 +91,11 @@ export interface ChatCoreProps {
   // ── Conversation actions (from ConversationProvider hub) ──
   sendMessage: (
     text: string,
-    options?: { hidden?: boolean; actionFeedback?: string },
+    options?: {
+      hidden?: boolean;
+      actionFeedback?: string;
+      imageAttachments?: ImageAttachment[];
+    },
   ) => Promise<void>;
   retry: () => Promise<void>;
   endConversation: () => Promise<void>;
@@ -150,6 +156,7 @@ export function ChatCore({
 }: ChatCoreProps) {
   const noop = useCallback(() => {}, []);
   const pipeline = useActionPipeline({ navigate: navigate ?? noop, executeTier1 });
+  const imageAttachment = useImageAttachment();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -279,12 +286,27 @@ export function ChatCore({
   const onSendRef = useRef<(text: string) => void>(() => {});
   onSendRef.current = (text: string) => {
     if (isStreaming) return;
+    // Synchronous ref check — avoids the race where React hasn't re-rendered
+    // the disabled state yet but prepareChatImage IPC is still in flight.
+    if (imageAttachment.isPreparingRef.current > 0) return;
     onExpressionUserSentMessage?.();
     pipeline.cancelAll();
     const pipelineResults = pipeline.consumeResults();
     const feedback = serializeActionFeedback(pipelineResults);
     pipeline.reset();
-    sendMessage(text, feedback ? { actionFeedback: feedback } : undefined);
+
+    // Consume pending images
+    const images = imageAttachment.consumeImages();
+    const opts: { actionFeedback?: string; imageAttachments?: ImageAttachment[] } = {};
+    if (feedback) opts.actionFeedback = feedback;
+    if (images.length > 0) {
+      opts.imageAttachments = images.map((img) => ({
+        mimeType: img.mimeType,
+        data: img.data,
+      }));
+    }
+
+    sendMessage(text, Object.keys(opts).length > 0 ? opts : undefined);
     onConversationStart?.();
   };
   const stableOnSend = useCallback((text: string) => {
@@ -458,7 +480,12 @@ export function ChatCore({
               <div
                 className={`assistant-chat__message assistant-chat__message--${msg.role}`}
               >
-                <MessageBubble id={msg.id} role={msg.role} content={msg.content} />
+                <MessageBubble
+                  id={msg.id}
+                  role={msg.role}
+                  content={msg.content}
+                  attachments={msg.attachments}
+                />
                 {parsed && (
                   <ReviewConfirmation
                     gameId={reviewContext!.gameId}
@@ -593,6 +620,11 @@ export function ChatCore({
             onInput={onExpressionUserTyping}
             showEndButton={!!conversationId && !hideEndButton && !isCompacting}
             onEndConversation={conversationId ? stableEndConversation : undefined}
+            pendingImages={imageAttachment.pendingImages}
+            preparingCount={imageAttachment.preparingCount}
+            onAttachImage={imageAttachment.attachImage}
+            onRemoveImage={imageAttachment.removeImage}
+            onPasteImage={imageAttachment.pasteImage}
           />
         </>
       )}

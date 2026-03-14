@@ -25,7 +25,7 @@ export interface ConversationContextValue {
   conversationId: string | null;
   /** Whether a conversation is currently active. */
   hasConversation: boolean;
-  /** Whether the very first conversation just started (for greeting). */
+  /** @deprecated No longer used — first-conversation detection is now DB-driven in useAutoGreet. */
   isFirstConversation: boolean;
   /** Whether initial load is still in progress. */
   isLoading: boolean;
@@ -137,7 +137,6 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasConversation, setHasConversation] = useState(false);
-  const [isFirstConversation, setIsFirstConversation] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
 
   // Post-session review
@@ -266,8 +265,6 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
 
   const handleConversationEnd = useCallback(async () => {
     if (!activeAvatar) return;
-    // After the first conversation ends, subsequent ones are not "first"
-    setIsFirstConversation(false);
     try {
       const newConvId = await assistantApi.startConversation(activeAvatar.id);
       setConversationId(newConvId);
@@ -320,7 +317,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
   // ── Auto-greeting + stale check ──
   const autoGreetResult = useAutoGreet({
     conversationId,
-    isFirstConversation,
+    avatarId: activeAvatar?.id ?? null,
     loadHistory: conversation.loadHistory,
     sendMessage: conversation.sendMessage,
     onStaleReset: handleStaleReset,
@@ -336,7 +333,6 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
         setActiveAvatar(avatar);
         setConversationId(convId);
         setHasConversation(true);
-        setIsFirstConversation(true);
         const personalityList = await assistantApi.listPersonalities();
         setPersonalities(personalityList);
       } catch (err) {
@@ -495,7 +491,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
     personalities,
     conversationId,
     hasConversation,
-    isFirstConversation,
+    isFirstConversation: false,
     isLoading,
     spriteDataUrl,
     expression: conversation.isCompacting ? "sleepy" : expressionEngine.expression,

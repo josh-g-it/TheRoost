@@ -6,7 +6,7 @@ import { getErrorMessage } from "../utils/errors";
 
 interface UseAutoGreetOptions {
   conversationId: string | null;
-  isFirstConversation: boolean;
+  avatarId: string | null;
   loadHistory: (convId: string) => Promise<AiMessage[]>;
   sendMessage: (text: string, opts?: { hidden?: boolean }) => void;
   onStaleReset: () => void;
@@ -17,13 +17,13 @@ interface UseAutoGreetOptions {
  * On a new conversationId:
  * 1. Checks if stale → abandons + resets if so
  * 2. Loads history
- * 3. If empty history, sends a hidden auto-greeting
+ * 3. If empty history, queries the DB to determine first-time vs returning greeting
  *
  * Returns `historyLoaded` so callers can gate review injection etc.
  */
 export function useAutoGreet({
   conversationId,
-  isFirstConversation,
+  avatarId,
   loadHistory,
   sendMessage,
   onStaleReset,
@@ -32,12 +32,12 @@ export function useAutoGreet({
   const introSentForRef = useRef<string | null>(null);
 
   // Ref-sync for values read inside async effect (avoids stale closures)
-  const callbacksRef = useRef({ isFirstConversation, onStaleReset });
-  callbacksRef.current = { isFirstConversation, onStaleReset };
+  const callbacksRef = useRef({ onStaleReset });
+  callbacksRef.current = { onStaleReset };
 
   useEffect(() => {
     setHistoryLoaded(false);
-    if (!conversationId) return;
+    if (!conversationId || !avatarId) return;
     // Synchronous claim: if we've already handled this conversation, bail out
     // immediately. Prevents duplicate greetings from StrictMode double-mount,
     // sendMessage dep recreation, or other re-fires. (KI #8)
@@ -61,7 +61,9 @@ export function useAutoGreet({
       const history = await loadHistory(conversationId!);
       setHistoryLoaded(true);
       if (history.length === 0) {
-        const prompt = callbacksRef.current.isFirstConversation
+        // Ask the DB whether this avatar has ever completed a conversation
+        const isFirst = await assistantApi.isAvatarFirstConversation(avatarId!);
+        const prompt = isFirst
           ? "This is your very first conversation with the user. They just created you. Introduce yourself warmly — tell them your name, ask what they'd like to be called, and ask how they prefer conversations (casual, detailed, brief). Be yourself and be curious."
           : "A new conversation has started. This message is sent automatically by the system, not by the user. Greet the user warmly as someone you already know. Keep it brief and natural — maybe reference something from your memories or just say hello and ask what's on their mind.";
         sendMessage(prompt, { hidden: true });
@@ -73,7 +75,7 @@ export function useAutoGreet({
         error: getErrorMessage(err),
       });
     });
-  }, [conversationId, loadHistory, sendMessage]);
+  }, [conversationId, avatarId, loadHistory, sendMessage]);
 
   return { historyLoaded };
 }

@@ -5,6 +5,7 @@ import type {
   CompactionEventPayload,
   ConversationEndedPayload,
   Expression,
+  ImageAttachment,
   ResolvedAction,
   StreamChunkPayload,
   UserMessagePayload,
@@ -208,10 +209,19 @@ export function useConversation({
     try {
       const history = await assistantApi.getConversationHistory(convId);
       const cleaned = history.map((msg) => {
+        const patched = { ...msg };
         if (msg.role === "assistant" && msg.content.includes("---ACTIONS---")) {
-          return { ...msg, content: stripActions(msg.content) };
+          patched.content = stripActions(msg.content);
         }
-        return msg;
+        // Attachments arrive as a JSON string from Rust — parse into array
+        if (typeof patched.attachments === "string") {
+          try {
+            patched.attachments = JSON.parse(patched.attachments);
+          } catch {
+            patched.attachments = undefined;
+          }
+        }
+        return patched;
       });
       setMessages(cleaned);
       logger.info("useConversation", "api", "Loaded conversation history", {
@@ -230,7 +240,14 @@ export function useConversation({
 
   // ── Send message — streams chunks via events, awaits full response as commit ──
   const sendMessage = useCallback(
-    async (text: string, options?: { hidden?: boolean; actionFeedback?: string }) => {
+    async (
+      text: string,
+      options?: {
+        hidden?: boolean;
+        actionFeedback?: string;
+        imageAttachments?: ImageAttachment[];
+      },
+    ) => {
       if (!conversationId) return;
       if (isStreamingRef.current) return;
 
@@ -272,6 +289,7 @@ export function useConversation({
           content: text,
           createdAt: new Date().toISOString(),
           tokenEstimate: Math.ceil(text.length / 4),
+          attachments: options?.imageAttachments,
         };
         setMessages((prev) => [...prev, userMessage]);
       }
@@ -290,6 +308,16 @@ export function useConversation({
       try {
         const pageContext = options?.hidden ? undefined : buildPageContext();
 
+        // Serialize image attachments for IPC (only mimeType + data, no previewUrl)
+        const imageAttachmentsJson = options?.imageAttachments?.length
+          ? JSON.stringify(
+              options.imageAttachments.map((a) => ({
+                mimeType: a.mimeType,
+                data: a.data,
+              })),
+            )
+          : undefined;
+
         // Rust streams chunks via events AND returns the full response when done.
         const fullResponse = await assistantApi.sendMessage(
           conversationId,
@@ -299,6 +327,7 @@ export function useConversation({
           options?.actionFeedback,
           maxOutputTokens,
           pageContext,
+          imageAttachmentsJson,
         );
 
         unlisten();

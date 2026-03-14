@@ -22,7 +22,7 @@ export function AssistantJournals({ avatarId }: AssistantJournalsProps) {
     try {
       const data = await assistantApi.getJournal(avatarId);
       const sorted = [...data].sort(
-        (a, b) => new Date(b.logDate).getTime() - new Date(a.logDate).getTime(),
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
       setEntries(sorted);
     } catch (err) {
@@ -61,6 +61,13 @@ export function AssistantJournals({ avatarId }: AssistantJournalsProps) {
     });
   };
 
+  const formatTime = (isoStr: string) => {
+    return new Date(isoStr).toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
+
   return (
     <div className="assistant-journals">
       <div className="assistant-journals__list">
@@ -83,41 +90,54 @@ export function AssistantJournals({ avatarId }: AssistantJournalsProps) {
             </p>
           </div>
         )}
-        {entries.map((entry) => (
-          <div key={entry.id} className="journal-entry">
-            <div className="journal-entry__header">
-              <span className="journal-entry__date">{formatDate(entry.logDate)}</span>
-              {confirmingDelete !== entry.id && (
-                <button
-                  className="journal-entry__delete"
-                  onClick={() => setConfirmingDelete(entry.id)}
-                >
-                  <AppIcon name="trash" size={12} /> Delete
-                </button>
+        {entries.map((entry, idx) => {
+          const prevDate = idx > 0 ? entries[idx - 1].logDate : null;
+          const showDateHeader = entry.logDate !== prevDate;
+          return (
+            <div key={entry.id}>
+              {showDateHeader && (
+                <div className="journal-entry__date-header">
+                  {formatDate(entry.logDate)}
+                </div>
               )}
-            </div>
-            <p className="journal-entry__summary">{entry.summary}</p>
-            {confirmingDelete === entry.id && (
-              <div className="journal-entry__confirm">
-                <span className="journal-entry__confirm-text">
-                  Delete this journal entry?
-                </span>
-                <button
-                  className="journal-entry__confirm-yes"
-                  onClick={() => handleDelete(entry.id)}
-                >
-                  Yes, delete
-                </button>
-                <button
-                  className="journal-entry__confirm-no"
-                  onClick={() => setConfirmingDelete(null)}
-                >
-                  Cancel
-                </button>
+              <div className="journal-entry">
+                <div className="journal-entry__header">
+                  <span className="journal-entry__time">
+                    {formatTime(entry.createdAt)}
+                  </span>
+                  {confirmingDelete !== entry.id && (
+                    <button
+                      className="journal-entry__delete"
+                      onClick={() => setConfirmingDelete(entry.id)}
+                    >
+                      <AppIcon name="trash" size={12} /> Delete
+                    </button>
+                  )}
+                </div>
+                <p className="journal-entry__summary">{entry.summary}</p>
+                {confirmingDelete === entry.id && (
+                  <div className="journal-entry__confirm">
+                    <span className="journal-entry__confirm-text">
+                      Delete this journal entry?
+                    </span>
+                    <button
+                      className="journal-entry__confirm-yes"
+                      onClick={() => handleDelete(entry.id)}
+                    >
+                      Yes, delete
+                    </button>
+                    <button
+                      className="journal-entry__confirm-no"
+                      onClick={() => setConfirmingDelete(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

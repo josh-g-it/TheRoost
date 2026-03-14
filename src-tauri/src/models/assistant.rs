@@ -71,6 +71,16 @@ pub struct AiAvatar {
     pub companion_role_custom: Option<String>,
     pub is_active: bool,
     pub created_at: String,
+    /// Whether this avatar receives cross-avatar memories in context assembly.
+    #[serde(default = "default_true")]
+    pub cross_avatar_memory_access: bool,
+    /// Whether this avatar's memories are hidden from other avatars.
+    #[serde(default)]
+    pub cross_avatar_memory_private: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,6 +116,9 @@ pub struct AiMessage {
     pub content: String,
     pub created_at: String,
     pub token_estimate: u32,
+    /// Encrypted JSON array of image attachments, or None for text-only messages.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,6 +211,8 @@ mod tests {
             companion_role_custom: None,
             is_active: true,
             created_at: "2026-02-27".into(),
+            cross_avatar_memory_access: true,
+            cross_avatar_memory_private: false,
         };
         let json = serde_json::to_string(&avatar).unwrap();
         assert!(json.contains("personalityId"));

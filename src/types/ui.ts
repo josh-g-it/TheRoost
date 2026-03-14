@@ -232,13 +232,9 @@ export const DEFAULT_COMMAND_CENTER_SLOTS: SlotActionId[] = [
 export type RailMode = "collapsed" | "expanded" | "dynamic";
 
 // ── Overlay Shortcut ────────────────────────────────────────────
-export type CommandCenterShortcut =
-  | "Ctrl+Space"
-  | "Ctrl+K"
-  | "Ctrl+J"
-  | "Ctrl+Shift+Space";
+export type CommandCenterShortcut = string;
 
-export const SHORTCUT_OPTIONS: { id: CommandCenterShortcut; label: string }[] = [
+export const SHORTCUT_OPTIONS: { id: string; label: string }[] = [
   { id: "Ctrl+Space", label: "Ctrl + Space" },
   { id: "Ctrl+Shift+Space", label: "Ctrl + Shift + Space" },
   { id: "Ctrl+K", label: "Ctrl + K" },

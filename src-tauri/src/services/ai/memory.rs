@@ -265,7 +265,7 @@ pub fn insert_journal_entry(
     summary: &str,
     key: &[u8; 32],
 ) -> Result<String, AppError> {
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let encrypted = encrypt_field(summary, key)?;
     db.insert_ai_journal_raw(avatar_id, conversation_id, &today, &encrypted)
 }

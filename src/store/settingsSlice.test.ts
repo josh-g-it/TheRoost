@@ -24,7 +24,7 @@ function makeSettings(overrides: Partial<AppSettings> = {}): AppSettings {
     cardDisplay: { showPlaytime: true, showLastPlayed: true, showPlatformBadge: true },
     profileChartOptions: { bucketPreset: "default", genreTopN: 8, devPubTopN: 10 },
     commandCenterSlots: [],
-    commandCenterShortcut: { key: "Space", modifiers: ["Control"] },
+    commandCenterShortcut: "`+Space",
     railMode: "icons-and-labels",
     minimizeToTray: false,
     devSettingsEnabled: false,

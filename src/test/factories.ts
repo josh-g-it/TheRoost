@@ -12,6 +12,7 @@ import type {
   AiConversation,
   ResolvedAction,
   SpriteInfo,
+  ImageAttachment,
 } from "../types";
 import type { BackupManifest } from "../services/tauri";
 import type { ShelfConfig } from "../types/shelf";
@@ -184,6 +185,8 @@ export function makeAiAvatar(id: string, overrides?: Partial<AiAvatar>): AiAvata
     companionRoleCustom: null,
     isActive: true,
     createdAt: "2026-02-27T12:00:00Z",
+    crossAvatarMemoryAccess: true,
+    crossAvatarMemoryPrivate: false,
     ...overrides,
   };
 }
@@ -200,6 +203,16 @@ export function makeAiMessage(
     content: `Message ${id}`,
     createdAt: "2026-02-27T12:00:00Z",
     tokenEstimate: 10,
+    ...overrides,
+  };
+}
+
+export function makeImageAttachment(
+  overrides?: Partial<ImageAttachment>,
+): ImageAttachment {
+  return {
+    mimeType: "image/jpeg",
+    data: "dGVzdA==", // base64 "test"
     ...overrides,
   };
 }

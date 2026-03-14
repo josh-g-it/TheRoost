@@ -208,6 +208,51 @@
   border-color: var(--color-accent-primary);
 }
 
+/* ── Shortcut key recorder ───────────────────────────────── */
+.settings-view__shortcut-recorder {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.settings-view__shortcut-display {
+  padding: var(--space-xs) var(--space-md);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-family: monospace;
+  min-width: 160px;
+  text-align: center;
+}
+
+.settings-view__shortcut-btn {
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.settings-view__shortcut-btn:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+}
+
+.settings-view__shortcut-btn--confirm {
+  color: var(--color-accent-primary);
+  border-color: var(--color-accent-primary);
+}
+
+.settings-view__shortcut-btn--confirm:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .settings-view__field-hint {
   font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);

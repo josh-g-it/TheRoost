@@ -119,6 +119,8 @@ export type {
   CompanionRolePreset,
   AiConversation,
   AiMessage,
+  ImageAttachment,
+  PreparedImage,
   AiMemory,
   AiDailyLog,
   ConversationEndedPayload,
