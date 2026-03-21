@@ -78,6 +78,63 @@ describe("processShelfGames", () => {
       expect(result.every((g) => g.lastPlayed != null && g.lastPlayed > 0)).toBe(true);
       expect(result).toHaveLength(3);
     });
+
+    it("'pinned-only' preset returns no games when nothing is pinned", () => {
+      const shelf = makeShelf({ preset: "pinned-only" });
+      const result = processShelfGames(
+        games,
+        shelf,
+        "",
+        favorites,
+        emptyTagMap,
+        hiddenGames,
+        emptyMetadata,
+      );
+      expect(result).toHaveLength(0);
+    });
+
+    it("'pinned-only' preset returns only pinned games", () => {
+      const shelf = makeShelf({ preset: "pinned-only", pinnedGameIds: ["g1", "g3"] });
+      const result = processShelfGames(
+        games,
+        shelf,
+        "",
+        favorites,
+        emptyTagMap,
+        hiddenGames,
+        emptyMetadata,
+      );
+      expect(result.map((g) => g.gameId).sort()).toEqual(["g1", "g3"]);
+    });
+
+    it("'pinned-only' preset excludes hidden pinned games", () => {
+      const hidden = new Set(["g1"]);
+      const shelf = makeShelf({ preset: "pinned-only", pinnedGameIds: ["g1", "g3"] });
+      const result = processShelfGames(
+        games,
+        shelf,
+        "",
+        favorites,
+        emptyTagMap,
+        hidden,
+        emptyMetadata,
+      );
+      expect(result.map((g) => g.gameId)).toEqual(["g3"]);
+    });
+
+    it("'pinned-only' preset respects global search", () => {
+      const shelf = makeShelf({ preset: "pinned-only", pinnedGameIds: ["g1", "g3"] });
+      const result = processShelfGames(
+        games,
+        shelf,
+        "portal",
+        favorites,
+        emptyTagMap,
+        hiddenGames,
+        emptyMetadata,
+      );
+      expect(result.map((g) => g.gameId)).toEqual(["g1"]);
+    });
   });
 
   describe("shelf filters", () => {

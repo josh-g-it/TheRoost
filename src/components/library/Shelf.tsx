@@ -96,7 +96,11 @@ export function Shelf({
           shelfIndex={shelfIndex}
           onPersist={onPersist}
         />
-        <div className="shelf__empty">No games match this shelf</div>
+        <div className="shelf__empty">
+          {shelf.preset === "pinned-only"
+            ? "No games pinned — right-click a game to pin it here"
+            : "No games match this shelf"}
+        </div>
       </div>
     );
   }

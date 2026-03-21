@@ -16,6 +16,8 @@ function applyPresetFilter(
       return games.filter((g) => favorites.has(g.gameId));
     case "installed":
       return games.filter((g) => g.isInstalled);
+    case "pinned-only":
+      return [];
     case "all":
     case "custom":
     default:

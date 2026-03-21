@@ -133,6 +133,22 @@
   margin-top: var(--space-xs);
 }
 
+/* ── Disabled state (pinned-only preset) ─────────────────────── */
+
+.shelf-editor__section--disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  user-select: none;
+}
+
+.shelf-editor__disabled-hint {
+  font-weight: var(--font-weight-normal);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
 /* ── Chip sections (collapsible) ──────────────────────────────── */
 
 .shelf-editor__chip-section {

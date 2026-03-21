@@ -50,6 +50,7 @@ const PRESETS: { value: ShelfPreset; label: string }[] = [
   { value: "recently-played", label: "Recently Played" },
   { value: "favorites", label: "Favorites" },
   { value: "installed", label: "Installed" },
+  { value: "pinned-only", label: "Pinned Only" },
   { value: "custom", label: "Custom" },
 ];
 
@@ -400,8 +401,18 @@ export function ShelfEditorDialog({
         </div>
 
         {/* Filters */}
-        <div className="shelf-editor__section">
-          <label className="shelf-editor__label">Filters</label>
+        <div
+          className={`shelf-editor__section${preset === "pinned-only" ? " shelf-editor__section--disabled" : ""}`}
+        >
+          <label className="shelf-editor__label">
+            Filters
+            {preset === "pinned-only" && (
+              <span className="shelf-editor__disabled-hint">
+                {" "}
+                — only pinned games are shown
+              </span>
+            )}
+          </label>
           <div className="shelf-editor__filters">
             <label className="shelf-editor__checkbox">
               <input

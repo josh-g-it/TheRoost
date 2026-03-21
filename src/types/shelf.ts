@@ -8,6 +8,7 @@ export type ShelfPreset =
   | "recently-played"
   | "favorites"
   | "installed"
+  | "pinned-only"
   | "custom";
 
 export type ShelfDisplayMode = "collapsed" | "extended" | "expanded";
@@ -85,6 +86,13 @@ export const SHELF_PRESET_CONFIGS: Record<
     sortBy: "name",
     sortOrder: "asc",
     filters: { showInstalledOnly: true },
+    maxVisibleGames: null,
+  },
+  "pinned-only": {
+    name: "Pinned Only",
+    sortBy: "name",
+    sortOrder: "asc",
+    filters: {},
     maxVisibleGames: null,
   },
 };
